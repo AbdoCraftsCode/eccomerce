@@ -191,12 +191,11 @@ export const signup = asyncHandelr(async (req, res, next) => {
     });
 
     if (checkuser) {
-        // السماح لو مقدم خدمة
         if (
             checkuser.accountType === "ServiceProvider" &&
             (checkuser.serviceType === "Delivery" || checkuser.serviceType === "Driver")
         ) {
-            console.log("✅ الإيميل/الفون موجود لمقدم خدمة — مسموح تسجيل User جديد");
+            console.log(" الإيميل/الفون موجود لمقدم خدمة — مسموح تسجيل User جديد");
         } else {
             if (email && checkuser.email === email) {
                 return next(new Error("البريد الإلكتروني مستخدم من قبل", { cause: 400 }));
@@ -210,7 +209,7 @@ export const signup = asyncHandelr(async (req, res, next) => {
     // ✅ تشفير الباسورد
     const hashpassword = await generatehash({ planText: password });
 
-    // ✅ إنشاء المستخدم
+    // ✅ إنشاء المستخدم (مُفعل مباشرة)
     const user = await dbservice.create({
         model: Usermodel,
         data: {
@@ -228,32 +227,23 @@ export const signup = asyncHandelr(async (req, res, next) => {
             favoritePopgroup,
             productType,
 
-            accountType: "User"
+            accountType: "User",
+            isConfirmed: true   // ✅ بدون OTP
         }
     });
 
-    // ✅ OTP على الفون فقط
-    try {
-        if (phone) {
-            await sendOTP(phone);
-            console.log(`📩 OTP تم إرساله إلى الهاتف: ${phone}`);
-        }
+    // ✅ نفس التوكنات بتاعة confirOtp
+    const access_Token = generatetoken({ payload: { id: user._id } });
+    const refreshToken = generatetoken({
+        payload: { id: user._id },
+        expiresIn: "365d",
+    });
 
-        // ℹ️ الإيميل يُخزن فقط بدون OTP
-        if (email) {
-            console.log("ℹ️ تم تخزين الإيميل بدون إرسال OTP (التحقق عبر الهاتف فقط)");
-        }
-
-    } catch (error) {
-        console.error("❌ فشل في إرسال OTP:", error.message);
-        return next(new Error("فشل في إرسال رمز التحقق", { cause: 500 }));
-    }
-
-    return successresponse(
-        res,
-        "تم إنشاء الحساب بنجاح، وتم إرسال رمز التحقق على الهاتف",
-        201
-    );
+    return successresponse(res, "تم انشاء السحاب  بنجاحا ", 200, {
+        access_Token,
+        refreshToken,
+        user,
+    });
 });
 
 
