@@ -157,16 +157,29 @@ export async function sendOTP(phone, method = "whatsapp") {
 //     return successresponse(res, "تم إنشاء الحساب بنجاح، وتم إرسال رمز التحقق", 201);
 // });
 
-
 export const signup = asyncHandelr(async (req, res, next) => {
-    const { fullName, password, email, phone } = req.body;
+    const {
+        fullName,
+        password,
+        email,
+        phone,
 
-    // ✅ تحقق من وجود واحد من الاتنين فقط
+        country,
+        currency,
+        lang,
+        weight,
+        height,
+        preferredFlavor,
+        favoritePopgroup,
+        productType
+    } = req.body;
+
+    // ✅ لازم فون أو إيميل واحد على الأقل
     if (!email && !phone) {
         return next(new Error("يجب إدخال البريد الإلكتروني أو رقم الهاتف", { cause: 400 }));
     }
 
-    // ✅ تحقق من عدم تكرار الإيميل أو رقم الهاتف
+    // ✅ التأكد إن الإيميل أو الفون مش مستخدمين قبل كده
     const checkuser = await dbservice.findOne({
         model: Usermodel,
         filter: {
@@ -177,25 +190,24 @@ export const signup = asyncHandelr(async (req, res, next) => {
         }
     });
 
-    // ✅ لو المستخدم موجود بالفعل
     if (checkuser) {
-        // 👇 الشرط الجديد:
-        if (checkuser.accountType === "ServiceProvider" &&
-            (checkuser.serviceType === "Delivery" || checkuser.serviceType === "Driver")) {
-            // 🟢 مسموح يكمل تسجيل كمستخدم عادي
-            console.log("✅ نفس الإيميل/الهاتف موجود لمقدم خدمة Delivery أو Driver — السماح بالتسجيل كمستخدم عادي.");
+        // السماح لو مقدم خدمة
+        if (
+            checkuser.accountType === "ServiceProvider" &&
+            (checkuser.serviceType === "Delivery" || checkuser.serviceType === "Driver")
+        ) {
+            console.log("✅ الإيميل/الفون موجود لمقدم خدمة — مسموح تسجيل User جديد");
         } else {
-            // ❌ لو مش مقدم خدمة — ممنوع التسجيل
-            if (checkuser.email === email) {
+            if (email && checkuser.email === email) {
                 return next(new Error("البريد الإلكتروني مستخدم من قبل", { cause: 400 }));
             }
-            if (checkuser.phone === phone) {
+            if (phone && checkuser.phone === phone) {
                 return next(new Error("رقم الهاتف مستخدم من قبل", { cause: 400 }));
             }
         }
     }
 
-    // ✅ تشفير كلمة المرور
+    // ✅ تشفير الباسورد
     const hashpassword = await generatehash({ planText: password });
 
     // ✅ إنشاء المستخدم
@@ -206,36 +218,30 @@ export const signup = asyncHandelr(async (req, res, next) => {
             password: hashpassword,
             email,
             phone,
-            accountType: 'User',  // 👈 تحديد إنه مستخدم عادي
+
+            country,
+            currency,
+            lang,
+            weight,
+            height,
+            preferredFlavor,
+            favoritePopgroup,
+            productType,
+
+            accountType: "User"
         }
     });
 
-    // ✅ إرسال OTP
+    // ✅ OTP على الفون فقط
     try {
         if (phone) {
             await sendOTP(phone);
             console.log(`📩 OTP تم إرساله إلى الهاتف: ${phone}`);
         }
-        else if (email) {
-            const otp = customAlphabet("0123456789", 4)();
-            const html = vervicaionemailtemplet({ code: otp });
 
-            const emailOTP = await generatehash({ planText: `${otp}` });
-            const otpExpiresAt = new Date(Date.now() + 10 * 60 * 1000);
-
-            await Usermodel.updateOne(
-                { _id: user._id },
-                { emailOTP, otpExpiresAt, attemptCount: 0 }
-            );
-
-            await sendemail({
-                to: email,
-                subject: "Confirm Email",
-                text: "رمز التحقق الخاص بك",
-                html,
-            });
-
-            console.log(`📩 OTP تم إرساله إلى البريد: ${email}`);
+        // ℹ️ الإيميل يُخزن فقط بدون OTP
+        if (email) {
+            console.log("ℹ️ تم تخزين الإيميل بدون إرسال OTP (التحقق عبر الهاتف فقط)");
         }
 
     } catch (error) {
@@ -243,8 +249,14 @@ export const signup = asyncHandelr(async (req, res, next) => {
         return next(new Error("فشل في إرسال رمز التحقق", { cause: 500 }));
     }
 
-    return successresponse(res, "تم إنشاء الحساب بنجاح، وتم إرسال رمز التحقق", 201);
+    return successresponse(
+        res,
+        "تم إنشاء الحساب بنجاح، وتم إرسال رمز التحقق على الهاتف",
+        201
+    );
 });
+
+
 
 
 
@@ -352,7 +364,6 @@ export const signup = asyncHandelr(async (req, res, next) => {
 
 export const forgetPassword = asyncHandelr(async (req, res, next) => {
     const { email, phone } = req.body;
-    const { fedk, fedkdrivers } = req.query;
 
     if (!email && !phone) {
         return next(new Error("❌ يجب إدخال البريد الإلكتروني أو رقم الهاتف", { cause: 400 }));
@@ -364,30 +375,6 @@ export const forgetPassword = asyncHandelr(async (req, res, next) => {
             ...(phone ? [{ phone }] : [])
         ]
     };
-
-    if (fedk) {
-        baseFilter.$or = [
-            ...(email ? [
-                { email, accountType: "User" },
-                { email, accountType: "ServiceProvider", serviceType: { $in: ["Host", "Doctor"] } }
-            ] : []),
-            ...(phone ? [
-                { phone, accountType: "User" },
-                { phone, accountType: "ServiceProvider", serviceType: { $in: ["Host", "Doctor"] } }
-            ] : [])
-        ];
-    }
-
-    if (fedkdrivers) {
-        baseFilter.$or = [
-            ...(email ? [
-                { email, accountType: "ServiceProvider", serviceType: { $in: ["Driver", "Delivery"] } }
-            ] : []),
-            ...(phone ? [
-                { phone, accountType: "ServiceProvider", serviceType: { $in: ["Driver", "Delivery"] } }
-            ] : [])
-        ];
-    }
 
     const user = await Usermodel.findOne(baseFilter);
 
