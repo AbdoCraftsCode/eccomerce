@@ -257,6 +257,9 @@ export const signup = asyncHandelr(async (req, res, next) => {
 
 
 
+
+
+
 // export const forgetPassword = asyncHandelr(async (req, res, next) => {
 //     const { email, phone } = req.body;
 
