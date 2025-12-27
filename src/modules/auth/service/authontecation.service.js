@@ -2464,181 +2464,630 @@ export const deleteVariant = asyncHandelr(async (req, res, next) => {
 
 
 export const filterProducts = asyncHandelr(async (req, res, next) => {
-    const { color, size, lang = "en" } = req.query; // ?color=أحمر&size=M&lang=ar
+    const {
+        lang = "en",
+        page = 1,
+        limit = 10,
+        color,      // مثال: "أحمر" أو "Red"
+        size        // مثال: "42" أو "M"
+    } = req.query;
 
-    // جلب كل المنتجات المفعلة
-    const products = await ProductModellll.find({ isActive: true })
-        .populate("categories", "name slug")
+    // تأمين الـ pagination
+    const pageNum = Math.max(1, parseInt(page) || 1);
+    const limitNum = Math.min(50, Math.max(1, parseInt(limit) || 10));
+    const skip = (pageNum - 1) * limitNum;
+
+    let matchingValueIds = [];
+
+    if (color || size) {
+        // جلب الـ AttributeValues المطابقة للـ color أو size
+        let valueFilter = { isActive: true };
+
+        if (color || size) {
+            const orConditions = [];
+
+            if (color) {
+                orConditions.push(
+                    { [`value.${lang}`]: color },
+                    { "value.en": color }
+                );
+            }
+            if (size) {
+                orConditions.push(
+                    { [`value.${lang}`]: size },
+                    { "value.en": size }
+                );
+            }
+
+            if (orConditions.length > 0) {
+                valueFilter.$or = orConditions;
+            }
+        }
+
+        const matchingValues = await AttributeValueModel.find(valueFilter)
+            .select("_id")
+            .lean();
+
+        if (matchingValues.length === 0) {
+            return res.status(200).json({
+                success: true,
+                message: "لا توجد منتجات مطابقة للفلاتر المطلوبة",
+                count: 0,
+                pagination: {
+                    currentPage: 1,
+                    totalPages: 0,
+                    totalItems: 0,
+                    itemsPerPage: limitNum,
+                    hasNext: false,
+                    hasPrev: false
+                },
+                data: []
+            });
+        }
+
+        matchingValueIds = matchingValues.map(v => v._id);
+    }
+
+    // فلتر الـ variants اللي فيها valueId مطابق
+    let variantFilter = { isActive: true };
+    if (matchingValueIds.length > 0) {
+        variantFilter["attributes.valueId"] = { $in: matchingValueIds };
+    }
+
+    // جلب الـ variants المطابقة
+    const matchingVariants = await VariantModel.find(variantFilter)
+        .select("productId")
         .lean();
 
-    const result = [];
-    for (const product of products) {
-        let variantFilter = { productId: product._id, isActive: true };
-
-        if (color) variantFilter[`color.${lang}`] = color;
-        if (size) variantFilter.size = size;
-
-        const variants = await VariantModel.find(variantFilter).lean();
-        if (variants.length > 0) {
-            // تعديل اسم ووصف المنتج حسب اللغة المطلوبة
-            const localizedProduct = {
-                ...product,
-                name: product.name[lang] || product.name.en,
-                description: product.description[lang] || product.description.en,
-                categories: product.categories.map(cat => ({
-                    _id: cat._id,
-                    name: cat.name[lang] || cat.name.en,
-                    slug: cat.slug
-                })),
-                variants
-            };
-            result.push(localizedProduct);
-        }
+    if (matchingVariants.length === 0) {
+        return res.status(200).json({
+            success: true,
+            message: "لا توجد منتجات مطابقة للفلاتر",
+            count: 0,
+            pagination: {
+                currentPage: 1,
+                totalPages: 0,
+                totalItems: 0,
+                itemsPerPage: limitNum,
+                hasNext: false,
+                hasPrev: false
+            },
+            data: []
+        });
     }
+
+    // استخراج productIds الفريدة
+    const productIds = [...new Set(matchingVariants.map(v => v.productId.toString()))];
+
+    const totalProducts = productIds.length;
+
+    // pagination على الـ productIds
+    const paginatedProductIds = productIds.slice(skip, skip + limitNum);
+
+    // جلب المنتجات
+    let products = await ProductModellll.find({
+        _id: { $in: paginatedProductIds },
+        isActive: true,
+        status: "published"
+    })
+        .populate({
+            path: "categories",
+            match: { isActive: true },
+            select: "name slug"
+        })
+        .populate({
+            path: "brands",
+            match: { isActive: true },
+            select: "name image"
+        })
+        .select("-__v")
+        .lean();
+
+    // جلب كل الـ variants للمنتجات في الصفحة (مش بس المفلترة)
+    const productIdsInPage = products.map(p => p._id);
+    let variantsMap = {};
+
+    if (productIdsInPage.length > 0) {
+        const allVariants = await VariantModel.find({
+            productId: { $in: productIdsInPage },
+            isActive: true
+        })
+            .populate({
+                path: "attributes.attributeId",
+                select: "name"
+            })
+            .populate({
+                path: "attributes.valueId",
+                select: "value hexCode"
+            })
+            .lean();
+
+        allVariants.forEach(variant => {
+            if (!variantsMap[variant.productId]) {
+                variantsMap[variant.productId] = [];
+            }
+
+            const formattedAttributes = variant.attributes
+                .filter(attr => attr.attributeId && attr.valueId)
+                .map(attr => ({
+                    attributeName: attr.attributeId.name[lang] || attr.attributeId.name.en,
+                    value: attr.valueId.value[lang] || attr.valueId.value.en,
+                    hexCode: attr.valueId.hexCode || null
+                }));
+
+            variantsMap[variant.productId].push({
+                _id: variant._id,
+                price: variant.price,
+                stock: variant.stock,
+                images: variant.images,
+                attributes: formattedAttributes
+            });
+        });
+    }
+
+    // تنسيق المنتجات (نفس GetAllProducts)
+    const formattedProducts = products.map(product => {
+        const baseProduct = {
+            _id: product._id,
+            name: product.name[lang] || product.name.en,
+            description: product.description?.[lang] || product.description?.en || "",
+            categories: (product.categories || []).map(cat => ({
+                _id: cat._id,
+                name: cat.name[lang] || cat.name.en,
+                slug: cat.slug
+            })),
+            brands: (product.brands || []).map(brand => ({
+                _id: brand._id,
+                name: brand.name[lang] || brand.name.en,
+                image: brand.image
+            })),
+            images: product.images || [],
+            mainPrice: product.mainPrice,
+            disCountPrice: product.disCountPrice || null,
+            currency: product.currency,
+            sku: product.sku,
+            tax: product.tax,
+            rating: product.rating,
+            seo: product.seo,
+            hasVariants: product.hasVariants,
+            inStock: product.inStock,
+            unlimitedStock: product.unlimitedStock,
+            stock: product.stock || 0,
+            tags: product.tags || [],
+            bulkDiscounts: product.bulkDiscounts || []
+        };
+
+        return {
+            ...baseProduct,
+            variants: variantsMap[product._id.toString()] || []
+        };
+    });
+
+    const pagination = {
+        currentPage: pageNum,
+        totalPages: Math.ceil(totalProducts / limitNum),
+        totalItems: totalProducts,
+        itemsPerPage: limitNum,
+        hasNext: pageNum < Math.ceil(totalProducts / limitNum),
+        hasPrev: pageNum > 1
+    };
 
     res.status(200).json({
         success: true,
-        message: " تم جلب المنتجات مع Variants المفلترة بنجاح",
-        data: result
+        message: "تم فلترة المنتجات بنجاح ✅",
+        count: formattedProducts.length,
+        pagination,
+        data: formattedProducts
     });
 });
+
+
 
 export const GetAllProducts = asyncHandelr(async (req, res, next) => {
-    const { lang = "en", color, size } = req.query; // ?lang=ar&color=أحمر&size=M
+    const {
+        lang = "en",
+        page = 1,
+        limit = 10
+    } = req.query;
 
-    // جلب كل المنتجات المفعلة
-    const products = await ProductModellll.find({ isActive: true })
-        .populate("categories", "name slug")
+    // تحويل وتأمين القيم
+    const pageNum = Math.max(1, parseInt(page) || 1);
+    const limitNum = Math.min(50, Math.max(1, parseInt(limit) || 10)); // max 50 للأداء
+    const skip = (pageNum - 1) * limitNum;
+
+    // جلب عدد المنتجات الكلي للـ pagination
+    const totalProducts = await ProductModellll.countDocuments({
+        isActive: true,
+        status: "published"
+    });
+
+    // جلب المنتجات مع pagination + populate
+    let products = await ProductModellll.find({
+        isActive: true,
+        status: "published"
+    })
+        .populate({
+            path: "categories",
+            match: { isActive: true },
+            select: "name slug"
+        })
+        .populate({
+            path: "brands",
+            match: { isActive: true },
+            select: "name image"
+        })
+        .select("-__v")
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limitNum)
         .lean();
 
-    const result = [];
+    // جلب الـ variants فقط للمنتجات الموجودة في الصفحة الحالية
+    const productIdsWithVariants = products
+        .filter(p => p.hasVariants)
+        .map(p => p._id);
 
-    for (const product of products) {
-        // فلترة Variants حسب المنتج
-        let variantFilter = { productId: product._id, isActive: true };
-        if (color) variantFilter[`color.${lang}`] = color;
-        if (size) variantFilter.size = size;
+    let variantsMap = {};
 
-        const variants = await VariantModel.find(variantFilter).lean();
+    if (productIdsWithVariants.length > 0) {
+        const variants = await VariantModel.find({
+            productId: { $in: productIdsWithVariants },
+            isActive: true
+        })
+            .populate({
+                path: "attributes.attributeId",
+                select: "name"
+            })
+            .populate({
+                path: "attributes.valueId",
+                select: "value hexCode"
+            })
+            .lean();
 
-        if (variants.length > 0) {
-            // ترتيب وتنظيم البيانات
-            const formattedProduct = {
-                _id: product._id,
-                name: product.name[lang] || product.name.en,
-                description: product.description[lang] || product.description.en,
-                categories: product.categories.map(cat => ({
-                    _id: cat._id,
-                    name: cat.name[lang] || cat.name.en,
-                    slug: cat.slug
-                })),
-                images: product.images,
-                seo: product.seo,
-                status: product.status,
-                rating: product.rating,
-                variants: variants.map(variant => ({
-                    _id: variant._id,
-                    color: variant.color,
-                    size: variant.size,
-                    price: variant.price,
-                    stock: variant.stock,
-                    images: variant.images
-                }))
-            };
+        variants.forEach(variant => {
+            if (!variantsMap[variant.productId]) {
+                variantsMap[variant.productId] = [];
+            }
 
-            result.push(formattedProduct);
-        }
+            const formattedAttributes = variant.attributes
+                .filter(attr => attr.attributeId && attr.valueId)
+                .map(attr => ({
+                    attributeName: attr.attributeId.name[lang] || attr.attributeId.name.en,
+                    value: attr.valueId.value[lang] || attr.valueId.value.en,
+                    hexCode: attr.valueId.hexCode || null
+                }));
+
+            variantsMap[variant.productId].push({
+                _id: variant._id,
+                price: variant.price,
+                stock: variant.stock,
+                images: variant.images,
+                attributes: formattedAttributes
+            });
+        });
     }
+
+    // تنسيق المنتجات النهائي
+    const formattedProducts = products.map(product => {
+        const baseProduct = {
+            _id: product._id,
+            name: product.name[lang] || product.name.en,
+            description: product.description?.[lang] || product.description?.en || "",
+            categories: (product.categories || []).map(cat => ({
+                _id: cat._id,
+                name: cat.name[lang] || cat.name.en,
+                slug: cat.slug
+            })),
+            brands: (product.brands || []).map(brand => ({
+                _id: brand._id,
+                name: brand.name[lang] || brand.name.en,
+                image: brand.image
+            })),
+            images: product.images || [],
+            mainPrice: product.mainPrice,
+            disCountPrice: product.disCountPrice || null,
+            currency: product.currency,
+            sku: product.sku,
+            tax: product.tax,
+            rating: product.rating,
+            seo: product.seo,
+            hasVariants: product.hasVariants,
+            inStock: product.inStock,
+            unlimitedStock: product.unlimitedStock,
+            stock: product.stock || 0,
+            tags: product.tags || [],
+            bulkDiscounts: product.bulkDiscounts || []
+        };
+
+        if (product.hasVariants) {
+            return {
+                ...baseProduct,
+                variants: variantsMap[product._id.toString()] || []
+            };
+        } else {
+            return {
+                ...baseProduct,
+                price: product.mainPrice,
+                stock: product.unlimitedStock ? "unlimited" : product.stock,
+                variants: []
+            };
+        }
+    });
+
+    // معلومات الـ pagination
+    const pagination = {
+        currentPage: pageNum,
+        totalPages: Math.ceil(totalProducts / limitNum),
+        totalItems: totalProducts,
+        itemsPerPage: limitNum,
+        hasNext: pageNum < Math.ceil(totalProducts / limitNum),
+        hasPrev: pageNum > 1
+    };
 
     res.status(200).json({
         success: true,
-        message: " تم جلب كل المنتجات بشكل مرتب ومنسق",
-        data: result
+        message: "تم جلب المنتجات بنجاح مع التصفح الصفحي ",
+        count: formattedProducts.length,
+        pagination,
+        data: formattedProducts
     });
 });
 
-export const getCategoriesLocalized = asyncHandelr(async (req, res, next) => {
-    const { lang = "en" } = req.query; // ?lang=ar
 
-    // جلب كل الأقسام المفعلة
+
+export const getCategoriesLocalized = asyncHandelr(async (req, res, next) => {
+    const { lang = "en" } = req.query; // ?lang=ar أو en
+
+    // جلب كل الأقسام المفعلة مع populate للأب
     const categories = await CategoryModellll.find({ isActive: true })
         .populate("parentCategory", "name slug")
         .sort({ createdAt: -1 })
         .lean();
 
-    // تعديل الاسم حسب اللغة
-    const localizedCategories = categories.map(cat => ({
-        _id: cat._id,
+    if (categories.length === 0) {
+        return res.status(200).json({
+            success: true,
+            message: "لا توجد أقسام حاليًا",
+            data: []
+        });
+    }
+
+    // تنسيق الأقسام مع ترجمة الأسماء
+    const formattedCategories = categories.map(cat => ({
+        _id: cat._id.toString(),
         name: cat.name[lang] || cat.name.en,
         slug: cat.slug,
+        images: cat.images || [],
+        description: cat.description?.[lang] || cat.description?.en || "",
+        comment: cat.comment?.[lang] || cat.comment?.en || "",
+        status: cat.status,
+        parentId: cat.parentCategory ? cat.parentCategory._id.toString() : null,
         parentCategory: cat.parentCategory
             ? {
-                _id: cat.parentCategory._id,
+                _id: cat.parentCategory._id.toString(),
                 name: cat.parentCategory.name[lang] || cat.parentCategory.name.en,
                 slug: cat.parentCategory.slug
             }
             : null
     }));
 
+    // بناء الشجرة الهرمية
+    const categoryMap = {};
+    const tree = [];
+
+    // أولاً: نحط كل قسم في map عشان الوصول السريع
+    formattedCategories.forEach(cat => {
+        categoryMap[cat._id] = {
+            ...cat,
+            children: []
+        };
+    });
+
+    // ثانيًا: نربط الأبناء بالآباء
+    formattedCategories.forEach(cat => {
+        if (cat.parentId) {
+            // لو ليه أب، نضيفه كـ child عند الأب
+            if (categoryMap[cat.parentId]) {
+                categoryMap[cat.parentId].children.push(categoryMap[cat._id]);
+            }
+        } else {
+            // لو مفيش أب → قسم رئيسي، نضيفه للشجرة الرئيسية
+            tree.push(categoryMap[cat._id]);
+        }
+    });
+
+    // ترتيب الأبناء داخل كل أب (اختياري: حسب createdAt أو اسم)
+    const sortChildren = (node) => {
+        if (node.children.length > 0) {
+            node.children.sort((a, b) => b.createdAt - a.createdAt); // أحدث الأبناء أولاً
+            node.children.forEach(sortChildren);
+        }
+    };
+    tree.forEach(sortChildren);
+
     res.status(200).json({
         success: true,
-        message: " تم جلب الأقسام بنجاح",
-        data: localizedCategories
+        message: "تم جلب شجرة الأقسام بنجاح مع الترجمة ",
+        count: tree.length, // عدد الأقسام الرئيسية فقط
+        data: tree
     });
 });
 
+
 export const GetProductsByCategory = asyncHandelr(async (req, res, next) => {
     const { categoryId } = req.params;
-    const { lang = "en" } = req.query; // ?lang=ar
+    const {
+        lang = "en",
+        page = 1,
+        limit = 10
+    } = req.query;
 
-    // جلب المنتجات المفعلة ضمن القسم المحدد
-    const products = await ProductModellll.find({
+    // تأمين الـ pagination
+    const pageNum = Math.max(1, parseInt(page) || 1);
+    const limitNum = Math.min(50, Math.max(1, parseInt(limit) || 10));
+    const skip = (pageNum - 1) * limitNum;
+
+    // التحقق من وجود القسم
+    const mainCategory = await CategoryModellll.findById(categoryId);
+    if (!mainCategory || !mainCategory.isActive) {
+        return next(new Error("❌ القسم غير موجود أو غير مفعل", { cause: 404 }));
+    }
+
+    // جلب كل subcategories المتداخلة (تراكمي)
+    const getAllSubCategoryIds = async (catId) => {
+        const children = await CategoryModellll.find({
+            parentCategory: catId,
+            isActive: true
+        }).select('_id');
+
+        let subs = children.map(c => c._id);
+        for (const child of children) {
+            subs = subs.concat(await getAllSubCategoryIds(child._id));
+        }
+        return subs;
+    };
+
+    const subCategoryIds = await getAllSubCategoryIds(categoryId);
+    const allCategoryIds = [categoryId, ...subCategoryIds];
+
+    // فلتر المنتجات اللي في القسم أو أي فرعي منه
+    const filter = {
         isActive: true,
-        categories: categoryId
-    })
-        .populate("categories", "name slug")
+        status: "published",
+        categories: { $in: allCategoryIds }
+    };
+
+    // عدد المنتجات الكلي في القسم (للـ pagination)
+    const totalProducts = await ProductModellll.countDocuments(filter);
+
+    // جلب المنتجات مع pagination
+    let products = await ProductModellll.find(filter)
+        .populate({
+            path: "categories",
+            match: { isActive: true },
+            select: "name slug"
+        })
+        .populate({
+            path: "brands",
+            match: { isActive: true },
+            select: "name image"
+        })
+        .select("-__v")
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limitNum)
         .lean();
 
-    const result = [];
+    // جلب الـ variants للمنتجات في الصفحة الحالية فقط
+    const productIdsWithVariants = products
+        .filter(p => p.hasVariants)
+        .map(p => p._id);
 
-    for (const product of products) {
-        // جلب Variants المفعلة لهذا المنتج
-        const variants = await VariantModel.find({ productId: product._id, isActive: true }).lean();
+    let variantsMap = {};
 
-        // ترتيب البيانات وإظهارها بشكل مرتب
-        const formattedProduct = {
+    if (productIdsWithVariants.length > 0) {
+        const variants = await VariantModel.find({
+            productId: { $in: productIdsWithVariants },
+            isActive: true
+        })
+            .populate({
+                path: "attributes.attributeId",
+                select: "name"
+            })
+            .populate({
+                path: "attributes.valueId",
+                select: "value hexCode"
+            })
+            .lean();
+
+        variants.forEach(variant => {
+            if (!variantsMap[variant.productId]) {
+                variantsMap[variant.productId] = [];
+            }
+
+            const formattedAttributes = variant.attributes
+                .filter(attr => attr.attributeId && attr.valueId)
+                .map(attr => ({
+                    attributeName: attr.attributeId.name[lang] || attr.attributeId.name.en,
+                    value: attr.valueId.value[lang] || attr.valueId.value.en,
+                    hexCode: attr.valueId.hexCode || null
+                }));
+
+            variantsMap[variant.productId].push({
+                _id: variant._id,
+                price: variant.price,
+                stock: variant.stock,
+                images: variant.images,
+                attributes: formattedAttributes
+            });
+        });
+    }
+
+    // تنسيق المنتجات (نفس GetAllProducts بالضبط)
+    const formattedProducts = products.map(product => {
+        const baseProduct = {
             _id: product._id,
             name: product.name[lang] || product.name.en,
-            description: product.description[lang] || product.description.en,
-            categories: product.categories.map(cat => ({
+            description: product.description?.[lang] || product.description?.en || "",
+            categories: (product.categories || []).map(cat => ({
                 _id: cat._id,
                 name: cat.name[lang] || cat.name.en,
                 slug: cat.slug
             })),
-            images: product.images,
-            seo: product.seo,
-            status: product.status,
+            brands: (product.brands || []).map(brand => ({
+                _id: brand._id,
+                name: brand.name[lang] || brand.name.en,
+                image: brand.image
+            })),
+            images: product.images || [],
+            mainPrice: product.mainPrice,
+            disCountPrice: product.disCountPrice || null,
+            currency: product.currency,
+            sku: product.sku,
+            tax: product.tax,
             rating: product.rating,
-            variants: variants.map(variant => ({
-                _id: variant._id,
-                color: variant.color,
-                size: variant.size,
-                price: variant.price,
-                stock: variant.stock,
-                images: variant.images
-            }))
+            seo: product.seo,
+            hasVariants: product.hasVariants,
+            inStock: product.inStock,
+            unlimitedStock: product.unlimitedStock,
+            stock: product.stock || 0,
+            tags: product.tags || [],
+            bulkDiscounts: product.bulkDiscounts || []
         };
 
-        result.push(formattedProduct);
-    }
+        if (product.hasVariants) {
+            return {
+                ...baseProduct,
+                variants: variantsMap[product._id.toString()] || []
+            };
+        } else {
+            return {
+                ...baseProduct,
+                price: product.mainPrice,
+                stock: product.unlimitedStock ? "unlimited" : product.stock,
+                variants: []
+            };
+        }
+    });
+
+    // معلومات الـ pagination
+    const pagination = {
+        currentPage: pageNum,
+        totalPages: Math.ceil(totalProducts / limitNum),
+        totalItems: totalProducts,
+        itemsPerPage: limitNum,
+        hasNext: pageNum < Math.ceil(totalProducts / limitNum),
+        hasPrev: pageNum > 1
+    };
 
     res.status(200).json({
         success: true,
-        message: " تم جلب المنتجات حسب القسم بنجاح",
-        data: result
+        message: "تم جلب المنتجات في القسم بنجاح مع التصفح الصفحي ✅",
+        count: formattedProducts.length,
+        pagination,
+        data: formattedProducts
     });
 });
-
 
 export const createBrand = asyncHandelr(async (req, res, next) => {
     const { name, description } = req.body;
@@ -2950,5 +3399,41 @@ export const getAttributeValues = asyncHandelr(async (req, res, next) => {
         success: true,
         message: "تم جلب القيم بنجاح",
         data: values
+    });
+});
+
+
+export const GetBrands = asyncHandelr(async (req, res, next) => {
+    const { lang = "en" } = req.query; // ?lang=ar أو en (default: en)
+
+    // جلب كل البراندات النشطة فقط
+    const brands = await BrandModel.find({ isActive: true })
+        .select("name description image createdAt")
+        .sort({ createdAt: -1 })
+        .lean();
+
+    if (brands.length === 0) {
+        return res.status(200).json({
+            success: true,
+            message: "لا توجد علامات تجارية حاليًا",
+            count: 0,
+            data: []
+        });
+    }
+
+    // تنسيق البيانات مع الترجمة حسب اللغة
+    const formattedBrands = brands.map(brand => ({
+        _id: brand._id,
+        name: brand.name[lang] || brand.name.en, // لو اللغة مش موجودة، يرجع الإنجليزي
+        description: brand.description?.[lang] || brand.description?.en || "",
+        image: brand.image,
+        createdAt: brand.createdAt
+    }));
+
+    res.status(200).json({
+        success: true,
+        message: "تم جلب العلامات التجارية بنجاح ✅",
+        count: formattedBrands.length,
+        data: formattedBrands
     });
 });
