@@ -2,7 +2,7 @@ import { Router } from "express";
 import { validation } from "../../middlewere/validation.middlewere.js";
 import  * as validators from "../auth/auth.validate.js"
 import { addAuthorizedUser, addAuthorizedUserToSupermarket, addProduct, addSection, confirmOTP, createAdminUser, createAppointment, createBranch, createDoctor, createEvaluation, createMainGroup, createMode, createOrder, createOrderSupermarket, createPaidService, createPaidServiceDrivers, createPermissions, createProduct, createPropertyBooking, createQuestion, createRentalProperty, createReport, createRestaurant, createService, createSubGroup, createSubscriptionPlan, createSupermarket, createUserByOwner, deleteAdminUser, deleteAppSettings, deleteBranch, deleteDoctor, deleteMainGroup, deletePermission, deleteProduct, deleteProducts, deleteRentalProperty, deleteRestaurant, deleteSection, deleteSingleQuestion, deleteSubGroup, deleteSubscriptionPlan, deleteSupermarket, deleteUserByAdmin, deleteUserByOwner, findNearbyDrivers, forgetPassword, getAcceptedOrders, getAccessibleSupermarket, getAllAdminUsers, getAllImages, getAllNormalUsers, getAllPaidServiceDrivers, getAllPaidServices, getAllPaidServicesadmin, getAllPermissions, getAllRentalProperties, getAllServiceProviders, getAllSubscriptionPlans, getBranches, getClinetHistory, getDeliveredOrdersByDriver, getDoctorAppointments, getDoctors, getDriverHistory, getDriverOrdersStats, getDriverStats, getEvaluations, getMainGroupsForUser, getMainGroupsWithSubGroups, getManagerRestaurants, getMyDoctorProfile, getMyEvaluations, getMyRestaurantsProducts, getMySubGroups, getNotificationsByDoctor, getNotificationsByProperty, getNotificationsByRestaurant, getNotificationsByUser, getOwnerRestaurants, getProductsByRestaurant, getPropertyBookings, getQuestionsByMainGroups, getReports, getRestaurantOrders, getRestaurants, getRideRequestById, getServices, getSubGroupsByMainGroup, getSupermarket, getSupermarketAdmin, getSupermarketNotifications, getSupermarketOrders, getSupermarketSections, getSupermarketWithSectionsAndProducts, getUserOrders, getUserRentalProperties, getUsersByOwner, markAllNotificationsAsRead, markAllNotificationsAsReadDoctor, markAllNotificationsAsReadProperty, registerRestaurant, resetPassword, sendotpphone, signup, signupServiceProvider, signupwithGmail, updateAdminUser, updateBranch, updateDoctor, updateMainGroup, updateMyProfile, updateOrderStatus, updateOrderStatusSupermarket, updatePermission, updateProduct, updateProductsupermarket, updateRentalProperty, updateRestaurant, updateSection, updateService, updateSingleQuestion, updateSubGroup, updateSubscription, updateSubscriptionPlan, updateSupermarket, updateUser, updateUserByOwner, uploadImages,  } from "./service/regestration.service.js";
-import { confirOtp, createBrand, createCategory, createOrUpdateSettings, CreateProdut, createVariant, deleteBrand, deleteCategory, deleteMyAccount, DeleteProduct, deleteVariant, filterProducts, forgetpassword,   forgetPasswordphone,   forgetPasswordphoneadmin,   GetAllProducts,   getAppSettingsAdmin,   getBrands,   getCategories,   getCategoriesLocalized,   getMyCompactProfile,   getMyProfile,   getProducts,   GetProductsByCategory,   getSettings,   getVariants,   login, loginAdmin, loginRestaurant, loginwithGmail, refreshToken, resendOTP, resetpassword, resetPasswordphone, updateBrand, updateCategory, UpdateProduct, updateVariant, verifyOTP } from "./service/authontecation.service.js";
+import { confirOtp, createAttribute, createAttributeValue, createBrand, createCategory, createOrUpdateSettings, CreateProdut, createVariant, deleteBrand, deleteCategory, deleteMyAccount, DeleteProduct, deleteVariant, filterProducts, forgetpassword,   forgetPasswordphone,   forgetPasswordphoneadmin,   GetAllProducts,   getAppSettingsAdmin,   getAttributesWithValues,   getAttributeValues,   getBrands,   getCategories,   getCategoriesLocalized,   getMyCompactProfile,   getMyProfile,   getProducts,   GetProductsByCategory,   getSettings,   getVariants,   login, loginAdmin, loginRestaurant, loginwithGmail, refreshToken, resendOTP, resetpassword, resetPasswordphone, updateBrand, updateCategory, UpdateProduct, updateVariant, verifyOTP } from "./service/authontecation.service.js";
 import { authentication, checkRestaurantPermission } from "../../middlewere/authontcation.middlewere.js";
 
 const routr = Router()
@@ -121,7 +121,7 @@ routr.post("/uploadImages",
 
 routr.post(
     "/CreateProdut",
-    // authentication(),
+
     uploadCloudFile(fileValidationTypes.image).array("images"),
   CreateProdut
 );
@@ -272,6 +272,7 @@ routr.patch(
 
 
 
+
 routr.patch(
     "/updateService/:id",
     uploadCloudFile(fileValidationTypes.image).fields([{ name: "servicePicture", maxCount: 1 }]),
@@ -307,16 +308,28 @@ routr.delete("/deleteSection/:id", authentication(), deleteSection)
 routr.delete("/deleteProducts/:id", authentication(), deleteProducts)
 
 routr.post("/createOrUpdateSettings", createOrUpdateSettings)
-routr.post("/createCategory", createCategory)
+routr.post("/createCategory", uploadCloudFile(fileValidationTypes.image).array("images"),
+    
+     createCategory)
 
 routr.get("/getSettings", getSettings)
 
 routr.get("/getCategories", getCategories)
 
-routr.put("/updateCategory/:categoryId", updateCategory)
+routr.put("/updateCategory/:categoryId",
+    uploadCloudFile(fileValidationTypes.image).array("images"),
+    updateCategory)
 routr.delete("/deleteCategory/:categoryId", deleteCategory)
 
+routr.post("/createAttribute", createAttribute)
+routr.post("/createAttributeValue", createAttributeValue)
+
+routr.get("/getAttributesWithValues", getAttributesWithValues)
+
 routr.post("/forgetPassword", forgetPassword)
+
+routr.get("/getAttributeValues/:attributeId", getAttributeValues)
+
 routr.delete("/deleteAppSettings", deleteAppSettings)
 
 routr.delete("/deleteProduct/:id",authentication() ,deleteProduct)
@@ -390,7 +403,9 @@ routr.post("/resendOTP",resendOTP )
 routr.post("/resetpassword", resetpassword) 
 routr.patch("/resetPasswordphone", resetPasswordphone)
 
-routr.put("/UpdateProduct/:productId", UpdateProduct)
+routr.put("/UpdateProduct/:productId",
+    uploadCloudFile(fileValidationTypes.image).array("images"),
+    UpdateProduct)
 
 routr.delete("/DeleteProduct/:productId", DeleteProduct)
 

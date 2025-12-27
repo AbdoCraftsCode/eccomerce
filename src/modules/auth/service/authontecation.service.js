@@ -1318,9 +1318,13 @@ import slugify from "slugify";
 import { ProductModellll } from "../../../DB/models/productSchemaaaa.js";
 import { VariantModel } from "../../../DB/models/variantSchema.js";
 import { BrandModel } from "../../../DB/models/brandSchemaaa.js";
+import { AttributeModell } from "../../../DB/models/attributeSchemaaa.js";
+import { AttributeValueModel } from "../../../DB/models/attributeValueSchema.js";
+
+
 
 export const createCategory = asyncHandelr(async (req, res, next) => {
-    const { name, parentCategory } = req.body;
+    const { name, parentCategory, description, status } = req.body;
 
     // ✅ Validation
     if (!name?.ar || !name?.en) {
@@ -1339,11 +1343,26 @@ export const createCategory = asyncHandelr(async (req, res, next) => {
         return next(new Error("❌ اسم القسم موجود بالفعل", { cause: 409 }));
     }
 
+    // ✅ رفع الصور (أكثر من صورة)
+    let images = [];
+    if (req.files && req.files.length > 0) {
+        for (const file of req.files) {
+            const { secure_url } = await cloud.uploader.upload(file.path, {
+                folder: "categories"
+            });
+            images.push(secure_url);
+            fs.unlinkSync(file.path);
+        }
+    }
+
     // ✅ Create
     const category = await CategoryModellll.create({
         name,
         slug,
-        parentCategory: parentCategory || null
+        parentCategory: parentCategory || null,
+        images,                    // الصور
+        description,               // الوصف (ar / en)
+        status                      // الحالة (published | inactive | scheduled)
     });
 
     res.status(201).json({
@@ -1353,21 +1372,135 @@ export const createCategory = asyncHandelr(async (req, res, next) => {
     });
 });
 
+
+
+
+
 export const getCategories = asyncHandelr(async (req, res, next) => {
+    // ✅ جلب كل الأقسام المفعلة مع populate للأب
     const categories = await CategoryModellll.find({ isActive: true })
         .populate("parentCategory", "name slug")
-        .sort({ createdAt: -1 });
+        .sort({ createdAt: -1 })
+        .lean();
+
+    // ✅ جلب إحصائيات المنتجات لكل قسم (بما فيه الفرعيات)
+    const categoryStats = await ProductModellll.aggregate([
+        {
+            $match: {
+                isActive: true,
+                status: "published" // اختياري: بس المنشورة
+            }
+        },
+        { $unwind: "$categories" },
+        {
+            $group: {
+                _id: "$categories",
+                productCount: { $sum: 1 },
+                totalPrice: { 
+                    $sum: { 
+                        $cond: [
+                            { $regexMatch: { input: "$mainPrice", regex: /^\d+(\.\d+)?$/ } },
+                            { $toDouble: "$mainPrice" },
+                            0
+                        ]
+                    }
+                }
+            }
+        }
+    ]);
+
+    // map: categoryId → { productCount, totalPrice }
+    const statsMap = {};
+    categoryStats.forEach(stat => {
+        statsMap[stat._id.toString()] = {
+            productCount: stat.productCount || 0,
+            totalPrice: stat.totalPrice || 0
+        };
+    });
+
+    // ✅ دالة لحساب كل subcategories المتداخلة (للحساب التراكمي)
+    const getAllSubCategoryIds = (catId, allCats) => {
+        const directChildren = allCats.filter(c => 
+            c.parentCategory && c.parentCategory._id.toString() === catId.toString()
+        );
+        let subs = directChildren.map(c => c._id.toString());
+        for (const child of directChildren) {
+            subs = subs.concat(getAllSubCategoryIds(child._id.toString(), allCats));
+        }
+        return subs;
+    };
+
+    // ✅ دالة لحساب الإحصائيات التراكمية لقسم (هو + كل أبنائه)
+    const getCategoryStats = (catId, allCats) => {
+        const subIds = getAllSubCategoryIds(catId, allCats);
+        const allIds = [catId, ...subIds];
+
+        let productCount = 0;
+        let totalPrice = 0;
+
+        allIds.forEach(id => {
+            const s = statsMap[id];
+            if (s) {
+                productCount += s.productCount;
+                totalPrice += s.totalPrice;
+            }
+        });
+
+        return { productCount, totalPrice };
+    };
+
+    // ✅ بناء الشجرة مع الإحصائيات
+    const buildTree = (parentId = null) => {
+        return categories
+            .filter(c => {
+                if (parentId === null) return !c.parentCategory;
+                return c.parentCategory && c.parentCategory._id.toString() === parentId.toString();
+            })
+            .map(cat => {
+                const catId = cat._id.toString();
+                const stats = getCategoryStats(catId, categories);
+
+                const children = buildTree(catId);
+
+                return {
+                    _id: cat._id,
+                    name: cat.name,
+                    slug: cat.slug,
+                    images: cat.images || [],
+                    description: cat.description || {},
+                    comment: cat.comment || {},
+                    status: cat.status,
+                    parentCategory: cat.parentCategory,
+                    productCount: stats.productCount,
+                    totalPrice: stats.totalPrice,
+                    children: children.length > 0 ? children : []
+                };
+            });
+    };
+
+    const tree = buildTree();
+
+    // ✅ حساب الإحصائيات العامة
+    const mainCategories = categories.filter(c => !c.parentCategory);
+    const subCategories = categories.filter(c => c.parentCategory);
+
+    const stats = {
+        totalMainCategories: mainCategories.length,
+        totalSubCategories: subCategories.length,
+        totalCategories: categories.length
+    };
 
     res.status(200).json({
         success: true,
-        message: " تم جلب الأقسام بنجاح",
-        data: categories
+        message: "تم جلب شجرة الأقسام مع الإحصائيات بنجاح ",
+        stats,
+        data: tree
     });
 });
 
 export const updateCategory = asyncHandelr(async (req, res, next) => {
     const { categoryId } = req.params;
-    const { name, parentCategory } = req.body;
+    const { name, parentCategory, description, status, comment } = req.body;
 
     const category = await CategoryModellll.findById(categoryId);
     if (!category) {
@@ -1401,6 +1534,39 @@ export const updateCategory = asyncHandelr(async (req, res, next) => {
         category.parentCategory = parentCategory || null;
     }
 
+    // تعديل الوصف
+    if (description) {
+        category.description.ar = description?.ar || category.description.ar;
+        category.description.en = description?.en || category.description.en;
+    }
+
+    if (comment) {
+        category.comment.ar = comment?.ar || category.comment.ar;
+        category.comment.en = comment?.en || category.comment.en;
+    }
+
+
+    // تعديل الحالة
+    if (status) {
+        if (!["published", "inactive", "scheduled"].includes(status)) {
+            return next(new Error("❌ الحالة غير صحيحة", { cause: 400 }));
+        }
+        category.status = status;
+    }
+
+    // تعديل الصور (لو تم إرسال ملفات جديدة)
+    if (req.files && req.files.length > 0) {
+        const images = [];
+        for (const file of req.files) {
+            const { secure_url } = await cloud.uploader.upload(file.path, {
+                folder: "categories"
+            });
+            images.push(secure_url);
+            fs.unlinkSync(file.path);
+        }
+        category.images = images; // استبدال الصور القديمة بالجديدة
+    }
+
     await category.save();
 
     res.status(200).json({
@@ -1409,6 +1575,7 @@ export const updateCategory = asyncHandelr(async (req, res, next) => {
         data: category
     });
 });
+
 
 export const deleteCategory = asyncHandelr(async (req, res, next) => {
     const { categoryId } = req.params;
@@ -1432,15 +1599,32 @@ export const deleteCategory = asyncHandelr(async (req, res, next) => {
 // Product
 
 export const CreateProdut = asyncHandelr(async (req, res, next) => {
-    const { name, description, categories, seo } = req.body;
-    // const userId = req.user._id;
+    const {
+        name,
+        description,
+        categories,
+        brands,
+        stock,
+        seo,
+        sku,
+        mainPrice,
+        disCountPrice,
+        tax,              // { enabled: boolean, rate: number }
+        bulkDiscounts,    // array of { minQty, maxQty, discountPercent }
+        currency ,
+        hasVariants,
+        inStock ,
+        unlimitedStock ,
+        tags = [],        // array of strings
+        status ,
+    } = req.body;
 
-
+    // Validations أساسية
     if (!name?.ar || !name?.en) {
         return next(new Error("❌ اسم المنتج مطلوب بالعربي والإنجليزي", { cause: 400 }));
     }
 
-    if (!categories || categories.length === 0) {
+    if (!categories || !Array.isArray(categories) || categories.length === 0) {
         return next(new Error("❌ يجب اختيار قسم واحد على الأقل", { cause: 400 }));
     }
 
@@ -1448,140 +1632,442 @@ export const CreateProdut = asyncHandelr(async (req, res, next) => {
         return next(new Error("❌ يجب رفع صورة واحدة على الأقل", { cause: 400 }));
     }
 
-    // ✅ تأكد إن الأقسام موجودة
+    // التحقق من وجود الأقسام
     const categoriesCount = await CategoryModellll.countDocuments({
         _id: { $in: categories },
         isActive: true
     });
-
     if (categoriesCount !== categories.length) {
-        return next(new Error("❌ قسم أو أكثر غير موجود", { cause: 400 }));
+        return next(new Error("❌ قسم أو أكثر غير موجود أو غير مفعل", { cause: 400 }));
     }
 
-    // ✅ رفع الصور
+    // التحقق من SKU إذا كان موجود (unique)
+    if (sku) {
+        const existingSku = await ProductModellll.findOne({ sku });
+        if (existingSku) {
+            return next(new Error("❌ هذا SKU مستخدم من قبل", { cause: 409 }));
+        }
+    }
+
+    // رفع الصور إلى Cloudinary
     const images = [];
     for (const file of req.files) {
         const result = await cloud.uploader.upload(file.path, {
             folder: "products"
         });
-
         images.push(result.secure_url);
-        fs.unlinkSync(file.path);
+        fs.unlinkSync(file.path); // حذف الملف المؤقت
     }
 
-    // ✅ SEO slug
-    const seoSlug = slugify(seo?.slug || name.en, {
-        lower: true,
-        strict: true
-    });
-
+    // إنشاء Slug للـ SEO
+    const seoSlug = slugify(seo?.slug || name.en, { lower: true, strict: true });
     const slugExists = await ProductModellll.findOne({ "seo.slug": seoSlug });
     if (slugExists) {
-        return next(new Error("❌ هذا المنتج موجود بالفعل", { cause: 409 }));
+        return next(new Error("❌ هذا الـ slug مستخدم بالفعل، اختر اسم آخر", { cause: 409 }));
     }
 
-    // ✅ Create Product
+    // إنشاء المنتج
     const product = await ProductModellll.create({
         name,
         description,
         categories,
+        brands,
         images,
+        sku: sku?.trim() || undefined,
+        mainPrice,
+        disCountPrice,
+        tax: {
+            enabled: tax?.enabled || false,
+            rate: tax?.rate || 0
+        },
+        bulkDiscounts: bulkDiscounts || [],
+        currency,
+        stock,
+        hasVariants,
+        inStock,
+        unlimitedStock,
+        tags: tags.map(tag => tag.toLowerCase().trim()),
+        status,
         seo: {
             title: seo?.title || name.en,
-            description: seo?.description || "",
+            description: seo?.description || description?.en || "",
             slug: seoSlug
         },
         rating: {
             average: 0,
             count: 0
         },
-        // createdBy: userId
+        isActive: true
     });
 
     res.status(201).json({
         success: true,
-        message: " تم إنشاء المنتج بنجاح",
+        message: "تم إنشاء المنتج بنجاح ",
         data: product
     });
 });
 
 
+
+
+
 export const getProducts = asyncHandelr(async (req, res, next) => {
-    const products = await ProductModellll.find({ isActive: true })
-        .populate("categories", "name slug")
-        .sort({ createdAt: -1 });
+    const {
+        stock,      // available, low, out, inactive
+        category,   // category ID
+        status,     // published, inactive, scheduled
+        page = 1,   // pagination
+        limit = 10  // pagination
+    } = req.query;
+
+    // تحويل page و limit إلى أرقام
+    const pageNum = Math.max(1, parseInt(page) || 1);
+    const limitNum = Math.min(100, Math.max(1, parseInt(limit) || 10)); // max 100
+    const skip = (pageNum - 1) * limitNum;
+
+    // ✅ بناء الفلتر الأساسي
+    let filter = {};
+
+    // فلترة حسب status (published, inactive, scheduled)
+    if (status) {
+        const validStatuses = ["published", "inactive", "scheduled"];
+        if (!validStatuses.includes(status)) {
+            return next(new Error("قيمة status غير صحيحة. استخدم: published, inactive, scheduled", { cause: 400 }));
+        }
+        filter.status = status;
+    } else {
+        // افتراضي: بس الـ published (للعرض العام للعملاء)
+        filter.status = "published";
+    }
+
+    // فلترة حسب القسم + subcategories
+    if (category) {
+        const mainCat = await CategoryModellll.findById(category);
+        if (!mainCat || !mainCat.isActive) {
+            return next(new Error("القسم غير موجود أو غير مفعل", { cause: 404 }));
+        }
+
+        // دالة recursive لجلب كل الأبناء المتداخلين
+        const getAllSubCategoryIds = async (catId) => {
+            const children = await CategoryModellll.find({
+                parentCategory: catId,
+                isActive: true
+            }).select('_id');
+
+            let subs = [];
+            for (const child of children) {
+                subs.push(child._id);
+                subs.push(...await getAllSubCategoryIds(child._id));
+            }
+            return subs;
+        };
+
+        const subCategoryIds = await getAllSubCategoryIds(category);
+        const allCategoryIds = [category, ...subCategoryIds];
+
+        filter.categories = { $in: allCategoryIds };
+    }
+
+    // ✅ جلب المنتجات مع الفلترة والـ pagination
+    let productsQuery = ProductModellll.find(filter)
+        .populate({
+            path: "categories",
+            match: { isActive: true },
+            select: "name slug images description comment status parentCategory",
+            populate: {
+                path: "parentCategory",
+                match: { isActive: true },
+                select: "name slug"
+            }
+        })
+        .select('-__v')
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limitNum);
+
+    // جلب العدد الكلي للـ pagination
+    const totalProducts = await ProductModellll.countDocuments(filter);
+
+    let products = await productsQuery.lean();
+
+    // ✅ جلب stock الكلي من الـ variants
+    const productsWithVariants = products.filter(p => p.hasVariants).map(p => p._id);
+    let variantStockMap = {};
+
+    if (productsWithVariants.length > 0) {
+        const variantStocks = await VariantModel.aggregate([
+            { $match: { productId: { $in: productsWithVariants }, isActive: true } },
+            { $group: { _id: "$productId", totalVariantStock: { $sum: "$stock" }, variantCount: { $sum: 1 } } }
+        ]);
+
+        variantStocks.forEach(v => {
+            variantStockMap[v._id.toString()] = {
+                total: v.totalVariantStock || 0,
+                count: v.variantCount || 0
+            };
+        });
+    }
+
+    // ✅ دالة حساب stockStatus
+    const calculateStockStatus = (product) => {
+        if (!product.isActive || product.status !== "published") {
+            return { status: "غير نشط", total: 0, available: 0, lowStock: 0, outOfStock: 0, inactive: 1 };
+        }
+        if (product.unlimitedStock) {
+            return { status: "متوفر في المخزون", total: 999999, available: 1, lowStock: 0, outOfStock: 0, inactive: 0 };
+        }
+
+        let effectiveStock = product.stock || 0;
+        if (product.hasVariants) {
+            effectiveStock = variantStockMap[product._id.toString()]?.total || 0;
+        }
+
+        let statusText = "نفد من المخزون";
+        if (effectiveStock > 10) statusText = "متوفر في المخزون";
+        else if (effectiveStock > 0) statusText = "قارب على النفاد";
+
+        return {
+            status: statusText,
+            total: effectiveStock,
+            available: effectiveStock > 10 ? 1 : 0,
+            lowStock: (effectiveStock > 0 && effectiveStock <= 10) ? 1 : 0,
+            outOfStock: effectiveStock === 0 ? 1 : 0,
+            inactive: 0
+        };
+    };
+
+    // ✅ إضافة stockStatus و variantInfo
+    products = products.map(product => ({
+        ...product,
+        stockStatus: calculateStockStatus(product),
+        ...(product.hasVariants && variantStockMap[product._id.toString()] ? {
+            variantInfo: {
+                totalVariants: variantStockMap[product._id.toString()].count,
+                totalVariantStock: variantStockMap[product._id.toString()].total
+            }
+        } : {})
+    }));
+
+    // ✅ فلترة حسب stock status بعد الحساب
+    if (stock) {
+        const validStocks = ["available", "low", "out", "inactive"];
+        if (!validStocks.includes(stock)) {
+            return next(new Error("قيمة stock غير صحيحة. استخدم: available, low, out, inactive", { cause: 400 }));
+        }
+
+        const statusMap = {
+            available: "متوفر في المخزون",
+            low: "قارب على النفاد",
+            out: "نفد من المخزون",
+            inactive: "غير نشط"
+        };
+
+        products = products.filter(p => p.stockStatus.status === statusMap[stock]);
+    }
+
+    // ✅ إضافة children للأقسام
+    const categoryIds = products.flatMap(p => p.categories.map(c => c._id.toString()));
+    let childrenMap = {};
+    if (categoryIds.length > 0) {
+        const children = await CategoryModellll.find({
+            parentCategory: { $in: categoryIds },
+            isActive: true
+        }).select("name slug parentCategory").lean();
+
+        children.forEach(child => {
+            const parentId = child.parentCategory.toString();
+            if (!childrenMap[parentId]) childrenMap[parentId] = [];
+            childrenMap[parentId].push({ _id: child._id, name: child.name, slug: child.slug });
+        });
+    }
+
+    products.forEach(product => {
+        product.categories.forEach(category => {
+            category.children = childrenMap[category._id.toString()] || [];
+        });
+    });
+
+    // ✅ الـ summary بعد كل الفلاتر
+    const summary = {
+        totalProducts: products.length,
+        available: products.filter(p => p.stockStatus.status === "متوفر في المخزون").length,
+        lowStock: products.filter(p => p.stockStatus.status === "قارب على النفاد").length,
+        outOfStock: products.filter(p => p.stockStatus.status === "نفد من المخزون").length,
+        inactive: products.filter(p => p.stockStatus.status === "غير نشط").length
+    };
+
+    // ✅ معلومات الـ pagination
+    const pagination = {
+        currentPage: pageNum,
+        totalPages: Math.ceil(totalProducts / limitNum),
+        totalItems: totalProducts,
+        itemsPerPage: limitNum,
+        hasNext: pageNum < Math.ceil(totalProducts / limitNum),
+        hasPrev: pageNum > 1
+    };
 
     res.status(200).json({
         success: true,
-        message: " تم جلب المنتجات بنجاح",
+        message: "تم جلب المنتجات بنجاح ",
+        count: products.length,
+        summary,
+        pagination,
         data: products
     });
 });
 
 
 
+
 export const UpdateProduct = asyncHandelr(async (req, res, next) => {
     const { productId } = req.params;
-    const { name, description, categories, seo, status } = req.body;
+
+    const {
+        name,
+        description,
+        categories,
+        seo,
+        status,
+        sku,
+        mainPrice,
+        disCountPrice,
+        currency,
+        tax,                  // { enabled: boolean, rate: number }
+        inStock,
+        unlimitedStock,
+        stock,                // عدد المخزون (للمنتجات بدون variants)
+        tags,
+        bulkDiscounts,
+        hasVariants,
+        isActive
+    } = req.body;
 
     const product = await ProductModellll.findById(productId);
     if (!product) {
         return next(new Error("❌ المنتج غير موجود", { cause: 404 }));
     }
 
-    // تعديل الاسم
-    if (name?.ar || name?.en) {
-        product.name.ar = name?.ar || product.name.ar;
-        product.name.en = name?.en || product.name.en;
+    // ✅ تعديل الاسم + slug
+    if (name) {
+        if (name.ar) product.name.ar = name.ar.trim();
+        if (name.en) {
+            product.name.en = name.en.trim();
 
-        if (name?.en) {
+            // توليد slug جديد وفحص التكرار (ما عدا المنتج نفسه)
             const newSlug = slugify(name.en, { lower: true, strict: true });
-
             const slugExists = await ProductModellll.findOne({
                 "seo.slug": newSlug,
                 _id: { $ne: productId }
             });
-
             if (slugExists) {
-                return next(new Error("❌ هذا المنتج موجود بالفعل", { cause: 409 }));
+                return next(new Error("❌ هذا الـ slug مستخدم في منتج آخر", { cause: 409 }));
             }
-
             product.seo.slug = newSlug;
-            if (!seo?.title) product.seo.title = name.en;
+            if (!seo?.title) product.seo.title = name.en; // لو ما بعتش title جديد
         }
     }
 
-    // تعديل الوصف
-    if (description?.ar) product.description.ar = description.ar;
-    if (description?.en) product.description.en = description.en;
+    // ✅ تعديل الوصف
+    if (description) {
+        if (description.ar) product.description.ar = description.ar.trim();
+        if (description.en) product.description.en = description.en.trim();
+    }
 
-    // تعديل الأقسام
-    if (categories && categories.length > 0) {
+    // ✅ تعديل الأقسام
+    if (categories && Array.isArray(categories) && categories.length > 0) {
         const categoriesCount = await CategoryModellll.countDocuments({
             _id: { $in: categories },
             isActive: true
         });
         if (categoriesCount !== categories.length) {
-            return next(new Error("❌ قسم أو أكثر غير موجود", { cause: 400 }));
+            return next(new Error("❌ قسم أو أكثر غير موجود أو غير مفعل", { cause: 400 }));
         }
         product.categories = categories;
     }
 
-    // تعديل الحالة
+    // ✅ تعديل الحقول البسيطة
     if (status) product.status = status;
+    if (sku !== undefined) {
+        if (sku.trim() === "") {
+            product.sku = undefined;
+        } else {
+            const skuExists = await ProductModellll.findOne({ sku: sku.trim(), _id: { $ne: productId } });
+            if (skuExists) return next(new Error("❌ هذا SKU مستخدم في منتج آخر", { cause: 409 }));
+            product.sku = sku.trim();
+        }
+    }
+    if (mainPrice !== undefined) product.mainPrice = mainPrice;
+    if (disCountPrice !== undefined) product.disCountPrice = disCountPrice;
+    if (currency) product.currency = currency;
+    if (hasVariants !== undefined) product.hasVariants = !!hasVariants;
+    if (isActive !== undefined) product.isActive = !!isActive;
 
-    // تعديل SEO
-    if (seo?.title) product.seo.title = seo.title;
-    if (seo?.description) product.seo.description = seo.description;
+    // ✅ تعديل المخزون
+    if (inStock !== undefined) product.inStock = !!inStock;
+    if (unlimitedStock !== undefined) product.unlimitedStock = !!unlimitedStock;
+    if (stock !== undefined) product.stock = Math.max(0, Number(stock) || 0);
+
+    // ✅ تعديل الضريبة
+    if (tax) {
+        if (tax.enabled !== undefined) product.tax.enabled = !!tax.enabled;
+        if (tax.rate !== undefined) product.tax.rate = Math.max(0, Number(tax.rate) || 0);
+    }
+
+    // ✅ تعديل الـ tags
+    if (tags && Array.isArray(tags)) {
+        product.tags = tags.map(tag => tag.toLowerCase().trim()).filter(Boolean);
+    }
+
+    // ✅ تعديل bulkDiscounts
+    if (bulkDiscounts && Array.isArray(bulkDiscounts)) {
+        product.bulkDiscounts = bulkDiscounts.map(d => ({
+            minQty: Number(d.minQty),
+            maxQty: Number(d.maxQty),
+            discountPercent: Math.min(100, Math.max(1, Number(d.discountPercent)))
+        }));
+    }
+
+    // ✅ تعديل SEO
+    if (seo) {
+        if (seo.title) product.seo.title = seo.title.trim();
+        if (seo.description) product.seo.description = seo.description.trim();
+    }
+
+    // ✅ تحديث الصور (إضافة جديدة + حذف قديمة اختياري)
+    if (req.files && req.files.length > 0) {
+        const newImages = [];
+        for (const file of req.files) {
+            const result = await cloud.uploader.upload(file.path, {
+                folder: "products"
+            });
+            newImages.push(result.secure_url);
+            fs.unlinkSync(file.path); // حذف الملف المؤقت
+        }
+        // نضيف الصور الجديدة للقديمة (مش نستبدل)
+        product.images = [...product.images, ...newImages];
+    }
+
+    // ✅ حذف صورة معينة (اختياري - لو بعتت removeImages array من public_ids أو urls)
+    if (req.body.removeImages && Array.isArray(JSON.parse(req.body.removeImages))) {
+        const imagesToRemove = JSON.parse(req.body.removeImages);
+        product.images = product.images.filter(img => !imagesToRemove.includes(img));
+
+        // اختياري: حذف من Cloudinary
+        // for (const url of imagesToRemove) {
+        //     const publicId = url.split('/').pop().split('.')[0];
+        //     await cloud.uploader.destroy(`products/${publicId}`);
+        // }
+    }
 
     await product.save();
 
     res.status(200).json({
         success: true,
-        message: " تم تعديل المنتج بنجاح",
+        message: "تم تعديل المنتج بنجاح ",
         data: product
     });
 });
+
 
 
 export const DeleteProduct = asyncHandelr(async (req, res, next) => {
@@ -1611,98 +2097,349 @@ export const DeleteProduct = asyncHandelr(async (req, res, next) => {
 
 
 export const createVariant = asyncHandelr(async (req, res, next) => {
-    const { productId, color, size, price, stock } = req.body;
+    const { productId, attributes, price, stock } = req.body;
 
-    // ✅ Validation
-    if (!productId) return next(new Error("❌ productId مطلوب", { cause: 400 }));
-    if (!price) return next(new Error("❌ السعر مطلوب", { cause: 400 }));
-    if (!stock && stock !== 0) return next(new Error("❌ المخزون مطلوب", { cause: 400 }));
-    if (!req.files || req.files.length === 0) return next(new Error("❌ يجب رفع صورة واحدة على الأقل للمتغير", { cause: 400 }));
-
-    // ✅ تأكد إن المنتج موجود
-    const product = await ProductModellll.findById(productId);
-    if (!product || !product.isActive) {
-        return next(new Error("❌ المنتج غير موجود أو غير مفعل", { cause: 404 }));
+    // ✅ Validation أساسية
+    if (!productId) {
+        return next(new Error("❌ productId مطلوب", { cause: 400 }));
     }
 
-    // ✅ رفع الصور
+    if (!price || isNaN(price) || Number(price) <= 0) {
+        return next(new Error("❌ السعر مطلوب ويجب أن يكون رقم موجب", { cause: 400 }));
+    }
+
+    if (stock === undefined || stock === null || isNaN(stock) || Number(stock) < 0) {
+        return next(new Error("❌ المخزون مطلوب ويجب أن يكون رقم غير سالب", { cause: 400 }));
+    }
+
+    if (!req.files || req.files.length === 0) {
+        return next(new Error("❌ يجب رفع صورة واحدة على الأقل للمتغير", { cause: 400 }));
+    }
+
+    // ✅ تحويل attributes من string إلى array إذا كان جاي كـ JSON string (شائع في form-data)
+    let parsedAttributes = [];
+    try {
+        if (typeof attributes === "string") {
+            parsedAttributes = JSON.parse(attributes);
+        } else if (Array.isArray(attributes)) {
+            parsedAttributes = attributes;
+        } else {
+            return next(new Error("❌ صيغة attributes غير صحيحة", { cause: 400 }));
+        }
+
+        if (!Array.isArray(parsedAttributes) || parsedAttributes.length === 0) {
+            return next(new Error("❌ يجب اختيار متغير واحد على الأقل (attribute)", { cause: 400 }));
+        }
+    } catch (error) {
+        return next(new Error("❌ صيغة JSON للـ attributes غير صحيحة", { cause: 400 }));
+    }
+
+    // ✅ تأكد إن المنتج موجود ومفعل ويدعم المتغيرات
+    const product = await ProductModellll.findById(productId);
+    if (!product) {
+        return next(new Error("❌ المنتج غير موجود", { cause: 404 }));
+    }
+    if (!product.isActive) {
+        return next(new Error("❌ المنتج غير مفعل", { cause: 400 }));
+    }
+    if (!product.hasVariants) {
+        return next(new Error("❌ هذا المنتج لا يدعم المتغيرات (hasVariants = false)", { cause: 400 }));
+    }
+
+    // ✅ التحقق من صحة الـ attributeId و valueId
+    for (const attr of parsedAttributes) {
+        if (!attr.attributeId || !attr.valueId) {
+            return next(new Error("❌ كل متغير يجب أن يحتوي على attributeId و valueId", { cause: 400 }));
+        }
+
+        // تحقق من وجود الـ Attribute والـ Value وأنهم مفعلين
+        const attribute = await AttributeModell.findOne({
+            _id: attr.attributeId,
+            isActive: true
+        });
+        if (!attribute) {
+            return next(new Error(`❌ الخاصية (Attribute) غير موجودة أو غير مفعلة: ${attr.attributeId}`, { cause: 400 }));
+        }
+
+        const value = await AttributeValueModel.findOne({
+            _id: attr.valueId,
+            attributeId: attr.attributeId,
+            isActive: true
+        });
+        if (!value) {
+            return next(new Error(`❌ القيمة (Value) غير موجودة أو غير مطابقة للخاصية: ${attr.valueId}`, { cause: 400 }));
+        }
+    }
+
+    // ✅ رفع الصور إلى Cloudinary
     const images = [];
     for (const file of req.files) {
-        const result = await cloud.uploader.upload(file.path, { folder: "variants" });
-        images.push({ url: result.secure_url, public_id: result.public_id });
-        fs.unlinkSync(file.path);
+        const result = await cloud.uploader.upload(file.path, {
+            folder: "variants"
+        });
+        images.push({
+            url: result.secure_url,
+            public_id: result.public_id
+        });
+        fs.unlinkSync(file.path); // حذف الملف المؤقت
     }
 
     // ✅ إنشاء المتغير
     const variant = await VariantModel.create({
         productId,
-        color: color ? JSON.parse(color) : {}, // color: {ar:"أحمر", en:"Red"} لو أرسلت كـ JSON string
-        size,
-        price,
-        stock,
+        attributes: parsedAttributes.map(attr => ({
+            attributeId: attr.attributeId,
+            valueId: attr.valueId
+        })),
+        price: Number(price),
+        stock: Number(stock),
         images
     });
 
     res.status(201).json({
         success: true,
-        message: " تم إنشاء المتغير بنجاح",
+        message: "تم إنشاء المتغير بنجاح ",
         data: variant
     });
 });
+
+
+
+
 
 export const getVariants = asyncHandelr(async (req, res, next) => {
     const { productId } = req.params;
 
-    const variants = await VariantModel.find({ productId, isActive: true }).sort({ createdAt: -1 });
+    // ✅ التحقق من وجود المنتج أولاً
+    const product = await ProductModellll.findById(productId);
+    if (!product) {
+        return next(new Error("❌ المنتج غير موجود", { cause: 404 }));
+    }
+
+    if (!product.hasVariants) {
+        return res.status(200).json({
+            success: true,
+            message: "هذا المنتج لا يحتوي على متغيرات",
+            count: 0,
+            data: []
+        });
+    }
+
+    // ✅ جلب المتغيرات مع populate كامل للـ attributes والـ values
+    const variants = await VariantModel.find({
+        productId,
+        isActive: true
+    })
+        .populate({
+            path: "attributes.attributeId",
+            match: { isActive: true },
+            select: "name type"
+        })
+        .populate({
+            path: "attributes.valueId",
+            match: { isActive: true },
+            select: "value hexCode"
+        })
+        .sort({ createdAt: -1 })
+        .lean(); // عشان نقدر نعدل عليها بسهولة
+
+    // ✅ تنظيف وتحسين شكل الـ attributes للـ frontend
+    const formattedVariants = variants.map(variant => {
+        // فلترة أي attribute فشل في الـ populate (لو attribute أو value محذوفة أو غير مفعلة)
+        const validAttributes = variant.attributes.filter(
+            attr => attr.attributeId && attr.valueId
+        );
+
+        // تحويل إلى شكل أوضح: array من objects مع كل التفاصيل
+        const attributes = validAttributes.map(attr => ({
+            name: attr.attributeId.name,        // { ar: "اللون", en: "Color" }
+            type: attr.attributeId.type,        // مثلاً "color" أو "select"
+            value: attr.valueId.value,          // { ar: "أحمر", en: "Red" }
+            hexCode: attr.valueId.hexCode || null
+        }));
+
+        // أو لو عايز شكل object بدل array (أسهل للـ frontend أحيانًا)
+        // const attributesObj = validAttributes.reduce((obj, attr) => {
+        //     obj[attr.attributeId.name.en.toLowerCase()] = {
+        //         name: attr.attributeId.name,
+        //         value: attr.valueId.value,
+        //         hexCode: attr.valueId.hexCode || null
+        //     };
+        //     return obj;
+        // }, {});
+
+        return {
+            _id: variant._id,
+            price: variant.price,
+            stock: variant.stock,
+            images: variant.images,
+            isActive: variant.isActive,
+            createdAt: variant.createdAt,
+            updatedAt: variant.updatedAt,
+            attributes // أو attributesObj لو عايز object
+        };
+    });
 
     res.status(200).json({
         success: true,
-        message: " تم جلب المتغيرات بنجاح",
-        data: variants
+        message: "تم جلب المتغيرات بنجاح ",
+        count: formattedVariants.length,
+        data: formattedVariants
     });
 });
+
+
 
 
 export const updateVariant = asyncHandelr(async (req, res, next) => {
     const { variantId } = req.params;
-    const { color, size, price, stock, isActive } = req.body;
+    const { attributes, price, stock, isActive } = req.body;
 
     const variant = await VariantModel.findById(variantId);
-    if (!variant) return next(new Error("❌ المتغير غير موجود", { cause: 404 }));
+    if (!variant) {
+        return next(new Error("❌ المتغير غير موجود", { cause: 404 }));
+    }
 
-    // تعديل الحقول النصية
-    if (color) variant.color = JSON.parse(color); // color JSON string
-    if (size) variant.size = size;
-    if (price !== undefined) variant.price = price;
-    if (stock !== undefined) variant.stock = stock;
-    if (isActive !== undefined) variant.isActive = isActive;
+    // ✅ تحديث الـ attributes (يجب أن تكون array من { attributeId, valueId })
+    if (attributes) {
+        let parsedAttributes;
+        try {
+            if (typeof attributes === "string") {
+                parsedAttributes = JSON.parse(attributes);
+            } else if (Array.isArray(attributes)) {
+                parsedAttributes = attributes;
+            } else {
+                return next(new Error("❌ صيغة attributes غير صحيحة", { cause: 400 }));
+            }
 
-    // تعديل الصور (لو تم رفع ملفات جديدة)
+            if (!Array.isArray(parsedAttributes) || parsedAttributes.length === 0) {
+                return next(new Error("❌ يجب إرسال متغير واحد على الأقل (attribute)", { cause: 400 }));
+            }
+
+            // التحقق الأساسي من البنية
+            for (const attr of parsedAttributes) {
+                if (!attr.attributeId || !attr.valueId) {
+                    return next(new Error("❌ كل attribute يجب أن يحتوي على attributeId و valueId", { cause: 400 }));
+                }
+            }
+
+            // التحقق من وجود الـ attribute و value وأنهم مفعلين (اختياري للأمان)
+            for (const attr of parsedAttributes) {
+                const attribute = await AttributeModell.findOne({ _id: attr.attributeId, isActive: true });
+                if (!attribute) {
+                    return next(new Error(`❌ الخاصية غير موجودة أو غير مفعلة: ${attr.attributeId}`, { cause: 400 }));
+                }
+
+                const value = await AttributeValueModel.findOne({
+                    _id: attr.valueId,
+                    attributeId: attr.attributeId,
+                    isActive: true
+                });
+                if (!value) {
+                    return next(new Error(`❌ القيمة غير موجودة أو غير مطابقة: ${attr.valueId}`, { cause: 400 }));
+                }
+            }
+
+            variant.attributes = parsedAttributes.map(attr => ({
+                attributeId: attr.attributeId,
+                valueId: attr.valueId
+            }));
+        } catch (error) {
+            return next(new Error("❌ صيغة JSON للـ attributes غير صحيحة", { cause: 400 }));
+        }
+    }
+
+    // ✅ تحديث الحقول البسيطة
+    if (price !== undefined) {
+        if (isNaN(price) || Number(price) <= 0) {
+            return next(new Error("❌ السعر يجب أن يكون رقم موجب", { cause: 400 }));
+        }
+        variant.price = Number(price);
+    }
+
+    if (stock !== undefined) {
+        if (isNaN(stock) || Number(stock) < 0) {
+            return next(new Error("❌ المخزون يجب أن يكون رقم غير سالب", { cause: 400 }));
+        }
+        variant.stock = Number(stock);
+    }
+
+    if (isActive !== undefined) {
+        variant.isActive = !!isActive;
+    }
+
+    // ✅ تحديث الصور (استبدال كامل: حذف القديمة + رفع الجديدة)
     if (req.files && req.files.length > 0) {
         // حذف الصور القديمة من Cloudinary
         for (const img of variant.images) {
-            await cloud.uploader.destroy(img.public_id);
+            if (img.public_id) {
+                await cloud.uploader.destroy(img.public_id);
+            }
         }
 
         // رفع الصور الجديدة
-        const images = [];
+        const newImages = [];
         for (const file of req.files) {
-            const result = await cloud.uploader.upload(file.path, { folder: "variants" });
-            images.push({ url: result.secure_url, public_id: result.public_id });
-            fs.unlinkSync(file.path);
+            const result = await cloud.uploader.upload(file.path, {
+                folder: "variants"
+            });
+            newImages.push({
+                url: result.secure_url,
+                public_id: result.public_id
+            });
+            fs.unlinkSync(file.path); // حذف الملف المؤقت
         }
 
-        variant.images = images;
+        variant.images = newImages;
     }
 
     await variant.save();
 
+    // ✅ جلب الـ variant بعد التحديث مع populate كامل (زي الـ getVariants)
+    const updatedVariant = await VariantModel.findById(variantId)
+        .populate({
+            path: "attributes.attributeId",
+            match: { isActive: true },
+            select: "name type"
+        })
+        .populate({
+            path: "attributes.valueId",
+            match: { isActive: true },
+            select: "value hexCode"
+        })
+        .lean();
+
+    // تنسيق الـ attributes للـ frontend
+    const validAttributes = updatedVariant.attributes.filter(
+        attr => attr.attributeId && attr.valueId
+    );
+
+    const formattedAttributes = validAttributes.map(attr => ({
+        name: attr.attributeId.name,
+        type: attr.attributeId.type,
+        value: attr.valueId.value,
+        hexCode: attr.valueId.hexCode || null
+    }));
+
+    const responseData = {
+        _id: updatedVariant._id,
+        productId: updatedVariant.productId,
+        price: updatedVariant.price,
+        stock: updatedVariant.stock,
+        images: updatedVariant.images,
+        isActive: updatedVariant.isActive,
+        createdAt: updatedVariant.createdAt,
+        updatedAt: updatedVariant.updatedAt,
+        attributes: formattedAttributes
+    };
+
     res.status(200).json({
         success: true,
-        message: " تم تعديل المتغير بنجاح",
-        data: variant
+        message: "تم تعديل المتغير بنجاح ",
+        data: responseData
     });
 });
+
 
 
 export const deleteVariant = asyncHandelr(async (req, res, next) => {
@@ -1904,42 +2641,33 @@ export const GetProductsByCategory = asyncHandelr(async (req, res, next) => {
 
 
 export const createBrand = asyncHandelr(async (req, res, next) => {
-    const { categories } = req.body;
+    const { name, description } = req.body;
 
     // ✅ Validation
-    if (!categories || categories.length === 0) {
-        return next(new Error("❌ يجب إدخال قسم واحد على الأقل", { cause: 400 }));
+    if (!name?.ar || !name?.en) {
+        return next(new Error("❌ اسم البراند مطلوب بالعربي والإنجليزي", { cause: 400 }));
     }
 
     if (!req.file) {
         return next(new Error("❌ يجب رفع صورة للبراند", { cause: 400 }));
     }
 
-    // ✅ تحويل categories لـ Array لو جاية String
-    const categoriesArray = Array.isArray(categories)
-        ? categories
-        : [categories];
-
-    // ✅ تأكد إن كل الأقسام موجودة ومفعلة
-    const foundCategories = await CategoryModellll.find({
-        _id: { $in: categoriesArray },
-        isActive: true
-    });
-
-    if (foundCategories.length !== categoriesArray.length) {
-        return next(new Error("❌ قسم أو أكثر غير موجود أو غير مفعل", { cause: 404 }));
-    }
-
-    // ⬆️ رفع الصورة
+    // ✅ رفع الصورة إلى Cloudinary
     const result = await cloud.uploader.upload(req.file.path, {
         folder: "brands"
     });
-
     fs.unlinkSync(req.file.path);
 
-    // 💾 إنشاء البراند
+    // ✅ إنشاء البراند
     const brand = await BrandModel.create({
-        categories: categoriesArray,
+        name: {
+            ar: name.ar.trim(),
+            en: name.en.trim()
+        },
+        description: {
+            ar: description?.ar?.trim() || "",
+            en: description?.en?.trim() || ""
+        },
         image: {
             url: result.secure_url,
             public_id: result.public_id
@@ -1948,64 +2676,128 @@ export const createBrand = asyncHandelr(async (req, res, next) => {
 
     res.status(201).json({
         success: true,
-        message: "تم إنشاء البراند بنجاح",
+        message: "تم إنشاء البراند بنجاح ✅",
         data: brand
     });
 });
 
 
 export const getBrands = asyncHandelr(async (req, res, next) => {
-    const brands = await BrandModel.find({ isActive: true })
-        .populate("categories", "name slug")
+    // ✅ جلب كل البراندات النشطة
+    let brands = await BrandModel.find({ isActive: true })
+        .select("name description image")
         .sort({ createdAt: -1 })
         .lean();
 
+    // ✅ جلب عدد المنتجات لكل براند باستخدام aggregation
+    const brandStats = await ProductModellll.aggregate([
+        {
+            $match: {
+                isActive: true,
+                status: "published" // اختياري: بس المنتجات المنشورة
+            }
+        },
+        { $unwind: { path: "$brands", preserveNullAndEmptyArrays: true } },
+        {
+            $group: {
+                _id: "$brands",
+                productCount: { $sum: 1 }
+            }
+        }
+    ]);
+
+    // تحويل إلى map للوصول السريع: brandId → productCount
+    const brandProductCountMap = {};
+    let totalProducts = 0;
+    brandStats.forEach(stat => {
+        if (stat._id) { // تجاهل null (منتجات بدون براند)
+            brandProductCountMap[stat._id.toString()] = stat.productCount;
+            totalProducts += stat.productCount;
+        }
+    });
+
+    // ✅ إضافة productCount لكل براند
+    brands = brands.map(brand => ({
+        ...brand,
+        productCount: brandProductCountMap[brand._id.toString()] || 0
+    }));
+
+    // ✅ حساب الإحصائيات العامة
+    const totalBrands = brands.length;
+    const averageProductsPerBrand = totalBrands > 0 
+        ? Math.round(totalProducts / totalBrands) 
+        : 0;
+
+    // العلامة الأعلى منتجات
+    let topBrand = null;
+    if (brands.length > 0) {
+        const sorted = [...brands].sort((a, b) => b.productCount - a.productCount);
+        const highest = sorted[0];
+        if (highest.productCount > 0) {
+            topBrand = {
+                name: highest.name,
+                productCount: highest.productCount
+            };
+        }
+    }
+
+    // ✅ الإحصائيات النهائية
+    const stats = {
+        totalBrands,
+        totalProducts,
+        averageProductsPerBrand,
+        topBrand: topBrand || { name: { ar: "-", en: "-" }, productCount: 0 }
+    };
+
     res.status(200).json({
         success: true,
-        message: " تم جلب البراندات بنجاح",
+        message: "تم جلب العلامات التجارية مع الإحصائيات بنجاح ✅",
+        stats,
+        count: brands.length,
         data: brands
     });
 });
 
 
+
+
 export const updateBrand = asyncHandelr(async (req, res, next) => {
     const { brandId } = req.params;
-    const { categories } = req.body;
+    const { name, description, isActive } = req.body;
 
-    // 🔍 تأكد إن البراند موجود
     const brand = await BrandModel.findById(brandId);
     if (!brand) {
         return next(new Error("❌ البراند غير موجود", { cause: 404 }));
     }
 
-    // ✅ تعديل الأقسام لو اتبعت
-    if (categories) {
-        const categoriesArray = Array.isArray(categories)
-            ? categories
-            : [categories];
-
-        const foundCategories = await CategoryModellll.find({
-            _id: { $in: categoriesArray },
-            isActive: true
-        });
-
-        if (foundCategories.length !== categoriesArray.length) {
-            return next(new Error("❌ قسم أو أكثر غير موجود أو غير مفعل", { cause: 404 }));
-        }
-
-        brand.categories = categoriesArray;
+    // ✅ تعديل الاسم
+    if (name) {
+        if (name.ar) brand.name.ar = name.ar.trim();
+        if (name.en) brand.name.en = name.en.trim();
     }
 
-    // 🖼️ تعديل الصورة لو اتبعت
-    if (req.file) {
-        // 🗑️ حذف الصورة القديمة
-        await cloud.uploader.destroy(brand.image.public_id);
+    // ✅ تعديل الوصف
+    if (description) {
+        if (description.ar) brand.description.ar = description.ar.trim();
+        if (description.en) brand.description.en = description.en.trim();
+    }
 
-        // ⬆️ رفع الجديدة
+    // ✅ تعديل الحالة
+    if (isActive !== undefined) {
+        brand.isActive = !!isActive;
+    }
+
+    // ✅ تعديل الصورة (استبدال كامل)
+    if (req.file) {
+        // حذف الصورة القديمة من Cloudinary
+        if (brand.image.public_id) {
+            await cloud.uploader.destroy(brand.image.public_id);
+        }
+
+        // رفع الصورة الجديدة
         const result = await cloud.uploader.upload(req.file.path, {
             folder: "brands"
         });
-
         fs.unlinkSync(req.file.path);
 
         brand.image = {
@@ -2018,10 +2810,11 @@ export const updateBrand = asyncHandelr(async (req, res, next) => {
 
     res.status(200).json({
         success: true,
-        message: " تم تعديل البراند بنجاح",
+        message: "تم تعديل البراند بنجاح ✅",
         data: brand
     });
 });
+
 
 
 
@@ -2042,5 +2835,120 @@ export const deleteBrand = asyncHandelr(async (req, res, next) => {
     res.status(200).json({
         success: true,
         message: " تم حذف البراند بنجاح"
+    });
+});
+
+
+
+
+export const createAttribute = asyncHandelr(async (req, res, next) => {
+    const { name, type } = req.body;
+
+    if (!name?.ar || !name?.en) {
+        return next(new Error("❌ اسم الخاصية مطلوب", { cause: 400 }));
+    }
+
+    if (!type) {
+        return next(new Error("❌ نوع الخاصية مطلوب", { cause: 400 }));
+    }
+
+    const exists = await AttributeModell.findOne({
+        "name.en": name.en
+    });
+
+    if (exists) {
+        return next(new Error("❌ الخاصية موجودة بالفعل", { cause: 409 }));
+    }
+
+    const attribute = await AttributeModell.create({
+        name,
+        type
+    });
+
+    res.status(201).json({
+        success: true,
+        message: "تم إنشاء الخاصية بنجاح",
+        data: attribute
+    });
+});
+
+
+export const createAttributeValue = asyncHandelr(async (req, res, next) => {
+    const { attributeId, value, hexCode } = req.body;
+
+    if (!attributeId) {
+        return next(new Error("❌ attributeId مطلوب", { cause: 400 }));
+    }
+
+    if (!value?.ar || !value?.en) {
+        return next(new Error("❌ قيمة الخاصية مطلوبة", { cause: 400 }));
+    }
+
+    const attribute = await AttributeModell.findById(attributeId);
+    if (!attribute) {
+        return next(new Error("❌ الخاصية غير موجودة", { cause: 404 }));
+    }
+
+    const exists = await AttributeValueModel.findOne({
+        attributeId,
+        "value.en": value.en
+    });
+
+    if (exists) {
+        return next(new Error("❌ القيمة موجودة بالفعل", { cause: 409 }));
+    }
+
+    const attributeValue = await AttributeValueModel.create({
+        attributeId,
+        value,
+        hexCode
+    });
+
+    res.status(201).json({
+        success: true,
+        message: "تم إضافة القيمة بنجاح",
+        data: attributeValue
+    });
+});
+
+
+export const getAttributesWithValues = asyncHandelr(async (req, res, next) => {
+    const attributes = await AttributeModell.find({ isActive: true })
+        .lean();
+
+    const attributeIds = attributes.map(a => a._id);
+
+    const values = await AttributeValueModel.find({
+        attributeId: { $in: attributeIds },
+        isActive: true
+    });
+
+    const result = attributes.map(attr => ({
+        ...attr,
+        values: values.filter(v =>
+            v.attributeId.toString() === attr._id.toString()
+        )
+    }));
+
+    res.status(200).json({
+        success: true,
+        message: "تم جلب الخصائص مع القيم",
+        data: result
+    });
+});
+
+
+export const getAttributeValues = asyncHandelr(async (req, res, next) => {
+    const { attributeId } = req.params;
+
+    const values = await AttributeValueModel.find({
+        attributeId,
+        isActive: true
+    }).sort({ createdAt: -1 });
+
+    res.status(200).json({
+        success: true,
+        message: "تم جلب القيم بنجاح",
+        data: values
     });
 });

@@ -12,9 +12,29 @@ const categorySchema = new mongoose.Schema({
         unique: true
     },
 
+    images: [{
+        type: String
+    }],
+
+    // ✅ حقل الوصف
+    description: {
+        ar: { type: String, trim: true },
+        en: { type: String, trim: true }
+    },
+    comment: {
+        ar: { type: String, trim: true },
+        en: { type: String, trim: true }
+    },
+
+    // ✅ حقل الحالة (3 حالات فقط)
+    status: {
+        type: String,
+        enum: ["published", "inactive", "scheduled"],
+        default: "published"
+    },
     parentCategory: {
         type: mongoose.Schema.Types.ObjectId,
-        ref: "Category",
+        ref: "Categoryyyy",
         default: null
     },
 

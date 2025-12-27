@@ -7,14 +7,18 @@ const variantSchema = new mongoose.Schema({
         required: true
     },
 
-    color: {
-        ar: String,
-        en: String
-    },
-
-    size: {
-        type: String // M, L, 42, 43
-    },
+    attributes: [{
+        attributeId: {
+            type: mongoose.Schema.Types.ObjectId,
+            ref: "Attributee",
+            required: true
+        },
+        valueId: {
+            type: mongoose.Schema.Types.ObjectId,
+            ref: "AttributeValue",
+            required: true
+        }
+    }],
 
     price: {
         type: Number,
@@ -27,12 +31,10 @@ const variantSchema = new mongoose.Schema({
         min: 0
     },
 
-    images: [
-        {
-            url: { type: String, required: true },
-            public_id: { type: String, required: true },
-        },
-    ], // صور خاصة باللون
+    images: [{
+        url: String,
+        public_id: String
+    }],
 
     isActive: {
         type: Boolean,
@@ -41,3 +43,4 @@ const variantSchema = new mongoose.Schema({
 }, { timestamps: true });
 
 export const VariantModel = mongoose.model("Variant", variantSchema);
+

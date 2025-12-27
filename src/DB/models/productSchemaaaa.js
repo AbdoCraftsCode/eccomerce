@@ -16,19 +16,79 @@ const productSchema = new mongoose.Schema({
         ref: "Categoryyyy",
         required: true
     }],
+
+    brands: [{
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "Brand",
+     
+    }],
     rating: {
         average: { type: Number, default: 0 },
         count: { type: Number, default: 0 }
     },
 
-    images: [String], // صور عامة للمنتج
+    sku: { type: String, unique: true },
+    // barcode: { type: String, unique: true, sparse: true },
+
+    mainPrice: { type: String, },
+    disCountPrice: { type: String, },
+
+    images: [String], 
 
     status: {
         type: String,
-        enum: ["available", "out_of_stock", "hidden"],
-        default: "available"
+        enum: ["published", "inactive", "scheduled"],
+        default: "published"
+    },
+    tax: {
+        enabled: { type: Boolean, default: false },
+        rate: { type: Number, default: 0}
+    },
+    inStock: {
+        type: Boolean,
+        default: true
+    },
+    unlimitedStock: {
+        type: Boolean,
+        default: false
+    },
+    tags: [{
+        type: String,
+        trim: true,
+        lowercase: true
+    }],
+
+    bulkDiscounts: [{
+        minQty: {
+            type: Number,
+            required: true
+        },
+        maxQty: {
+            type: Number,
+            required: true
+        },
+        discountPercent: {
+            type: Number,
+            min: 1,
+            max: 100,
+            required: true
+        }
+    }],
+    currency: {
+        type: String,
+
+        default: "USD"
+    },
+    hasVariants: {
+        type: Boolean,
+        default: false
     },
 
+    stock: {
+        type: Number,
+        default: 0,
+        min: 0
+    },
     seo: {
         title: String,
         description: String,
