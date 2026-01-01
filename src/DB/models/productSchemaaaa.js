@@ -45,7 +45,7 @@ const productSchema = new mongoose.Schema({
 
     status: {
         type: String,
-        enum: ["published", "inactive", "scheduled"],
+        enum: ["published", "inactive"],
         default: "published"
     },
     tax: {

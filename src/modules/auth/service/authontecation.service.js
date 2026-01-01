@@ -3552,6 +3552,98 @@ export const getBrands = asyncHandelr(async (req, res, next) => {
 
 
 
+export const getBrandById = asyncHandelr(async (req, res, next) => {
+    const { brandId } = req.params;
+
+    // التحقق من وجود brandId
+    if (!brandId) {
+        return next(new Error("❌ معرف العلامة التجارية مطلوب", { cause: 400 }));
+    }
+
+    // جلب البراند المطلوب
+    const brand = await BrandModel.findOne({
+        _id: brandId,
+        isActive: true
+    })
+        .select("name description image createdAt")
+        .lean();
+
+    if (!brand) {
+        return next(new Error("❌ العلامة التجارية غير موجودة أو غير مفعلة", { cause: 404 }));
+    }
+
+    // جلب إحصائيات المنتجات لكل البراندات (عشان نحسب المتوسط والأعلى)
+    const brandStats = await ProductModellll.aggregate([
+        {
+            $match: {
+                isActive: true,
+                status: "published"
+            }
+        },
+        { $unwind: { path: "$brands", preserveNullAndEmptyArrays: true } },
+        {
+            $group: {
+                _id: "$brands",
+                productCount: { $sum: 1 }
+            }
+        }
+    ]);
+
+    const brandProductCountMap = {};
+    let totalProducts = 0;
+    brandStats.forEach(stat => {
+        if (stat._id) {
+            const idStr = stat._id.toString();
+            brandProductCountMap[idStr] = stat.productCount;
+            totalProducts += stat.productCount;
+        }
+    });
+
+    // عدد المنتجات لهذا البراند
+    const thisBrandProductCount = brandProductCountMap[brandId] || 0;
+
+    // جلب عدد كل البراندات النشطة (للمتوسط)
+    const totalBrands = await BrandModel.countDocuments({ isActive: true });
+
+    const averageProductsPerBrand = totalBrands > 0
+        ? Math.round(totalProducts / totalBrands)
+        : 0;
+
+    // هل هذا البراند الأعلى؟
+    let isTopBrand = false;
+    let topBrandCount = 0;
+    if (Object.keys(brandProductCountMap).length > 0) {
+        topBrandCount = Math.max(...Object.values(brandProductCountMap));
+        isTopBrand = thisBrandProductCount === topBrandCount && thisBrandProductCount > 0;
+    }
+
+    const formattedBrand = {
+        _id: brand._id,
+        name: brand.name,
+        description: brand.description || { ar: "", en: "" },
+        image: brand.image,
+        createdAt: brand.createdAt,
+        productCount: thisBrandProductCount
+    };
+
+    const stats = {
+        totalBrands,
+        totalProducts,
+        averageProductsPerBrand,
+        thisBrandProductCount,
+        isTopBrand,
+        topBrandMaxCount: topBrandCount
+    };
+
+    res.status(200).json({
+        success: true,
+        message: "تم جلب العلامة التجارية مع الإحصائيات بنجاح ✅",
+        stats,
+        data: formattedBrand
+    });
+});
+
+
 export const updateBrand = asyncHandelr(async (req, res, next) => {
     const { brandId } = req.params;
     const { name, description, isActive } = req.body;
