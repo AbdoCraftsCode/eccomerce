@@ -12,6 +12,11 @@ const attributeValueSchema = new mongoose.Schema({
         en: { type: String, required: true }
     },
 
+  createdBy: {
+            type: mongoose.Schema.Types.ObjectId,
+            ref: "User", 
+            required: true
+        },
     hexCode: String, // خاص بالألوان
 
     isActive: {

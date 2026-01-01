@@ -31,6 +31,8 @@ const variantSchema = new mongoose.Schema({
         min: 0
     },
 
+    sku: { type: String, unique: true },
+    disCountPrice: { type: String, },
     images: [{
         url: String,
         public_id: String

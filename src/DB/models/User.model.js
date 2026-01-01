@@ -14,8 +14,24 @@ const userSchema = new Schema({
     fullName: { type: String, required: true },
 
     email: { type: String, sparse: true, trim: true },
-    phone: { type: String,  sparse: true, trim: true },
+    phone: { type: String, sparse: true, trim: true },
+    
+    companyName: { type: String, sparse: true, trim: true },
+    categories: [{
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "Categoryyyy",
+        required: true
+    }],
+
     password: { type: String },
+
+    status: {
+        type: String,
+        enum: ["PENDING", "REFUSED", "ACCEPTED",],
+        default: "PENDING"
+    },
+
+
     country: { type: String },
     currency: { type: String },
     lang: { type: String },
@@ -36,7 +52,7 @@ const userSchema = new Schema({
     // modelcar: { type: String, default: null },
     accountType: {
         type: String,
-        enum: ['User', 'ServiceProvider', 'Owner', 'manager', 'staff','Admin'],
+        enum: ['User', 'ServiceProvider', 'Owner', 'manager', 'vendor','Admin'],
         required: true
     },
 
@@ -64,6 +80,9 @@ const userSchema = new Schema({
     attemptCount: Number,
     otpExpiresAt: Date,
     blockUntil: { type: Date },
+
+     
+
 
     // 🎯 بيانات إضافية عامة لمقدمي الخدمة
 

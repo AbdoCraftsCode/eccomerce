@@ -49,7 +49,7 @@ const adminUserSchema = new mongoose.Schema({
 
     createdBy: {
         type: mongoose.Schema.Types.ObjectId,
-        ref: "User", // صاحب المطعم اللي أنشأ الأدمن
+        ref: "User", 
         required: true
     },
     profileImage: {

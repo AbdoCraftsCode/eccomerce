@@ -1498,6 +1498,157 @@ export const getCategories = asyncHandelr(async (req, res, next) => {
     });
 });
 
+
+export const getCategoryTreeById = asyncHandelr(async (req, res, next) => {
+    const { categoryId } = req.params;
+
+    // التحقق من وجود categoryId
+    if (!categoryId) {
+        return next(new Error("❌ معرف القسم مطلوب", { cause: 400 }));
+    }
+
+    // جلب كل الأقسام المفعلة (نفس الطريقة القديمة)
+    const categories = await CategoryModellll.find({ isActive: true })
+        .populate("parentCategory", "name slug")
+        .sort({ createdAt: -1 })
+        .lean();
+
+    if (categories.length === 0) {
+        return res.status(200).json({
+            success: true,
+            message: "لا توجد أقسام حاليًا",
+            stats: {
+                totalMainCategories: 0,
+                totalSubCategories: 0,
+                totalCategories: 0
+            },
+            data: null
+        });
+    }
+
+    // التحقق من وجود القسم المطلوب
+    const targetCategory = categories.find(c => c._id.toString() === categoryId);
+    if (!targetCategory) {
+        return next(new Error("❌ القسم غير موجود أو غير مفعل", { cause: 404 }));
+    }
+
+    // جلب إحصائيات المنتجات (نفس الطريقة)
+    const categoryStats = await ProductModellll.aggregate([
+        {
+            $match: {
+                isActive: true,
+                status: "published"
+            }
+        },
+        { $unwind: "$categories" },
+        {
+            $group: {
+                _id: "$categories",
+                productCount: { $sum: 1 },
+                totalPrice: {
+                    $sum: {
+                        $cond: [
+                            { $regexMatch: { input: "$mainPrice", regex: /^\d+(\.\d+)?$/ } },
+                            { $toDouble: "$mainPrice" },
+                            0
+                        ]
+                    }
+                }
+            }
+        }
+    ]);
+
+    const statsMap = {};
+    categoryStats.forEach(stat => {
+        statsMap[stat._id.toString()] = {
+            productCount: stat.productCount || 0,
+            totalPrice: stat.totalPrice || 0
+        };
+    });
+
+    // دالة لحساب كل subcategories المتداخلة
+    const getAllSubCategoryIds = (catId, allCats) => {
+        const directChildren = allCats.filter(c =>
+            c.parentCategory && c.parentCategory._id.toString() === catId.toString()
+        );
+        let subs = directChildren.map(c => c._id.toString());
+        for (const child of directChildren) {
+            subs = subs.concat(getAllSubCategoryIds(child._id.toString(), allCats));
+        }
+        return subs;
+    };
+
+    // دالة لحساب الإحصائيات التراكمية
+    const getCategoryStats = (catId, allCats) => {
+        const subIds = getAllSubCategoryIds(catId, allCats);
+        const allIds = [catId, ...subIds];
+
+        let productCount = 0;
+        let totalPrice = 0;
+
+        allIds.forEach(id => {
+            const s = statsMap[id];
+            if (s) {
+                productCount += s.productCount;
+                totalPrice += s.totalPrice;
+            }
+        });
+
+        return { productCount, totalPrice };
+    };
+
+    // بناء الشجرة بداية من القسم المطلوب
+    const buildSubTree = (catId) => {
+        const cat = categories.find(c => c._id.toString() === catId);
+        if (!cat) return null;
+
+        const stats = getCategoryStats(catId, categories);
+        const children = categories
+            .filter(c => c.parentCategory && c.parentCategory._id.toString() === catId)
+            .map(child => buildSubTree(child._id.toString()))
+            .filter(Boolean);
+
+        return {
+            _id: cat._id,
+            name: cat.name,
+            slug: cat.slug,
+            images: cat.images || [],
+            description: cat.description || {},
+            comment: cat.comment || {},
+            status: cat.status,
+            parentCategory: cat.parentCategory,
+            productCount: stats.productCount,
+            totalPrice: stats.totalPrice,
+            children: children.length > 0 ? children : []
+        };
+    };
+
+    const tree = buildSubTree(categoryId);
+
+    // حساب الإحصائيات العامة (للقسم وفرعياته فقط)
+    const allSubIds = getAllSubCategoryIds(categoryId, categories);
+    const allIdsInTree = [categoryId, ...allSubIds];
+
+    const mainInTree = allIdsInTree.filter(id =>
+        !categories.find(c => c.parentCategory && c.parentCategory._id.toString() === id)
+    ).length;
+
+    const subInTree = allIdsInTree.length - mainInTree;
+
+    const stats = {
+        totalMainCategories: tree.parentCategory ? 0 : 1, // لو القسم رئيسي → 1، غير كده 0
+        totalSubCategories: subInTree,
+        totalCategories: allIdsInTree.length
+    };
+
+    res.status(200).json({
+        success: true,
+        message: "تم جلب شجرة القسم مع الفرعيات والإحصائيات بنجاح ✅",
+        stats,
+        data: tree
+    });
+});
+
 export const updateCategory = asyncHandelr(async (req, res, next) => {
     const { categoryId } = req.params;
     const { name, parentCategory, description, status, comment } = req.body;
@@ -1599,27 +1750,43 @@ export const deleteCategory = asyncHandelr(async (req, res, next) => {
 // Product
 
 export const CreateProdut = asyncHandelr(async (req, res, next) => {
+    // ✅ التحقق من وجود توكن ومستخدم مسجل دخول
+    if (!req.user) {
+        return next(new Error("❌ يجب تسجيل الدخول لإنشاء منتج", { cause: 401 }));
+    }
+
+    // ✅ التحقق من أن المستخدم بائع (vendor)
+    if (req.user.accountType !== "vendor") {
+        return next(new Error("❌ غير مصرح لك بإنشاء منتجات", { cause: 403 }));
+    }
+
+    // ✅ التأكد من أن البائع مقبول (اختياري للأمان الإضافي)
+    if (req.user.status !== "ACCEPTED") {
+        return next(new Error("❌ طلب الانضمام كبائع لم يُقبل بعد", { cause: 403 }));
+    }
+
     const {
         name,
         description,
         categories,
+        weight,
         brands,
         stock,
         seo,
         sku,
         mainPrice,
         disCountPrice,
-        tax,              // { enabled: boolean, rate: number }
-        bulkDiscounts,    // array of { minQty, maxQty, discountPercent }
-        currency ,
+        tax,
+        bulkDiscounts,
+        currency,
         hasVariants,
-        inStock ,
-        unlimitedStock ,
-        tags = [],        // array of strings
-        status ,
+        inStock,
+        unlimitedStock,
+        tags = [],
+        status,
     } = req.body;
 
-    // Validations أساسية
+    // Validations أساسية (نفس اللي عندك بدون تغيير)
     if (!name?.ar || !name?.en) {
         return next(new Error("❌ اسم المنتج مطلوب بالعربي والإنجليزي", { cause: 400 }));
     }
@@ -1666,7 +1833,7 @@ export const CreateProdut = asyncHandelr(async (req, res, next) => {
         return next(new Error("❌ هذا الـ slug مستخدم بالفعل، اختر اسم آخر", { cause: 409 }));
     }
 
-    // إنشاء المنتج
+    // إنشاء المنتج مع createdBy
     const product = await ProductModellll.create({
         name,
         description,
@@ -1682,6 +1849,7 @@ export const CreateProdut = asyncHandelr(async (req, res, next) => {
         },
         bulkDiscounts: bulkDiscounts || [],
         currency,
+        weight,
         stock,
         hasVariants,
         inStock,
@@ -1697,12 +1865,13 @@ export const CreateProdut = asyncHandelr(async (req, res, next) => {
             average: 0,
             count: 0
         },
-        isActive: true
+        isActive: true,
+        createdBy: req.user._id  // ← هنا التوكن بيشتغل (مين اللي أنشأ المنتج)
     });
 
     res.status(201).json({
         success: true,
-        message: "تم إنشاء المنتج بنجاح ",
+        message: "تم إنشاء المنتج بنجاح ✅",
         data: product
     });
 });
@@ -1712,23 +1881,39 @@ export const CreateProdut = asyncHandelr(async (req, res, next) => {
 
 
 export const getProducts = asyncHandelr(async (req, res, next) => {
+    // ✅ التحقق من وجود توكن
+    if (!req.user) {
+        return next(new Error("❌ يجب تسجيل الدخول لعرض المنتجات", { cause: 401 }));
+    }
+
+    const isVendor = req.user.accountType === "vendor";
+    const isAdminOrOwner = ["Admin", "Owner"].includes(req.user.accountType);
+
+    if (!isVendor && !isAdminOrOwner) {
+        return next(new Error("❌ غير مصرح لك بعرض المنتجات", { cause: 403 }));
+    }
+
     const {
-        stock,      // available, low, out, inactive
-        category,   // category ID
-        status,     // published, inactive, scheduled
-        page = 1,   // pagination
-        limit = 10  // pagination
+        stock,
+        category,
+        status,
+        page = 1,
+        limit = 10
     } = req.query;
 
-    // تحويل page و limit إلى أرقام
     const pageNum = Math.max(1, parseInt(page) || 1);
-    const limitNum = Math.min(100, Math.max(1, parseInt(limit) || 10)); // max 100
+    const limitNum = Math.min(100, Math.max(1, parseInt(limit) || 10));
     const skip = (pageNum - 1) * limitNum;
 
     // ✅ بناء الفلتر الأساسي
     let filter = {};
 
-    // فلترة حسب status (published, inactive, scheduled)
+    // إضافة فلتر createdBy لو بائع
+    if (isVendor) {
+        filter.createdBy = req.user._id;
+    }
+
+    // فلترة حسب status
     if (status) {
         const validStatuses = ["published", "inactive", "scheduled"];
         if (!validStatuses.includes(status)) {
@@ -1736,7 +1921,6 @@ export const getProducts = asyncHandelr(async (req, res, next) => {
         }
         filter.status = status;
     } else {
-        // افتراضي: بس الـ published (للعرض العام للعملاء)
         filter.status = "published";
     }
 
@@ -1747,7 +1931,6 @@ export const getProducts = asyncHandelr(async (req, res, next) => {
             return next(new Error("القسم غير موجود أو غير مفعل", { cause: 404 }));
         }
 
-        // دالة recursive لجلب كل الأبناء المتداخلين
         const getAllSubCategoryIds = async (catId) => {
             const children = await CategoryModellll.find({
                 parentCategory: catId,
@@ -1764,7 +1947,6 @@ export const getProducts = asyncHandelr(async (req, res, next) => {
 
         const subCategoryIds = await getAllSubCategoryIds(category);
         const allCategoryIds = [category, ...subCategoryIds];
-
         filter.categories = { $in: allCategoryIds };
     }
 
@@ -1785,21 +1967,23 @@ export const getProducts = asyncHandelr(async (req, res, next) => {
         .skip(skip)
         .limit(limitNum);
 
-    // جلب العدد الكلي للـ pagination
     const totalProducts = await ProductModellll.countDocuments(filter);
 
     let products = await productsQuery.lean();
 
+    // باقي الكود زي ما هو بالضبط (stock، variant، summary، pagination، children)
+    // ... (كل الكود من variantStockMap لحد الـ res.json)
+
+    // (نفس الكود اللي عندك من هنا لحد النهاية بدون أي تغيير)
+
     // ✅ جلب stock الكلي من الـ variants
     const productsWithVariants = products.filter(p => p.hasVariants).map(p => p._id);
     let variantStockMap = {};
-
     if (productsWithVariants.length > 0) {
         const variantStocks = await VariantModel.aggregate([
             { $match: { productId: { $in: productsWithVariants }, isActive: true } },
             { $group: { _id: "$productId", totalVariantStock: { $sum: "$stock" }, variantCount: { $sum: 1 } } }
         ]);
-
         variantStocks.forEach(v => {
             variantStockMap[v._id.toString()] = {
                 total: v.totalVariantStock || 0,
@@ -1808,7 +1992,7 @@ export const getProducts = asyncHandelr(async (req, res, next) => {
         });
     }
 
-    // ✅ دالة حساب stockStatus
+    // دالة حساب stockStatus
     const calculateStockStatus = (product) => {
         if (!product.isActive || product.status !== "published") {
             return { status: "غير نشط", total: 0, available: 0, lowStock: 0, outOfStock: 0, inactive: 1 };
@@ -1816,16 +2000,13 @@ export const getProducts = asyncHandelr(async (req, res, next) => {
         if (product.unlimitedStock) {
             return { status: "متوفر في المخزون", total: 999999, available: 1, lowStock: 0, outOfStock: 0, inactive: 0 };
         }
-
         let effectiveStock = product.stock || 0;
         if (product.hasVariants) {
             effectiveStock = variantStockMap[product._id.toString()]?.total || 0;
         }
-
         let statusText = "نفد من المخزون";
         if (effectiveStock > 10) statusText = "متوفر في المخزون";
         else if (effectiveStock > 0) statusText = "قارب على النفاد";
-
         return {
             status: statusText,
             total: effectiveStock,
@@ -1836,7 +2017,6 @@ export const getProducts = asyncHandelr(async (req, res, next) => {
         };
     };
 
-    // ✅ إضافة stockStatus و variantInfo
     products = products.map(product => ({
         ...product,
         stockStatus: calculateStockStatus(product),
@@ -1848,26 +2028,155 @@ export const getProducts = asyncHandelr(async (req, res, next) => {
         } : {})
     }));
 
-    // ✅ فلترة حسب stock status بعد الحساب
     if (stock) {
         const validStocks = ["available", "low", "out", "inactive"];
         if (!validStocks.includes(stock)) {
             return next(new Error("قيمة stock غير صحيحة. استخدم: available, low, out, inactive", { cause: 400 }));
         }
-
         const statusMap = {
             available: "متوفر في المخزون",
             low: "قارب على النفاد",
             out: "نفد من المخزون",
             inactive: "غير نشط"
         };
-
         products = products.filter(p => p.stockStatus.status === statusMap[stock]);
     }
 
-    // ✅ إضافة children للأقسام
     const categoryIds = products.flatMap(p => p.categories.map(c => c._id.toString()));
     let childrenMap = {};
+    if (categoryIds.length > 0) {
+        const children = await CategoryModellll.find({
+            parentCategory: { $in: categoryIds },
+            isActive: true
+        }).select("name slug parentCategory").lean();
+        children.forEach(child => {
+            const parentId = child.parentCategory.toString();
+            if (!childrenMap[parentId]) childrenMap[parentId] = [];
+            childrenMap[parentId].push({ _id: child._id, name: child.name, slug: child.slug });
+        });
+    }
+    products.forEach(product => {
+        product.categories.forEach(category => {
+            category.children = childrenMap[category._id.toString()] || [];
+        });
+    });
+
+    const summary = {
+        totalProducts: products.length,
+        available: products.filter(p => p.stockStatus.status === "متوفر في المخزون").length,
+        lowStock: products.filter(p => p.stockStatus.status === "قارب على النفاد").length,
+        outOfStock: products.filter(p => p.stockStatus.status === "نفد من المخزون").length,
+        inactive: products.filter(p => p.stockStatus.status === "غير نشط").length
+    };
+
+    const pagination = {
+        currentPage: pageNum,
+        totalPages: Math.ceil(totalProducts / limitNum),
+        totalItems: totalProducts,
+        itemsPerPage: limitNum,
+        hasNext: pageNum < Math.ceil(totalProducts / limitNum),
+        hasPrev: pageNum > 1
+    };
+
+    res.status(200).json({
+        success: true,
+        message: "تم جلب المنتجات بنجاح ✅",
+        count: products.length,
+        summary,
+        pagination,
+        data: products
+    });
+});
+
+
+
+export const GetProductById = asyncHandelr(async (req, res, next) => {
+    const { productId } = req.params;
+
+    // ✅ التحقق من وجود توكن
+    if (!req.user) {
+        return next(new Error("❌ يجب تسجيل الدخول لعرض المنتج", { cause: 401 }));
+    }
+
+    const isVendor = req.user.accountType === "vendor";
+    const isAdminOrOwner = ["Admin", "Owner"].includes(req.user.accountType);
+
+    if (!isVendor && !isAdminOrOwner) {
+        return next(new Error("❌ غير مصرح لك بعرض المنتجات", { cause: 403 }));
+    }
+
+    // ✅ فلتر أساسي
+    let filter = { _id: productId };
+
+    // لو بائع → لازم يكون المنتج تابع له
+    if (isVendor) {
+        filter.createdBy = req.user._id;
+    }
+
+    // جلب المنتج مع populate
+    const product = await ProductModellll.findOne(filter)
+        .populate({
+            path: "categories",
+            match: { isActive: true },
+            select: "name slug images description comment status parentCategory",
+            populate: {
+                path: "parentCategory",
+                match: { isActive: true },
+                select: "name slug"
+            }
+        })
+        .select('-__v')
+        .lean();
+
+    if (!product) {
+        return next(new Error("❌ المنتج غير موجود أو غير متاح لك", { cause: 404 }));
+    }
+
+    // ✅ حساب stock من الـ variants لو موجودة
+    let variantInfo = null;
+    let effectiveStock = product.stock || 0;
+
+    if (product.hasVariants) {
+        const variantStock = await VariantModel.aggregate([
+            { $match: { productId: product._id, isActive: true } },
+            {
+                $group: {
+                    _id: null,
+                    totalVariantStock: { $sum: "$stock" },
+                    variantCount: { $sum: 1 }
+                }
+            }
+        ]);
+
+        if (variantStock.length > 0) {
+            effectiveStock = variantStock[0].totalVariantStock || 0;
+            variantInfo = {
+                totalVariants: variantStock[0].variantCount,
+                totalVariantStock: variantStock[0].totalVariantStock
+            };
+        }
+    }
+
+    // ✅ حساب stockStatus
+    const calculateStockStatus = (prod) => {
+        if (!prod.isActive || prod.status !== "published") {
+            return { status: "غير نشط", total: 0 };
+        }
+        if (prod.unlimitedStock) {
+            return { status: "متوفر في المخزون", total: 999999 };
+        }
+        let statusText = "نفد من المخزون";
+        if (effectiveStock > 10) statusText = "متوفر في المخزون";
+        else if (effectiveStock > 0) statusText = "قارب على النفاد";
+        return { status: statusText, total: effectiveStock };
+    };
+
+    const stockStatus = calculateStockStatus(product);
+
+    // ✅ إضافة children للأقسام
+    const categoryIds = product.categories.map(c => c._id.toString());
+    let childrenMap = {};
+
     if (categoryIds.length > 0) {
         const children = await CategoryModellll.find({
             parentCategory: { $in: categoryIds },
@@ -1881,42 +2190,23 @@ export const getProducts = asyncHandelr(async (req, res, next) => {
         });
     }
 
-    products.forEach(product => {
-        product.categories.forEach(category => {
-            category.children = childrenMap[category._id.toString()] || [];
-        });
+    product.categories.forEach(category => {
+        category.children = childrenMap[category._id.toString()] || [];
     });
 
-    // ✅ الـ summary بعد كل الفلاتر
-    const summary = {
-        totalProducts: products.length,
-        available: products.filter(p => p.stockStatus.status === "متوفر في المخزون").length,
-        lowStock: products.filter(p => p.stockStatus.status === "قارب على النفاد").length,
-        outOfStock: products.filter(p => p.stockStatus.status === "نفد من المخزون").length,
-        inactive: products.filter(p => p.stockStatus.status === "غير نشط").length
-    };
-
-    // ✅ معلومات الـ pagination
-    const pagination = {
-        currentPage: pageNum,
-        totalPages: Math.ceil(totalProducts / limitNum),
-        totalItems: totalProducts,
-        itemsPerPage: limitNum,
-        hasNext: pageNum < Math.ceil(totalProducts / limitNum),
-        hasPrev: pageNum > 1
+    // ✅ إضافة الحقول الجديدة
+    const formattedProduct = {
+        ...product,
+        stockStatus,
+        ...(product.hasVariants ? { variantInfo } : {})
     };
 
     res.status(200).json({
         success: true,
-        message: "تم جلب المنتجات بنجاح ",
-        count: products.length,
-        summary,
-        pagination,
-        data: products
+        message: "تم جلب المنتج بنجاح ✅",
+        data: formattedProduct
     });
 });
-
-
 
 
 export const UpdateProduct = asyncHandelr(async (req, res, next) => {
@@ -1932,10 +2222,11 @@ export const UpdateProduct = asyncHandelr(async (req, res, next) => {
         mainPrice,
         disCountPrice,
         currency,
-        tax,                  // { enabled: boolean, rate: number }
+        tax,
         inStock,
         unlimitedStock,
-        stock,                // عدد المخزون (للمنتجات بدون variants)
+        stock,
+        weight,
         tags,
         bulkDiscounts,
         hasVariants,
@@ -1947,13 +2238,15 @@ export const UpdateProduct = asyncHandelr(async (req, res, next) => {
         return next(new Error("❌ المنتج غير موجود", { cause: 404 }));
     }
 
+    // دالة مساعدة لتحويل string أو boolean إلى boolean صحيح
+    const toBoolean = (value) => value === true || value === "true";
+
     // ✅ تعديل الاسم + slug
     if (name) {
         if (name.ar) product.name.ar = name.ar.trim();
         if (name.en) {
             product.name.en = name.en.trim();
 
-            // توليد slug جديد وفحص التكرار (ما عدا المنتج نفسه)
             const newSlug = slugify(name.en, { lower: true, strict: true });
             const slugExists = await ProductModellll.findOne({
                 "seo.slug": newSlug,
@@ -1963,7 +2256,7 @@ export const UpdateProduct = asyncHandelr(async (req, res, next) => {
                 return next(new Error("❌ هذا الـ slug مستخدم في منتج آخر", { cause: 409 }));
             }
             product.seo.slug = newSlug;
-            if (!seo?.title) product.seo.title = name.en; // لو ما بعتش title جديد
+            if (!seo?.title) product.seo.title = name.en;
         }
     }
 
@@ -1987,6 +2280,7 @@ export const UpdateProduct = asyncHandelr(async (req, res, next) => {
 
     // ✅ تعديل الحقول البسيطة
     if (status) product.status = status;
+
     if (sku !== undefined) {
         if (sku.trim() === "") {
             product.sku = undefined;
@@ -1996,20 +2290,24 @@ export const UpdateProduct = asyncHandelr(async (req, res, next) => {
             product.sku = sku.trim();
         }
     }
+
     if (mainPrice !== undefined) product.mainPrice = mainPrice;
     if (disCountPrice !== undefined) product.disCountPrice = disCountPrice;
+    if (weight !== undefined) product.weight = weight;
     if (currency) product.currency = currency;
-    if (hasVariants !== undefined) product.hasVariants = !!hasVariants;
-    if (isActive !== undefined) product.isActive = !!isActive;
+
+    // ✅ تعديل الحقول البوليانية (التصحيح النهائي)
+    if (hasVariants !== undefined) product.hasVariants = toBoolean(hasVariants);
+    if (isActive !== undefined) product.isActive = toBoolean(isActive);
+    if (inStock !== undefined) product.inStock = toBoolean(inStock);
+    if (unlimitedStock !== undefined) product.unlimitedStock = toBoolean(unlimitedStock);
 
     // ✅ تعديل المخزون
-    if (inStock !== undefined) product.inStock = !!inStock;
-    if (unlimitedStock !== undefined) product.unlimitedStock = !!unlimitedStock;
     if (stock !== undefined) product.stock = Math.max(0, Number(stock) || 0);
 
     // ✅ تعديل الضريبة
     if (tax) {
-        if (tax.enabled !== undefined) product.tax.enabled = !!tax.enabled;
+        if (tax.enabled !== undefined) product.tax.enabled = toBoolean(tax.enabled);
         if (tax.rate !== undefined) product.tax.rate = Math.max(0, Number(tax.rate) || 0);
     }
 
@@ -2033,7 +2331,7 @@ export const UpdateProduct = asyncHandelr(async (req, res, next) => {
         if (seo.description) product.seo.description = seo.description.trim();
     }
 
-    // ✅ تحديث الصور (إضافة جديدة + حذف قديمة اختياري)
+    // ✅ تحديث الصور (إضافة جديدة)
     if (req.files && req.files.length > 0) {
         const newImages = [];
         for (const file of req.files) {
@@ -2041,29 +2339,30 @@ export const UpdateProduct = asyncHandelr(async (req, res, next) => {
                 folder: "products"
             });
             newImages.push(result.secure_url);
-            fs.unlinkSync(file.path); // حذف الملف المؤقت
+            fs.unlinkSync(file.path);
         }
-        // نضيف الصور الجديدة للقديمة (مش نستبدل)
         product.images = [...product.images, ...newImages];
     }
 
-    // ✅ حذف صورة معينة (اختياري - لو بعتت removeImages array من public_ids أو urls)
-    if (req.body.removeImages && Array.isArray(JSON.parse(req.body.removeImages))) {
-        const imagesToRemove = JSON.parse(req.body.removeImages);
-        product.images = product.images.filter(img => !imagesToRemove.includes(img));
+    // ✅ حذف صور معينة
+    if (req.body.removeImages) {
+        let imagesToRemove;
+        try {
+            imagesToRemove = JSON.parse(req.body.removeImages);
+        } catch (e) {
+            return next(new Error("❌ صيغة removeImages غير صحيحة", { cause: 400 }));
+        }
 
-        // اختياري: حذف من Cloudinary
-        // for (const url of imagesToRemove) {
-        //     const publicId = url.split('/').pop().split('.')[0];
-        //     await cloud.uploader.destroy(`products/${publicId}`);
-        // }
+        if (Array.isArray(imagesToRemove)) {
+            product.images = product.images.filter(img => !imagesToRemove.includes(img));
+        }
     }
 
     await product.save();
 
     res.status(200).json({
         success: true,
-        message: "تم تعديل المنتج بنجاح ",
+        message: "تم تعديل المنتج بنجاح ✅",
         data: product
     });
 });
@@ -2073,20 +2372,30 @@ export const UpdateProduct = asyncHandelr(async (req, res, next) => {
 export const DeleteProduct = asyncHandelr(async (req, res, next) => {
     const { productId } = req.params;
 
+    // ✅ تحقق من وجود productId
+    if (!productId) {
+        return next(new Error("❌ معرف المنتج مطلوب", { cause: 400 }));
+    }
+
     const product = await ProductModellll.findById(productId);
+
     if (!product) {
         return next(new Error("❌ المنتج غير موجود", { cause: 404 }));
     }
 
+    // ✅ Soft Delete
     product.isActive = false;
     await product.save();
 
     res.status(200).json({
         success: true,
-        message: " تم حذف المنتج بنجاح"
+        message: "تم حذف المنتج بنجاح (تم إلغاء تفعيله) ✅",
+        data: {
+            productId: product._id,
+            isActive: product.isActive
+        }
     });
 });
-
 
 
 
@@ -2097,7 +2406,7 @@ export const DeleteProduct = asyncHandelr(async (req, res, next) => {
 
 
 export const createVariant = asyncHandelr(async (req, res, next) => {
-    const { productId, attributes, price, stock } = req.body;
+    const { productId, attributes, price, stock, sku, disCountPrice } = req.body;
 
     // ✅ Validation أساسية
     if (!productId) {
@@ -2107,6 +2416,11 @@ export const createVariant = asyncHandelr(async (req, res, next) => {
     if (!price || isNaN(price) || Number(price) <= 0) {
         return next(new Error("❌ السعر مطلوب ويجب أن يكون رقم موجب", { cause: 400 }));
     }
+
+    if (!disCountPrice || isNaN(disCountPrice) || Number(disCountPrice) <= 0) {
+        return next(new Error("❌ السعر مطلوب ويجب أن يكون رقم موجب", { cause: 400 }));
+    }
+
 
     if (stock === undefined || stock === null || isNaN(stock) || Number(stock) < 0) {
         return next(new Error("❌ المخزون مطلوب ويجب أن يكون رقم غير سالب", { cause: 400 }));
@@ -2193,6 +2507,8 @@ export const createVariant = asyncHandelr(async (req, res, next) => {
         })),
         price: Number(price),
         stock: Number(stock),
+        sku,
+        disCountPrice: Number(disCountPrice),
         images
     });
 
@@ -2272,6 +2588,8 @@ export const getVariants = asyncHandelr(async (req, res, next) => {
             _id: variant._id,
             price: variant.price,
             stock: variant.stock,
+            sku: variant.sku,
+            disCountPrice: variant.disCountPrice,
             images: variant.images,
             isActive: variant.isActive,
             createdAt: variant.createdAt,
@@ -2293,7 +2611,7 @@ export const getVariants = asyncHandelr(async (req, res, next) => {
 
 export const updateVariant = asyncHandelr(async (req, res, next) => {
     const { variantId } = req.params;
-    const { attributes, price, stock, isActive } = req.body;
+    const { attributes, price, stock, isActive, sku, disCountPrice } = req.body;
 
     const variant = await VariantModel.findById(variantId);
     if (!variant) {
@@ -2350,6 +2668,7 @@ export const updateVariant = asyncHandelr(async (req, res, next) => {
     }
 
     // ✅ تحديث الحقول البسيطة
+    // ✅ تحديث الحقول البسيطة
     if (price !== undefined) {
         if (isNaN(price) || Number(price) <= 0) {
             return next(new Error("❌ السعر يجب أن يكون رقم موجب", { cause: 400 }));
@@ -2366,6 +2685,27 @@ export const updateVariant = asyncHandelr(async (req, res, next) => {
 
     if (isActive !== undefined) {
         variant.isActive = !!isActive;
+    }
+
+    // ✅ إضافة: تحديث SKU مع التحقق من التكرار
+    if (sku !== undefined) {
+        if (sku.trim() === "") {
+            variant.sku = undefined;
+        } else {
+            const skuExists = await VariantModel.findOne({
+                sku: sku.trim(),
+                _id: { $ne: variantId }
+            });
+            if (skuExists) {
+                return next(new Error("❌ هذا SKU مستخدم في متغير آخر", { cause: 409 }));
+            }
+            variant.sku = sku.trim();
+        }
+    }
+
+    // ✅ إضافة: تحديث disCountPrice
+    if (disCountPrice !== undefined) {
+        variant.disCountPrice = disCountPrice.trim() || null;
     }
 
     // ✅ تحديث الصور (استبدال كامل: حذف القديمة + رفع الجديدة)
@@ -2425,6 +2765,8 @@ export const updateVariant = asyncHandelr(async (req, res, next) => {
         _id: updatedVariant._id,
         productId: updatedVariant.productId,
         price: updatedVariant.price,
+        sku: updatedVariant.sku,
+        disCountPrice: updatedVariant.disCountPrice,
         stock: updatedVariant.stock,
         images: updatedVariant.images,
         isActive: updatedVariant.isActive,
@@ -3293,95 +3635,338 @@ export const deleteBrand = asyncHandelr(async (req, res, next) => {
 export const createAttribute = asyncHandelr(async (req, res, next) => {
     const { name, type } = req.body;
 
+    // ✅ التحقق من وجود مستخدم مسجل دخول
+    if (!req.user) {
+        return next(new Error("❌ يجب تسجيل الدخول لإنشاء خاصية", { cause: 401 }));
+    }
+
+    // // ✅ التحقق من صلاحية الأدمن أو الأونر فقط
+    // if (!["Admin", "Owner"].includes(req.user.accountType)) {
+    //     return next(new Error("❌ غير مصرح لك بإنشاء خصائص", { cause: 403 }));
+    // }
+
+    // ✅ التحقق من الحقول
     if (!name?.ar || !name?.en) {
-        return next(new Error("❌ اسم الخاصية مطلوب", { cause: 400 }));
+        return next(new Error("❌ اسم الخاصية مطلوب بالعربي والإنجليزي", { cause: 400 }));
     }
 
     if (!type) {
         return next(new Error("❌ نوع الخاصية مطلوب", { cause: 400 }));
     }
 
-    const exists = await AttributeModell.findOne({
-        "name.en": name.en
-    });
+    // ✅ التحقق من عدم التكرار (بالاسم الإنجليزي)
+    // const exists = await AttributeModell.findOne({
+    //     "name.en": { $regex: `^${name.en.trim()}$`, $options: "i" } // case insensitive
+    // });
 
-    if (exists) {
-        return next(new Error("❌ الخاصية موجودة بالفعل", { cause: 409 }));
-    }
+    // if (exists) {
+    //     return next(new Error("❌ هذه الخاصية موجودة بالفعل", { cause: 409 }));
+    // }
 
+    // ✅ إنشاء الخاصية مع createdBy
     const attribute = await AttributeModell.create({
-        name,
-        type
+        name: {
+            ar: name.ar.trim(),
+            en: name.en.trim()
+        },
+        type: type.trim(),
+        createdBy: req.user._id // ← هنا التوكن بيشتغل
     });
+
+    // جلب الخاصية مع اسم المستخدم اللي أنشأها (اختياري للـ response)
+    const populatedAttribute = await AttributeModell.findById(attribute._id)
+        .populate("createdBy", "fullName email")
+        .lean();
 
     res.status(201).json({
         success: true,
-        message: "تم إنشاء الخاصية بنجاح",
-        data: attribute
+        message: "تم إنشاء الخاصية بنجاح ✅",
+        data: populatedAttribute
     });
 });
 
 
-export const createAttributeValue = asyncHandelr(async (req, res, next) => {
-    const { attributeId, value, hexCode } = req.body;
 
-    if (!attributeId) {
-        return next(new Error("❌ attributeId مطلوب", { cause: 400 }));
-    }
 
-    if (!value?.ar || !value?.en) {
-        return next(new Error("❌ قيمة الخاصية مطلوبة", { cause: 400 }));
-    }
+export const deleteAttribute = asyncHandelr(async (req, res, next) => {
+    const { attributeId } = req.params;
 
     const attribute = await AttributeModell.findById(attributeId);
     if (!attribute) {
         return next(new Error("❌ الخاصية غير موجودة", { cause: 404 }));
     }
 
-    const exists = await AttributeValueModel.findOne({
-        attributeId,
-        "value.en": value.en
+    // التحقق إذا كانت الخاصية مستخدمة في variants
+    const usedInVariants = await VariantModel.countDocuments({
+        "attributes.attributeId": attributeId
     });
 
-    if (exists) {
-        return next(new Error("❌ القيمة موجودة بالفعل", { cause: 409 }));
+    if (usedInVariants > 0) {
+        return next(new Error("❌ لا يمكن حذف الخاصية لأنها مستخدمة في متغيرات منتجات", { cause: 400 }));
     }
 
-    const attributeValue = await AttributeValueModel.create({
-        attributeId,
-        value,
-        hexCode
-    });
+    // Soft delete: نغير isActive إلى false
+    attribute.isActive = false;
+    await attribute.save();
 
-    res.status(201).json({
+    // اختياري: حذف القيم المرتبطة (أو نعمل soft delete ليها كمان)
+    await AttributeValueModel.updateMany(
+        { attributeId },
+        { isActive: false }
+    );
+
+    res.status(200).json({
         success: true,
-        message: "تم إضافة القيمة بنجاح",
-        data: attributeValue
+        message: "تم حذف الخاصية بنجاح (تم إلغاء تفعيلها) ✅",
+        data: {
+            _id: attribute._id,
+            name: attribute.name,
+            isActive: false
+        }
     });
 });
 
 
-export const getAttributesWithValues = asyncHandelr(async (req, res, next) => {
-    const attributes = await AttributeModell.find({ isActive: true })
-        .lean();
 
-    const attributeIds = attributes.map(a => a._id);
 
-    const values = await AttributeValueModel.find({
-        attributeId: { $in: attributeIds },
-        isActive: true
-    });
+export const updateAttribute = asyncHandelr(async (req, res, next) => {
+    const { attributeId } = req.params;
+    const { name, type, isActive } = req.body;
 
-    const result = attributes.map(attr => ({
-        ...attr,
-        values: values.filter(v =>
-            v.attributeId.toString() === attr._id.toString()
-        )
-    }));
+    // التحقق من وجود الخاصية
+    const attribute = await AttributeModell.findById(attributeId);
+    if (!attribute) {
+        return next(new Error("❌ الخاصية غير موجودة", { cause: 404 }));
+    }
+
+    // تحديث الاسم (إذا تم إرساله)
+    if (name) {
+        if (!name.ar || !name.en) {
+            return next(new Error("❌ اسم الخاصية مطلوب بالعربي والإنجليزي", { cause: 400 }));
+        }
+
+        // التحقق من عدم التكرار (ما عدا الخاصية نفسها)
+        // const nameExists = await AttributeModell.findOne({
+        //     "name.en": name.en,
+        //     _id: { $ne: attributeId }
+        // });
+
+        // if (nameExists) {
+        //     return next(new Error("❌ هذا الاسم (بالإنجليزي) مستخدم في خاصية أخرى", { cause: 409 }));
+        // }
+
+        attribute.name = {
+            ar: name.ar.trim(),
+            en: name.en.trim()
+        };
+    }
+
+    // تحديث النوع
+    if (type) {
+        attribute.type = type.trim();
+    }
+
+    // تحديث الحالة (نشط / غير نشط)
+    if (isActive !== undefined) {
+        attribute.isActive = !!isActive;
+    }
+
+    await attribute.save();
 
     res.status(200).json({
         success: true,
-        message: "تم جلب الخصائص مع القيم",
+        message: "تم تعديل الخاصية بنجاح ✅",
+        data: attribute
+    });
+});
+
+
+
+
+
+export const createAttributeValue = asyncHandelr(async (req, res, next) => {
+    const { attributeId, value, hexCode } = req.body;
+
+    // ✅ التحقق من وجود مستخدم مسجل دخول
+    if (!req.user) {
+        return next(new Error("❌ يجب تسجيل الدخول لإضافة قيمة خاصية", { cause: 401 }));
+    }
+
+    // ✅ التحقق من صلاحية الأدمن أو الأونر فقط
+    // if (!["Admin", "Owner"].includes(req.user.accountType)) {
+    //     return next(new Error("❌ غير مصرح لك بإضافة قيم خاصية", { cause: 403 }));
+    // }
+
+    // ✅ التحقق من الحقول
+    if (!attributeId) {
+        return next(new Error("❌ attributeId مطلوب", { cause: 400 }));
+    }
+
+    if (!value?.ar || !value?.en) {
+        return next(new Error("❌ قيمة الخاصية مطلوبة بالعربي والإنجليزي", { cause: 400 }));
+    }
+
+    // ✅ التحقق من وجود الخاصية
+    const attribute = await AttributeModell.findById(attributeId);
+    if (!attribute) {
+        return next(new Error("❌ الخاصية غير موجودة", { cause: 404 }));
+    }
+
+    // ✅ التحقق من عدم تكرار القيمة (بالإنجليزي - case insensitive)
+    // const exists = await AttributeValueModel.findOne({
+    //     attributeId,
+    //     "value.en": { $regex: `^${value.en.trim()}$`, $options: "i" }
+    // });
+
+    // if (exists) {
+    //     return next(new Error("❌ هذه القيمة موجودة بالفعل لهذه الخاصية", { cause: 409 }));
+    // }
+
+    // ✅ إنشاء القيمة مع createdBy
+    const attributeValue = await AttributeValueModel.create({
+        attributeId,
+        value: {
+            ar: value.ar.trim(),
+            en: value.en.trim()
+        },
+        hexCode: hexCode ? hexCode.trim() : null,
+        createdBy: req.user._id  // ← هنا التوكن بيشتغل
+    });
+
+    // جلب القيمة مع اسم المستخدم اللي أنشأها (اختياري)
+    const populatedValue = await AttributeValueModel.findById(attributeValue._id)
+        .populate("createdBy", "fullName email")
+        .lean();
+
+    res.status(201).json({
+        success: true,
+        message: "تم إضافة القيمة بنجاح ✅",
+        data: populatedValue
+    });
+});
+
+export const getAttributesWithValues = asyncHandelr(async (req, res, next) => {
+    // ✅ التحقق من وجود توكن ومستخدم مسجل دخول
+    if (!req.user) {
+        return next(new Error("❌ يجب تسجيل الدخول لعرض الخصائص", { cause: 401 }));
+    }
+
+    const isAdmin = req.user.accountType === "Admin";
+    const isOwner = req.user.accountType === "Owner";
+    const isVendor = req.user.accountType === "vendor";
+
+    if (!isAdmin && !isOwner && !isVendor) {
+        return next(new Error("❌ غير مصرح لك بعرض الخصائص", { cause: 403 }));
+    }
+
+    let attributes;
+
+    // فلتر أساسي للخصائص المفعلة
+    let attributeFilter = { isActive: true };
+
+    // لو بائع → يشوف فقط اللي هو أنشأها
+    if (isVendor) {
+        attributeFilter.createdBy = req.user._id;
+    }
+    // لو أدمن أو أونر → يشوف الكل (بدون فلتر createdBy)
+
+    attributes = await AttributeModell.find(attributeFilter)
+        .populate("createdBy", "fullName email") // اختياري: عشان نعرف مين أنشأها
+        .lean();
+
+    if (attributes.length === 0) {
+        return res.status(200).json({
+            success: true,
+            message: isVendor
+                ? "لا توجد خصائص أنشأتها أنت حاليًا"
+                : "لا توجد خصائص في النظام حاليًا",
+            stats: {
+                totalAttributes: 0,
+                totalValues: 0,
+                averageValuesPerAttribute: 0,
+                mostCommonType: { type: "-", count: 0 }
+            },
+            data: []
+        });
+    }
+
+    const attributeIds = attributes.map(a => a._id);
+
+    // جلب القيم اللي تابعة للخصائص دي فقط + اللي أنشأها المستخدم (لو بائع)
+    let valueFilter = {
+        attributeId: { $in: attributeIds },
+        isActive: true
+    };
+
+    if (isVendor) {
+        valueFilter.createdBy = req.user._id;
+    }
+
+    const values = await AttributeValueModel.find(valueFilter)
+        .populate("createdBy", "fullName email")
+        .lean();
+
+    // تنسيق البيانات
+    const result = attributes.map(attr => ({
+        _id: attr._id,
+        name: attr.name,
+        type: attr.type,
+        createdBy: attr.createdBy ? {
+            _id: attr.createdBy._id,
+            fullName: attr.createdBy.fullName,
+            email: attr.createdBy.email
+        } : null,
+        createdAt: attr.createdAt,
+        values: values.filter(v =>
+            v.attributeId.toString() === attr._id.toString()
+        ).map(v => ({
+            _id: v._id,
+            value: v.value,
+            hexCode: v.hexCode || null,
+            createdBy: v.createdBy ? {
+                _id: v.createdBy._id,
+                fullName: v.createdBy.fullName,
+                email: v.createdBy.email
+            } : null,
+            createdAt: v.createdAt
+        }))
+    }));
+
+    // حساب الإحصائيات
+    const totalAttributes = attributes.length;
+    const totalValues = values.length;
+    const averageValuesPerAttribute = totalAttributes > 0
+        ? Math.round(totalValues / totalAttributes)
+        : 0;
+
+    const typeCounts = {};
+    result.forEach(attr => {
+        const type = attr.type || "unknown";
+        const valueCount = attr.values.length;
+        typeCounts[type] = (typeCounts[type] || 0) + valueCount;
+    });
+
+    let mostCommonType = { type: "-", count: 0 };
+    if (Object.keys(typeCounts).length > 0) {
+        const maxType = Object.keys(typeCounts).reduce((a, b) =>
+            typeCounts[a] > typeCounts[b] ? a : b
+        );
+        mostCommonType = { type: maxType, count: typeCounts[maxType] };
+    }
+
+    const stats = {
+        totalAttributes,
+        totalValues,
+        averageValuesPerAttribute,
+        mostCommonType
+    };
+
+    res.status(200).json({
+        success: true,
+        message: isVendor
+            ? "تم جلب الخصائص والقيم التي أنشأتها بنجاح ✅"
+            : "تم جلب جميع الخصائص والقيم في النظام بنجاح ✅",
+        stats,
         data: result
     });
 });
@@ -3437,3 +4022,519 @@ export const GetBrands = asyncHandelr(async (req, res, next) => {
         data: formattedBrands
     });
 });
+
+
+
+export const becomeSeller = asyncHandelr(async (req, res, next) => {
+    const {
+        fullName,
+        email,
+        phone,
+        companyName,
+        categories,
+        password
+    } = req.body;
+
+    // نفس التحققات اللي عندك...
+    if (!fullName || !password) {
+        return next(new Error("الاسم الكامل وكلمة المرور مطلوبين", { cause: 400 }));
+    }
+    if (!email && !phone) {
+        return next(new Error("يجب إدخال البريد الإلكتروني أو رقم الهاتف", { cause: 400 }));
+    }
+    if (!categories || !Array.isArray(categories) || categories.length === 0) {
+        return next(new Error("يجب اختيار قسم واحد على الأقل", { cause: 400 }));
+    }
+
+    // تحقق من عدم التكرار
+    const existingVendor = await Usermodel.findOne({
+        $or: [
+            ...(email ? [{ email: email.toLowerCase() }] : []),
+            ...(phone ? [{ phone }] : [])
+        ]
+    });
+
+    if (existingVendor) {
+        if (email && existingVendor.email === email.toLowerCase()) {
+            return next(new Error("البريد الإلكتروني مستخدم من قبل", { cause: 400 }));
+        }
+        if (phone && existingVendor.phone === phone) {
+            return next(new Error("رقم الهاتف مستخدم من قبل", { cause: 400 }));
+        }
+    }
+
+    // تحقق من الأقسام
+    const validCategories = await CategoryModellll.countDocuments({
+        _id: { $in: categories },
+        isActive: true
+    });
+    if (validCategories !== categories.length) {
+        return next(new Error("واحد أو أكثر من الأقسام غير موجود أو غير مفعل", { cause: 400 }));
+    }
+
+    // تشفير الباسورد
+    const hashedPassword = await generatehash({ planText: password });
+
+    // إنشاء البائع (PENDING + isConfirmed = false)
+    const vendor = await Usermodel.create({
+        fullName,
+        email: email?.toLowerCase(),
+        phone,
+        companyName,
+        categories,
+        password: hashedPassword,
+        status: "PENDING",
+        accountType: "vendor",
+        isConfirmed: false
+    });
+
+    // توليد OTP وإرساله تلقائيًا
+    const otp = Math.floor(100000 + Math.random() * 900000).toString();
+    const otpExpiresAt = Date.now() + 10 * 60 * 1000; // 10 دقايق
+
+    vendor.emailOTP = otp;
+    vendor.otpExpiresAt = otpExpiresAt;
+    vendor.attemptCount = 0;
+    await vendor.save();
+
+    // إرسال OTP بالإيميل
+    await sendemail({
+        to: [vendor.email],
+        subject: "كود تفعيل حساب البائع - متجرك",
+        text: `مرحبًا ${fullName}،\n\nكود تفعيل حسابك كبائع هو: ${otp}\nصالح لمدة 10 دقائق.\nبعد التفعيل، سيتم مراجعة طلبك من الإدارة.\n\nتحياتنا،\nفريق المنصة`,
+        html: `
+            <div style="font-family: Arial, sans-serif; text-align: center; padding: 30px; background: #f9f9f9; border-radius: 10px;">
+                <h2>مرحبًا ${fullName} 👋</h2>
+                <p>شكرًا لتقديم طلب الانضمام كبائع!</p>
+                <p style="font-size: 18px;">كود تفعيل حسابك هو:</p>
+                <p style="font-size: 32px; font-weight: bold; color: #007bff; letter-spacing: 5px;">${otp}</p>
+                <p>هذا الكود صالح لمدة <strong>10 دقائق</strong>.</p>
+                <p>بعد التفعيل، سيتم مراجعة طلبك من الإدارة.</p>
+                <p style="color: #999; font-size: 14px;">لا تشارك هذا الكود مع أحد.</p>
+            </div>
+        `
+    });
+
+    return successresponse(res, "تم تقديم طلب الانضمام كبائع بنجاح ✅\nتم إرسال كود التفعيل إلى بريدك الإلكتروني", 201, {
+        vendorId: vendor._id,
+        status: "PENDING",
+        isConfirmed: false,
+        message: "يرجى تفعيل الحساب أولاً، ثم انتظار موافقة الإدارة"
+    });
+});
+
+
+
+export const sendOtpforeach = asyncHandelr(async (req, res, next) => {
+    const { email } = req.body;
+
+    if (!email) {
+        return next(new Error("البريد الإلكتروني مطلوب", { cause: 400 }));
+    }
+
+    // البحث عن المستخدم بالإيميل
+    const user = await Usermodel.findOne({
+        email: email.toLowerCase()
+    });
+
+    if (!user) {
+        return next(new Error("البريد الإلكتروني غير مسجل", { cause: 400 }));
+    }
+
+    // تحديد نوع الحساب
+    const isVendor = user.accountType === "vendor";
+    const isAdmin = user.accountType === "Admin";
+    const isOwner = user.accountType === "Owner";
+
+    if (!isVendor && !isAdmin && !isOwner) {
+        return next(new Error("هذا الحساب غير مصرح له بتسجيل الدخول بهذه الطريقة", { cause: 403 }));
+    }
+
+    // للبائع فقط: يتحقق من الموافقة
+    if (isVendor && user.status !== "ACCEPTED") {
+        return next(new Error("طلب الانضمام كبائع لم يُقبل بعد، لا يمكن إرسال كود التحقق", { cause: 400 }));
+    }
+
+    // توليد OTP (6 أرقام)
+    const otp = Math.floor(100000 + Math.random() * 900000).toString();
+    const otpExpiresAt = Date.now() + 10 * 60 * 1000; // 10 دقايق
+
+    // حفظ الـ OTP في الداتابيز
+    user.emailOTP = otp;
+    user.otpExpiresAt = otpExpiresAt;
+    user.attemptCount = 0; // إعادة العد
+    await user.save();
+
+    // عنوان الإيميل ورسالة حسب الدور
+    let subject = "كود التحقق لتسجيل الدخول";
+    let roleGreeting = "";
+
+    if (isOwner) {
+        subject = "كود التحقق - لوحة تحكم المالك (Owner)";
+        roleGreeting = "عزيزي المالك،";
+    } else if (isAdmin) {
+        subject = "كود التحقق - لوحة تحكم الأدمن";
+        roleGreeting = "عزيزي الأدمن،";
+    } else if (isVendor) {
+        subject = "كود التحقق - لوحة تحكم المتجر";
+        roleGreeting = "عزيزي صاحب المتجر،";
+    }
+
+    // إرسال الإيميل
+    await sendemail({
+        to: [email],
+        subject,
+        text: `كود التحقق الخاص بك هو: ${otp}\nصالح لمدة 10 دقائق فقط.`,
+        html: `
+            <div style="font-family: Arial, sans-serif; text-align: center; padding: 30px; background: #f9f9f9; border-radius: 10px;">
+                <h2 style="color: #333;">${roleGreeting}</h2>
+                <p style="font-size: 18px;">كود التحقق الخاص بك هو:</p>
+                <p style="font-size: 32px; font-weight: bold; color: #007bff; letter-spacing: 5px;">${otp}</p>
+                <p style="color: #666;">هذا الكود صالح لمدة <strong>10 دقائق</strong> فقط.</p>
+                <p style="color: #999; font-size: 14px;">لا تشارك هذا الكود مع أحد.</p>
+            </div>
+        `
+    });
+
+    // رسالة نجاح حسب الدور
+    let message = "تم إرسال كود التحقق إلى بريدك الإلكتروني ✅";
+    if (isOwner) message = "تم إرسال كود التحقق للمالك بنجاح ✅";
+    else if (isAdmin) message = "تم إرسال كود التحقق للأدمن بنجاح ✅";
+    else if (isVendor) message = "تم إرسال كود التحقق للبائع بنجاح ✅";
+
+    return successresponse(res, message, 200);
+});
+
+
+
+
+
+export const verifyOtpLogin = asyncHandelr(async (req, res, next) => {
+    const { email, otp } = req.body;
+
+    if (!email || !otp) {
+        return next(new Error("البريد الإلكتروني وكود التحقق مطلوبين", { cause: 400 }));
+    }
+
+    const vendor = await Usermodel.findOne({
+        email: email.toLowerCase(),
+        accountType: "vendor"
+    });
+
+    if (!vendor) {
+        return next(new Error("البريد الإلكتروني غير مسجل كبائع", { cause: 400 }));
+    }
+
+    // التحقق من عدد المحاولات
+    if (vendor.attemptCount >= 5 && vendor.blockUntil > Date.now()) {
+        const minutesLeft = Math.ceil((vendor.blockUntil - Date.now()) / (60 * 1000));
+        return next(new Error(`تم حظر الحساب مؤقتًا، حاول بعد ${minutesLeft} دقيقة`, { cause: 400 }));
+    }
+
+    // التحقق من الكود
+    if (vendor.emailOTP !== otp) {
+        vendor.attemptCount += 1;
+        if (vendor.attemptCount >= 5) {
+            vendor.blockUntil = Date.now() + 15 * 60 * 1000;
+        }
+        await vendor.save();
+        return next(new Error("كود التحقق غير صحيح", { cause: 400 }));
+    }
+
+    if (vendor.otpExpiresAt < Date.now()) {
+        return next(new Error("انتهت صلاحية الكود، اطلب كود جديد", { cause: 400 }));
+    }
+
+    // تفعيل الحساب
+    vendor.isConfirmed = true;
+    vendor.emailOTP = undefined;
+    vendor.otpExpiresAt = undefined;
+    vendor.attemptCount = 0;
+    vendor.blockUntil = undefined;
+    await vendor.save();
+
+    return successresponse(res, "تم تفعيل حساب البائع بنجاح ✅\nطلبك الآن في انتظار موافقة الإدارة", 200, {
+        vendorId: vendor._id,
+        isConfirmed: true,
+        status: vendor.status
+    });
+});
+
+
+
+export const getAllVendors = asyncHandelr(async (req, res, next) => {
+    const {
+        lang = "en",
+        page = 1,
+        limit = 10,
+        status // optional: PENDING, ACCEPTED, REFUSED
+    } = req.query;
+
+    // تأمين الـ pagination
+    const pageNum = Math.max(1, parseInt(page) || 1);
+    const limitNum = Math.min(50, Math.max(1, parseInt(limit) || 10));
+    const skip = (pageNum - 1) * limitNum;
+
+    // فلتر أساسي للبائعين
+    let filter = { accountType: "vendor" };
+
+    if (status) {
+        const validStatuses = ["PENDING", "ACCEPTED", "REFUSED"];
+        if (!validStatuses.includes(status)) {
+            return next(new Error("حالة غير صحيحة، استخدم: PENDING, ACCEPTED, REFUSED", { cause: 400 }));
+        }
+        filter.status = status;
+    }
+
+    // عدد البائعين الكلي للـ pagination
+    const totalVendors = await Usermodel.countDocuments(filter);
+
+    // جلب البائعين مع pagination + populate للأقسام
+    const vendors = await Usermodel.find(filter)
+        .populate({
+            path: "categories",
+            match: { isActive: true },
+            select: "name slug"
+        })
+        .select("fullName email phone companyName categories status createdAt updatedAt")
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limitNum)
+        .lean();
+
+    if (vendors.length === 0) {
+        return res.status(200).json({
+            success: true,
+            message: "لا يوجد بائعين حاليًا",
+            count: 0,
+            pagination: {
+                currentPage: pageNum,
+                totalPages: 0,
+                totalItems: 0,
+                itemsPerPage: limitNum,
+                hasNext: false,
+                hasPrev: false
+            },
+            data: []
+        });
+    }
+
+    // تنسيق البيانات مع ترجمة أسماء الأقسام
+    const formattedVendors = vendors.map(vendor => ({
+        _id: vendor._id,
+        fullName: vendor.fullName,
+        email: vendor.email,
+        phone: vendor.phone || null,
+        companyName: vendor.companyName || null,
+        status: vendor.status,
+        createdAt: vendor.createdAt,
+        updatedAt: vendor.updatedAt,
+        categories: (vendor.categories || []).map(cat => ({
+            _id: cat._id,
+            name: cat.name[lang] || cat.name.en,
+            slug: cat.slug
+        }))
+    }));
+
+    // معلومات الـ pagination
+    const pagination = {
+        currentPage: pageNum,
+        totalPages: Math.ceil(totalVendors / limitNum),
+        totalItems: totalVendors,
+        itemsPerPage: limitNum,
+        hasNext: pageNum < Math.ceil(totalVendors / limitNum),
+        hasPrev: pageNum > 1
+    };
+
+    res.status(200).json({
+        success: true,
+        message: "تم جلب البائعين بنجاح ✅",
+        count: formattedVendors.length,
+        pagination,
+        data: formattedVendors
+    });
+});
+
+
+
+
+
+export const updateVendorStatus = asyncHandelr(async (req, res, next) => {
+    const { vendorId } = req.params;
+    const { status } = req.body; // "ACCEPTED" أو "REFUSED"
+
+    // التحقق من الحالة المرسلة
+    if (!status || !["ACCEPTED", "REFUSED"].includes(status)) {
+        return next(new Error("يجب إرسال حالة صحيحة: ACCEPTED أو REFUSED", { cause: 400 }));
+    }
+
+    // جلب البائع
+    const vendor = await Usermodel.findOne({
+        _id: vendorId,
+        accountType: "vendor"
+    });
+
+    if (!vendor) {
+        return next(new Error("البائع غير موجود", { cause: 404 }));
+    }
+
+    // لو الحالة بالفعل نفس اللي هيتغير ليها
+    if (vendor.status === status) {
+        return next(new Error(`حالة البائع بالفعل ${status === "ACCEPTED" ? "مقبول" : "مرفوض"}`, { cause: 400 }));
+    }
+
+    // لو كان مرفوض وهنقبله أو العكس، تمام
+    const oldStatus = vendor.status;
+    vendor.status = status;
+    await vendor.save();
+
+    // تحديد عنوان ورسالة الإيميل حسب الحالة
+    let subject = "";
+    let htmlContent = "";
+    let textContent = "";
+
+    if (status === "ACCEPTED") {
+        subject = "🎉 تم قبول طلب انضمامك كبائع!";
+        textContent = `مرحبًا ${vendor.fullName}،
+
+تهانينا! تم قبول طلبك للانضمام كبائع على منصتنا.
+يمكنك الآن تسجيل الدخول إلى لوحة التحكم الخاصة بك والبدء في إضافة منتجاتك.
+
+بريدك الإلكتروني: ${vendor.email}
+كلمة المرور: التي اخترتها عند التسجيل
+
+تحياتنا،
+فريق المنصة`;
+
+        htmlContent = `
+            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: auto; padding: 20px; border: 1px solid #eee; border-radius: 10px;">
+                <h2 style="color: #28a745;">🎉 تهانينا!</h2>
+                <p>مرحبًا <strong>${vendor.fullName}</strong>،</p>
+                <p>سعداء جدًا بإبلاغك أن طلب انضمامك كبائع قد <strong style="color: #28a745;">تم قبوله</strong>!</p>
+                <p>يمكنك الآن:</p>
+                <ul>
+                    <li>تسجيل الدخول إلى لوحة تحكم البائع</li>
+                    <li>إضافة منتجاتك</li>
+                    <li>إدارة المخزون والطلبات</li>
+                </ul>
+                <p><strong>بيانات الدخول:</strong><br>
+                البريد الإلكتروني: <code>${vendor.email}</code><br>
+                كلمة المرور: التي اخترتها عند التسجيل</p>
+                <p>تحياتنا،<br><strong>فريق المنصة</strong></p>
+            </div>
+        `;
+    } else if (status === "REFUSED") {
+        subject = "😔 تم رفض طلب انضمامك كبائع";
+        textContent = `مرحبًا ${vendor.fullName}،
+
+نشكرك على اهتمامك بالانضمام إلينا كبائع.
+للأسف، بعد المراجعة، تم رفض طلبك في الوقت الحالي.
+
+إذا كان لديك أي استفسار، تواصل معنا.
+
+تحياتنا،
+فريق المنصة`;
+
+        htmlContent = `
+            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: auto; padding: 20px; border: 1px solid #eee; border-radius: 10px;">
+                <h2 style="color: #dc3545;">😔 تم رفض طلب الانضمام</h2>
+                <p>مرحبًا <strong>${vendor.fullName}</strong>،</p>
+                <p>نشكرك على اهتمامك بالانضمام إلينا كبائع على منصتنا.</p>
+                <p>للأسف، بعد مراجعة طلبك، تم <strong style="color: #dc3545;">رفضه</strong> في الوقت الحالي.</p>
+                <p>إذا كان لديك أي استفسار أو ترغب في معرفة السبب، يرجى التواصل مع الدعم.</p>
+                <p>تحياتنا،<br><strong>فريق المنصة</strong></p>
+            </div>
+        `;
+    }
+
+    // إرسال الإيميل
+    try {
+        await sendemail({
+            to: [vendor.email],
+            subject,
+            text: textContent,
+            html: htmlContent
+        });
+    } catch (error) {
+        console.error("فشل إرسال الإيميل للبائع:", error);
+        // مش هنرجع error عشان ما يفشلش العملية كلها، بس نسجل في اللوج
+    }
+
+    // رسالة نجاح للأدمن
+    const action = status === "ACCEPTED" ? "قبول" : "رفض";
+    return successresponse(res, `تم ${action} البائع بنجاح وإرسال إشعار له ✅`, 200, {
+        vendorId: vendor._id,
+        fullName: vendor.fullName,
+        email: vendor.email,
+        previousStatus: oldStatus,
+        newStatus: status
+    });
+});
+
+export const loginWithPassword = asyncHandelr(async (req, res, next) => {
+    const { email, password } = req.body;
+
+    if (!email || !password) {
+        return next(new Error("البريد الإلكتروني وكلمة المرور مطلوبين", { cause: 400 }));
+    }
+
+    const user = await Usermodel.findOne({ email: email.toLowerCase() });
+
+    if (!user) {
+        return next(new Error("بيانات الدخول غير صحيحة", { cause: 400 }));
+    }
+
+    const isVendor = user.accountType === "vendor";
+    const isAdmin = user.accountType === "Admin";
+    const isOwner = user.accountType === "Owner";
+
+    if (!isVendor && !isAdmin && !isOwner) {
+        return next(new Error("هذا الحساب غير مصرح له بالدخول", { cause: 403 }));
+    }
+
+    // للبائع: لازم يكون مفعل ومقبول
+    if (isVendor) {
+        if (!user.isConfirmed) {
+            return next(new Error("الحساب غير مفعل، يرجى تفعيله أولاً عبر كود OTP", { cause: 400 }));
+        }
+        if (user.status !== "ACCEPTED") {
+            return next(new Error("طلب الانضمام لم يُقبل بعد", { cause: 400 }));
+        }
+    }
+
+    // التحقق من الباسورد (التصحيح هنا)
+    const isMatch = await comparehash({ planText: password, valuehash: user.password });// 👈 التعديل الوحيد
+
+    if (!isMatch) {
+        return next(new Error("بيانات الدخول غير صحيحة", { cause: 400 }));
+    }
+
+    // توليد التوكنات
+    const access_Token = generatetoken({ payload: { id: user._id } });
+    const refreshToken = generatetoken({
+        payload: { id: user._id },
+        expiresIn: "365d"
+    });
+
+    let message = "";
+    if (isOwner) message = "تم تسجيل دخول المالك بنجاح ✅";
+    else if (isAdmin) message = "تم تسجيل دخول الأدمن بنجاح ✅";
+    else if (isVendor) message = "تم تسجيل دخول البائع بنجاح ✅";
+
+    return successresponse(res, message, 200, {
+        access_Token,
+        refreshToken,
+        user: {
+            _id: user._id,
+            fullName: user.fullName,
+            email: user.email,
+            phone: user.phone,
+            companyName: user.companyName || null,
+            accountType: user.accountType,
+            status: user.status || null
+        }
+    });
+});
+
+
+

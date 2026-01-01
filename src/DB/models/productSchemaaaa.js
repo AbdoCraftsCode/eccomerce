@@ -27,10 +27,18 @@ const productSchema = new mongoose.Schema({
         count: { type: Number, default: 0 }
     },
 
+           createdBy: {
+                type: mongoose.Schema.Types.ObjectId,
+                ref: "User", 
+                required: true
+            },
+
     sku: { type: String, unique: true },
     // barcode: { type: String, unique: true, sparse: true },
 
     mainPrice: { type: String, },
+    weight: { type: String, },
+
     disCountPrice: { type: String, },
 
     images: [String], 
@@ -44,6 +52,7 @@ const productSchema = new mongoose.Schema({
         enabled: { type: Boolean, default: false },
         rate: { type: Number, default: 0}
     },
+
     inStock: {
         type: Boolean,
         default: true

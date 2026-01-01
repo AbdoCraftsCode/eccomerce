@@ -13,6 +13,8 @@ import dotenv from "dotenv";
 dotenv.config();
 import fs from 'fs';
 import admin from 'firebase-admin';
+import { BrandModel } from "../../../DB/models/brandSchemaaa.js";
+import { ProductModellll } from "../../../DB/models/productSchemaaaa.js";
 
 export const Updateuseraccount = asyncHandelr(async (req, res, next) => {
     const user = await dbservice.findOne({
@@ -594,3 +596,111 @@ export const deleteFcmToken = asyncHandelr(async (req, res) => {
 
 
 
+
+
+
+
+export const getBrands = asyncHandelr(async (req, res, next) => {
+    // ✅ جلب كل البراندات النشطة
+    let brands = await BrandModel.find({ isActive: true })
+        .select("name description image")
+        .sort({ createdAt: -1 })
+        .lean();
+
+    // ✅ جلب عدد المنتجات لكل براند باستخدام aggregation
+    const brandStats = await ProductModellll.aggregate([
+        {
+            $match: {
+                isActive: true,
+                status: "published" // اختياري: بس المنتجات المنشورة
+            }
+        },
+        { $unwind: { path: "$brands", preserveNullAndEmptyArrays: true } },
+        {
+            $group: {
+                _id: "$brands",
+                productCount: { $sum: 1 }
+            }
+        }
+    ]);
+
+    // تحويل إلى map للوصول السريع: brandId → productCount
+    const brandProductCountMap = {};
+    let totalProducts = 0;
+    brandStats.forEach(stat => {
+        if (stat._id) { // تجاهل null (منتجات بدون براند)
+            brandProductCountMap[stat._id.toString()] = stat.productCount;
+            totalProducts += stat.productCount;
+        }
+    });
+
+    // ✅ إضافة productCount لكل براند
+    brands = brands.map(brand => ({
+        ...brand,
+        productCount: brandProductCountMap[brand._id.toString()] || 0
+    }));
+
+    // ✅ حساب الإحصائيات العامة
+    const totalBrands = brands.length;
+    const averageProductsPerBrand = totalBrands > 0
+        ? Math.round(totalProducts / totalBrands)
+        : 0;
+
+    // العلامة الأعلى منتجات
+    let topBrand = null;
+    if (brands.length > 0) {
+        const sorted = [...brands].sort((a, b) => b.productCount - a.productCount);
+        const highest = sorted[0];
+        if (highest.productCount > 0) {
+            topBrand = {
+                name: highest.name,
+                productCount: highest.productCount
+            };
+        }
+    }
+
+    // ✅ الإحصائيات النهائية
+    const stats = {
+        totalBrands,
+        totalProducts,
+        averageProductsPerBrand,
+        topBrand: topBrand || { name: { ar: "-", en: "-" }, productCount: 0 }
+    };
+
+    res.status(200).json({
+        success: true,
+        message: "تم جلب العلامات التجارية مع الإحصائيات بنجاح ✅",
+        stats,
+        count: brands.length,
+        data: brands
+    });
+});
+
+
+export const DeleteProduct = asyncHandelr(async (req, res, next) => {
+    const { productId } = req.params;
+
+    // ✅ تحقق من وجود productId
+    if (!productId) {
+        return next(new Error("❌ معرف المنتج مطلوب", { cause: 400 }));
+    }
+
+    const product = await ProductModellll.findById(productId);
+
+    if (!product) {
+        return next(new Error("❌ المنتج غير موجود", { cause: 404 }));
+    }
+
+    // ✅ Soft Delete
+    product.isActive = false;
+    await ProductModellll.findByIdAndDelete(productId);
+
+    res.status(200).json({
+        success: true,
+        message: "تم حذف المنتج بنجاح ",
+        data: {
+            productId: product._id,
+            // isActive: product.isActive
+        }
+    });
+});
