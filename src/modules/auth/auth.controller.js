@@ -2,7 +2,7 @@ import { Router } from "express";
 import { validation } from "../../middlewere/validation.middlewere.js";
 import  * as validators from "../auth/auth.validate.js"
 import { addAuthorizedUser, addAuthorizedUserToSupermarket, addProduct, addSection, confirmOTP, createAdminUser, createAppointment, createBranch, createDoctor, createEvaluation, createMainGroup, createMode, createOrder, createOrderSupermarket, createPaidService, createPaidServiceDrivers, createPermissions, createProduct, createPropertyBooking, createQuestion, createRentalProperty, createReport, createRestaurant, createService, createSubGroup, createSubscriptionPlan, createSupermarket, createUserByOwner, deleteAdminUser, deleteAppSettings, deleteBranch, deleteDoctor, deleteMainGroup, deletePermission, deleteProduct, deleteProducts, deleteRentalProperty, deleteRestaurant, deleteSection, deleteSingleQuestion, deleteSubGroup, deleteSubscriptionPlan, deleteSupermarket, deleteUserByAdmin, deleteUserByOwner, findNearbyDrivers, forgetPassword, getAcceptedOrders, getAccessibleSupermarket, getAllAdminUsers, getAllImages, getAllNormalUsers, getAllPaidServiceDrivers, getAllPaidServices, getAllPaidServicesadmin, getAllPermissions, getAllRentalProperties, getAllServiceProviders, getAllSubscriptionPlans, getBranches, getClinetHistory, getDeliveredOrdersByDriver, getDoctorAppointments, getDoctors, getDriverHistory, getDriverOrdersStats, getDriverStats, getEvaluations, getMainGroupsForUser, getMainGroupsWithSubGroups, getManagerRestaurants, getMyDoctorProfile, getMyEvaluations, getMyRestaurantsProducts, getMySubGroups, getNotificationsByDoctor, getNotificationsByProperty, getNotificationsByRestaurant, getNotificationsByUser, getOwnerRestaurants, getProductsByRestaurant, getPropertyBookings, getQuestionsByMainGroups, getReports, getRestaurantOrders, getRestaurants, getRideRequestById, getServices, getSubGroupsByMainGroup, getSupermarket, getSupermarketAdmin, getSupermarketNotifications, getSupermarketOrders, getSupermarketSections, getSupermarketWithSectionsAndProducts, getUserOrders, getUserRentalProperties, getUsersByOwner, markAllNotificationsAsRead, markAllNotificationsAsReadDoctor, markAllNotificationsAsReadProperty, registerRestaurant, resetPassword, sendotpphone, signup, signupServiceProvider, signupwithGmail, updateAdminUser, updateBranch, updateDoctor, updateMainGroup, updateMyProfile, updateOrderStatus, updateOrderStatusSupermarket, updatePermission, updateProduct, updateProductsupermarket, updateRentalProperty, updateRestaurant, updateSection, updateService, updateSingleQuestion, updateSubGroup, updateSubscription, updateSubscriptionPlan, updateSupermarket, updateUser, updateUserByOwner, uploadImages,  } from "./service/regestration.service.js";
-import { becomeSeller, confirOtp, createAttribute, createAttributeValue, createBrand, createCategory, createOrUpdateSettings, CreateProdut, createVariant, deleteAttribute, deleteBrand, deleteCategory, deleteMyAccount, DeleteProduct, deleteVariant, filterProducts, forgetpassword, forgetPasswordphone, forgetPasswordphoneadmin, GetAllProducts, getAllVendors, getAppSettingsAdmin, getAttributesWithValues, getAttributeValues, getBrandById, GetBrands, getBrands, getCategories, getCategoriesLocalized, getCategoryTreeById, getMyCompactProfile, getMyProfile, GetProductById, getProducts, GetProductsByCategory, getSettings, getVariants, login, loginAdmin, loginRestaurant, loginwithGmail, loginWithPassword, refreshToken, resendOTP, resetpassword, resetPasswordphone, sendOtpforeach, updateAttribute, updateBrand, updateCategory, UpdateProduct, updateVariant, updateVendorStatus, verifyOTP, verifyOtpLogin } from "./service/authontecation.service.js";
+import { applyCoupon, becomeSeller, confirOtp, createAttribute, createAttributeValue, createBrand, createCategory, createCategoryRequest, createCoupon, createOrderforUser, createOrUpdateSettings, CreateProdut, createVariant, deleteAttribute, deleteBrand, deleteCategory, deleteCoupon, deleteMyAccount, DeleteProduct, deleteVariant, filterProducts, forgetpassword, forgetPasswordphone, forgetPasswordphoneadmin, getAllNotificationsAdmin, GetAllProducts, getAllVendors, getAllVendorsWithStats, getAppSettingsAdmin, getAttributesWithValues, getAttributeValues, getBrandById, GetBrands, getBrands, getCategories, getCategoriesLocalized, getCategoryRequests, getCategoryTreeById, getCustomersWithOrders, getMyCompactProfile, getMyCoupons, getMyNotifications, GetMyOrders, getMyProfile, GetProductById, getProducts, GetProductsByCategory, getSettings, getVariants, getVendorDashboardStats, getVendorDetailedStats, getVendorOrders, getVendorSalesChart, login, loginAdmin, loginRestaurant, loginwithGmail, loginWithPassword, MarkAllNotificationsAsRead, refreshToken, resendOTP, resetpassword, resetPasswordphone, sendOtpforeach, updateAttribute, updateBrand, updateCategory, updateCategoryRequest, updateCoupon, UpdateProduct, updateVariant, updateVendorStatus, verifyOTP, verifyOtpLogin } from "./service/authontecation.service.js";
 import { authentication, checkRestaurantPermission } from "../../middlewere/authontcation.middlewere.js";
 
 const routr = Router()
@@ -500,10 +500,55 @@ routr.get("/getAllServiceProviders", getAllServiceProviders)
 
 routr.post("/getBranches", authentication(), getBranches)
 
+routr.post("/createCoupon", authentication(), createCoupon)
+
+routr.get("/getMyCoupons", authentication(), getMyCoupons)
+
+
+routr.get("/GetMyOrders", authentication(), GetMyOrders)
+
+
+routr.post("/applyCoupon", authentication(), applyCoupon)
+
+routr.get("/getVendorOrders", authentication(), getVendorOrders)
+
+routr.get("/getVendorDashboardStats", authentication(), getVendorDashboardStats)
+
+routr.get("/getCustomersWithOrders", authentication(), getCustomersWithOrders)
+
+
+routr.post("/createOrderforUser", authentication(), createOrderforUser)
+
+
 routr.post("/createUserByOwner", authentication(), createUserByOwner)
+
 routr.get("/getUsersByOwner", authentication(), getUsersByOwner)
+
+routr.get("/getAllVendorsWithStats", getAllVendorsWithStats)
+
+routr.get("/getVendorDetailedStats/:vendorId", getVendorDetailedStats)
+
+
+routr.get("/getVendorSalesChart/:vendorId", getVendorSalesChart)
+
+routr.get("/getCategoryRequests", getCategoryRequests)
+
+routr.get("/getAllNotificationsAdmin", getAllNotificationsAdmin)
+
 routr.delete("/deleteMyAccount", authentication(), deleteMyAccount)
 
+routr.post("/createCategoryRequest", authentication(), createCategoryRequest)
+
+routr.delete("/deleteCoupon/:couponId", authentication(), deleteCoupon)
+
+routr.get("/getMyNotifications", authentication(), getMyNotifications)
+
+routr.put("/updateCategoryRequest/:requestId", updateCategoryRequest)
+
+
+routr.put("/updateCoupon/:couponId", authentication(), updateCoupon)
+
+routr.post("/MarkAllNotificationsAsRead", authentication(), MarkAllNotificationsAsRead)
 
 routr.post("/createPropertyBooking", authentication(), createPropertyBooking)
 

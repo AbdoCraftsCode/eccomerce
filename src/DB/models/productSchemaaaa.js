@@ -40,6 +40,7 @@ const productSchema = new mongoose.Schema({
     weight: { type: String, },
 
     disCountPrice: { type: String, },
+    finalPrice: { type: String, },
 
     images: [String], 
 
