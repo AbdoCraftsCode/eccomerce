@@ -5275,10 +5275,12 @@ export const updateCoupon = asyncHandelr(async (req, res, next) => {
 export const deleteCoupon = asyncHandelr(async (req, res, next) => {
     const { couponId } = req.params;
 
+    // ✅ التحقق من توكن وبائع
     if (!req.user || req.user.accountType !== "vendor") {
         return next(new Error("❌ غير مصرح لك بحذف الكوبونات", { cause: 401 }));
     }
 
+    // جلب الكوبون مع التحقق من الانتماء للبائع
     const coupon = await CouponModel.findOne({
         _id: couponId,
         vendorId: req.user._id
@@ -5288,16 +5290,15 @@ export const deleteCoupon = asyncHandelr(async (req, res, next) => {
         return next(new Error("❌ الكوبون غير موجود أو لا يخصك", { cause: 404 }));
     }
 
-    coupon.isActive = false;
-    await coupon.save();
+    // حذف نهائي من الداتابيز
+    await CouponModel.findByIdAndDelete(couponId);
 
     res.status(200).json({
         success: true,
-        message: "تم إلغاء تفعيل الكوبون بنجاح ✅",
+        message: "تم حذف الكوبون نهائيًا بنجاح ✅",
         data: {
             _id: coupon._id,
-            code: coupon.code,
-            isActive: false
+            code: coupon.code
         }
     });
 });
