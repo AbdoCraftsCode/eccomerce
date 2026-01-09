@@ -133,4 +133,4 @@ const orderSchema = new mongoose.Schema({
     },
 }, { timestamps: true });
 
-export const OrderModel = mongoose.model("Orderrr", orderSchema);
+export const OrderModel = mongoose.model("Orderrrssssssssss", orderSchema);

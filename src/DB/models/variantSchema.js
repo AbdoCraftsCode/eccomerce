@@ -24,13 +24,13 @@ const variantSchema = new mongoose.Schema({
         type: Number,
         required: true
     },
-
+    finalPrice: { type: String, },
     stock: {
         type: Number,
         required: true,
         min: 0
     },
-
+    weight: { type: String, },
     sku: { type: String, unique: true },
     disCountPrice: { type: String, },
     images: [{
