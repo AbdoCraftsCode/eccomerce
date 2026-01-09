@@ -15,6 +15,7 @@ import fs from 'fs';
 import admin from 'firebase-admin';
 import { BrandModel } from "../../../DB/models/brandSchemaaa.js";
 import { ProductModellll } from "../../../DB/models/productSchemaaaa.js";
+import { VariantModel } from "../../../DB/models/variantSchema.js";
 
 export const Updateuseraccount = asyncHandelr(async (req, res, next) => {
     const user = await dbservice.findOne({
@@ -702,5 +703,19 @@ export const DeleteProduct = asyncHandelr(async (req, res, next) => {
             productId: product._id,
             // isActive: product.isActive
         }
+    });
+});
+export const DeleteVariant= asyncHandelr(async (req, res, next) => {
+    const { variantId } = req.params;
+
+    const variant = await VariantModel.findById(variantId);
+    if (!variant) return next(new Error("❌ المتغير غير موجود", { cause: 404 }));
+
+    variant.isActive = false;
+    await variant.save();
+
+    res.status(200).json({
+        success: true,
+        message: " تم حذف المتغير بنجاح"
     });
 });

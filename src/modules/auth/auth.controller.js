@@ -12,6 +12,7 @@ const routr = Router()
 import axios from "axios";
 import dotenv from "dotenv";
 import { fileValidationTypes, uploadCloudFile } from "../../utlis/multer/cloud.multer.js";
+import { DeleteVariant } from "../user/service/profile.service.js";
 
 dotenv.config();
 
@@ -451,7 +452,7 @@ routr.post("/sendOtpforeach", sendOtpforeach)
 routr.delete("/deleteUserByAdmin/userId", deleteUserByAdmin)
 
 
-routr.delete("/deleteVariant/variantId", deleteVariant)
+routr.delete("/DeleteVariant/variantId", DeleteVariant)
 
 
 routr.get("/GetAllProducts", GetAllProducts)
