@@ -2816,6 +2816,8 @@ export const deleteVariant = asyncHandelr(async (req, res, next) => {
 
 
 
+
+
 export const filterProducts = asyncHandelr(async (req, res, next) => {
     const {
         lang = "en",
@@ -4526,7 +4528,138 @@ export const getAllVendors = asyncHandelr(async (req, res, next) => {
     });
 });
 
+export const getVendorDetails = asyncHandelr(async (req, res, next) => {
+    const { vendorId } = req.params;
 
+    // ✅ التحقق من صلاحية الأدمن
+    if (!req.user || !["Admin", "Owner"].includes(req.user.accountType)) {
+        return next(new Error("❌ غير مصرح لك بعرض تفاصيل التاجر", { cause: 403 }));
+    }
+
+    // تحقق من صحة vendorId
+    if (!mongoose.Types.ObjectId.isValid(vendorId)) {
+        return next(new Error("❌ معرف التاجر غير صحيح", { cause: 400 }));
+    }
+
+    const vendorObjectId = new mongoose.Types.ObjectId(vendorId);
+
+    const {
+        lang = "en"
+    } = req.query;
+
+    // ✅ حساب الإحصائيات العامة للتاجر ده فقط
+    const now = new Date();
+    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+
+    const statsAggregation = await Usermodel.aggregate([
+        { $match: { _id: vendorObjectId, accountType: "vendor" } },
+        {
+            $group: {
+                _id: "$status",
+                count: { $sum: 1 }
+            }
+        }
+    ]);
+
+    let totalVendors = 0;
+    let activeVendors = 0;
+    let pendingVendors = 0;
+    let suspendedVendors = 0;
+
+    statsAggregation.forEach(stat => {
+        totalVendors += stat.count;
+        if (stat._id === "ACCEPTED") activeVendors = stat.count;
+        if (stat._id === "PENDING") pendingVendors = stat.count;
+        if (stat._id === "REFUSED" || stat._id === "SUSPENDED") suspendedVendors += stat.count;
+    });
+
+    // جدد هذا الشهر (للتاجر ده)
+    const newThisMonth = await Usermodel.countDocuments({
+        _id: vendorObjectId,
+        accountType: "vendor",
+        createdAt: { $gte: startOfMonth }
+    });
+
+    // إجمالي المنتجات من التاجر ده
+    const totalProducts = await ProductModellll.countDocuments({
+        createdBy: vendorObjectId,
+        isActive: true
+    });
+
+    // نسبة الزيادة في النشطين (مثال: مقارنة بالشهر السابق - افتراضي +8.5%)
+    const growthPercentage = "+8.5%"; // يمكن نحسبه ديناميكيًا لاحقًا
+
+    // جلب التاجر
+    const vendor = await Usermodel.findById(vendorObjectId)
+        .populate({
+            path: "categories",
+            match: { isActive: true },
+            select: "name slug"
+        })
+        .select("fullName email phone companyName categories status createdAt updatedAt")
+        .lean();
+
+    if (!vendor) {
+        return res.status(404).json({
+            success: false,
+            message: "❌ التاجر غير موجود"
+        });
+    }
+
+    // تنسيق البيانات مع ترجمة أسماء الأقسام
+    const formattedVendor = {
+        _id: vendor._id,
+        fullName: vendor.fullName,
+        email: vendor.email,
+        phone: vendor.phone || null,
+        companyName: vendor.companyName || null,
+        status: vendor.status,
+        createdAt: vendor.createdAt,
+        updatedAt: vendor.updatedAt,
+        categories: (vendor.categories || []).map(cat => ({
+            _id: cat._id,
+            name: cat.name[lang] || cat.name.en,
+            slug: cat.slug
+        }))
+    };
+
+    // معلومات الـ pagination (صفحة واحدة فقط)
+    const pagination = {
+        currentPage: 1,
+        totalPages: 1,
+        totalItems: 1,
+        itemsPerPage: 10,
+        hasNext: false,
+        hasPrev: false
+    };
+
+    // دالة تنسيق الأرقام (مثل 8450 → 8.450k)
+    const formatNumber = (num) => {
+        if (num >= 1000) {
+            return (num / 1000).toFixed(3).replace(/\.?0+$/, "") + "k";
+        }
+        return num.toString();
+    };
+
+    // الإحصائيات العامة (نفس اللي في getAllVendors)
+    const summary = {
+        totalVendors: 1, // لأن تاجر واحد
+        activeVendors: `${activeVendors} (${growthPercentage})`,
+        pendingVendors,
+        newThisMonth,
+        totalProducts: formatNumber(totalProducts),
+        suspendedVendors
+    };
+
+    res.status(200).json({
+        success: true,
+        message: "تم جلب تفاصيل التاجر بنجاح ",
+        summary,
+        count: 1,
+        pagination,
+        data: [formattedVendor] // مصفوفة بتاجر واحد
+    });
+});
 
 
 
@@ -5701,6 +5834,423 @@ export const getVendorOrders = asyncHandelr(async (req, res, next) => {
 
 
 
+
+export const getAllOrdersAdmin = asyncHandelr(async (req, res, next) => {
+
+    if (!req.user || !["Admin", "Owner"].includes(req.user.accountType)) {
+        return next(new Error("❌ غير مصرح لك بعرض الطلبات", { cause: 403 }));
+    }
+
+    const {
+        page = 1,
+        limit = 10,
+        paymentStatus,
+        shippingStatus,
+        status,
+        orderNumber,
+        vendorId // اختياري: فلتر بتاجر معين
+    } = req.query;
+
+    const pageNum = Math.max(1, parseInt(page) || 1);
+    const limitNum = Math.min(50, Math.max(1, parseInt(limit) || 10));
+    const skip = (pageNum - 1) * limitNum;
+
+    let filter = {};
+
+    // فلتر اختياري بتاجر معين
+    if (vendorId) {
+        if (!mongoose.Types.ObjectId.isValid(vendorId)) {
+            return next(new Error("❌ معرف التاجر غير صحيح", { cause: 400 }));
+        }
+        filter.vendorId = vendorId;
+    }
+
+    if (paymentStatus) {
+        const validPayment = ["pending", "paid", "failed", "refunded"];
+        if (!validPayment.includes(paymentStatus)) {
+            return next(new Error("❌ حالة الدفع غير صحيحة", { cause: 400 }));
+        }
+        filter.paymentStatus = paymentStatus;
+    }
+
+    if (shippingStatus) {
+        const validShipping = ["not_shipped", "preparing", "shipped", "in_transit", "delivered", "failed"];
+        if (!validShipping.includes(shippingStatus)) {
+            return next(new Error("❌ حالة الشحن غير صحيحة", { cause: 400 }));
+        }
+        filter.shippingStatus = shippingStatus;
+    }
+
+    if (status) {
+        const validStatus = ["pending", "confirmed", "processing", "shipped", "delivered", "cancelled"];
+        if (!validStatus.includes(status)) {
+            return next(new Error("❌ حالة الطلب غير صحيحة", { cause: 400 }));
+        }
+        filter.status = status;
+    }
+
+    if (orderNumber) {
+        filter.orderNumber = { $regex: orderNumber.trim(), $options: "i" };
+    }
+
+    // ✅ حساب الإحصائيات العامة (لكل النظام أو للتاجر المفلتر)
+    const statsAggregation = await OrderModelUser.aggregate([
+        { $match: filter },
+        {
+            $group: {
+                _id: "$paymentStatus",
+                count: { $sum: 1 },
+                totalPendingAmount: {
+                    $sum: {
+                        $cond: [{ $eq: ["$paymentStatus", "pending"] }, "$totalAmount", 0]
+                    }
+                }
+            }
+        }
+    ]);
+
+    let pendingCount = 0;
+    let pendingAmount = 0;
+    let paidCount = 0;
+    let refundedCount = 0;
+    let failedCount = 0;
+
+    statsAggregation.forEach(stat => {
+        if (stat._id === "pending") {
+            pendingCount = stat.count;
+            pendingAmount = stat.totalPendingAmount;
+        } else if (stat._id === "paid") {
+            paidCount = stat.count;
+        } else if (stat._id === "refunded") {
+            refundedCount = stat.count;
+        } else if (stat._id === "failed") {
+            failedCount = stat.count;
+        }
+    });
+
+    // عدد الطلبات الكلي للـ pagination
+    const totalOrders = await OrderModelUser.countDocuments(filter);
+
+    const orders = await OrderModelUser.find(filter)
+        .populate("customerId", "fullName email phone")
+        .populate("vendorId", "fullName companyName") // إضافة اسم التاجر
+        .populate({
+            path: "items.productId",
+            select: "name sku images mainPrice disCountPrice"
+        })
+        .populate({
+            path: "items.variantId",
+            select: "price disCountPrice attributes images weight sku",
+            populate: [
+                { path: "attributes.attributeId", select: "name type" },
+                { path: "attributes.valueId", select: "value hexCode" }
+            ]
+        })
+        .populate("couponUsed.couponId", "code discountType discountValue")
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limitNum)
+        .lean();
+
+    const formattedOrders = orders.map(order => {
+        const items = order.items.map(item => {
+            const product = item.productId;
+            const variant = item.variantId;
+
+            let variantFormattedAttributes = null;
+            let variantImages = product?.images || null;
+            let variantSku = product?.sku || null;
+            let variantWeight = product?.weight || null;
+
+            if (variant) {
+                variantFormattedAttributes = variant.attributes.map(attr => ({
+                    name: attr.attributeId?.name || { ar: "غير معروف", en: "Unknown" },
+                    type: attr.attributeId?.type || "text",
+                    value: attr.valueId?.value || { ar: "غير معروف", en: "Unknown" },
+                    hexCode: attr.valueId?.hexCode || null
+                }));
+                variantImages = variant.images || null;
+                variantSku = variant.sku || null;
+                variantWeight = variant.weight || null;
+            }
+
+            return {
+                productId: product?._id,
+                productName: item.productName,
+                variantId: variant?._id || null,
+                variantAttributes: variantFormattedAttributes,
+                variantImages,
+                variantSku,
+                variantWeight,
+                quantity: item.quantity,
+                unitPrice: item.unitPrice,
+                totalPrice: item.totalPrice
+            };
+        });
+
+        return {
+            _id: order._id,
+            orderNumber: order.orderNumber,
+            vendor: {
+                _id: order.vendorId?._id,
+                fullName: order.vendorId?.fullName,
+                companyName: order.vendorId?.companyName
+            },
+            customer: {
+                _id: order.customerId?._id,
+                fullName: order.customerId?.fullName,
+                email: order.customerId?.email,
+                phone: order.customerId?.phone
+            },
+            totalAmount: order.totalAmount,
+            currency: order.currency,
+            paymentStatus: order.paymentStatus,
+            shippingStatus: order.shippingStatus,
+            shippingMethod: order.shippingMethod,
+            shippingDetails: order.shippingDetails,
+            status: order.status,
+            shippingAddress: order.shippingAddress,
+            createdAt: order.createdAt,
+            items,
+            discountAmount: order.discountAmount,
+            couponUsed: order.couponUsed,
+            shippingCost: order.shippingCost
+        };
+    });
+
+    const pagination = {
+        currentPage: pageNum,
+        totalPages: Math.ceil(totalOrders / limitNum),
+        totalItems: totalOrders,
+        itemsPerPage: limitNum,
+        hasNext: pageNum < Math.ceil(totalOrders / limitNum),
+        hasPrev: pageNum > 1
+    };
+
+    const summary = {
+        pendingPayment: {
+            count: pendingCount,
+            totalAmount: pendingAmount
+        },
+        completed: paidCount,
+        refunded: refundedCount,
+        failed: failedCount
+    };
+
+    res.status(200).json({
+        success: true,
+        message: "تم جلب جميع الطلبات بنجاح ",
+        summary,
+        count: formattedOrders.length,
+        pagination,
+        data: formattedOrders
+    });
+});
+
+export const getOrderDetails = asyncHandelr(async (req, res, next) => {
+    const { orderId } = req.params;
+
+    // ✅ التحقق من تسجيل الدخول
+    if (!req.user) {
+        return next(new Error("❌ يجب تسجيل الدخول", { cause: 401 }));
+    }
+
+    // جلب الطلب مع التحقق من الانتماء للبائع
+    const order = await OrderModelUser.findOne({
+        _id: orderId,
+        vendorId: req.user._id  // البائع يشوف طلباته بس
+    })
+        .populate("customerId", "fullName email phone")
+        .populate({
+            path: "items.productId",
+            select: "name sku images mainPrice disCountPrice"
+        })
+        .populate({
+            path: "items.variantId",
+            select: "price disCountPrice attributes images weight sku",
+            populate: [
+                { path: "attributes.attributeId", select: "name type" },
+                { path: "attributes.valueId", select: "value hexCode" }
+            ]
+        })
+        .populate("couponUsed.couponId", "code discountType discountValue")
+        .lean();
+
+    if (!order) {
+        return next(new Error("❌ الطلب غير موجود أو لا يخصك", { cause: 404 }));
+    }
+
+    // تنسيق الـ items زي getVendorOrders
+    const items = order.items.map(item => {
+        const product = item.productId;
+        const variant = item.variantId;
+
+        let variantFormattedAttributes = null;
+        let variantImages = product?.images || null;
+        let variantSku = product?.sku || null;
+        let variantWeight = product?.weight || null;
+
+        if (variant) {
+            variantFormattedAttributes = variant.attributes.map(attr => ({
+                name: attr.attributeId?.name || { ar: "غير معروف", en: "Unknown" },
+                type: attr.attributeId?.type || "text",
+                value: attr.valueId?.value || { ar: "غير معروف", en: "Unknown" },
+                hexCode: attr.valueId?.hexCode || null
+            }));
+            variantImages = variant.images || null;
+            variantSku = variant.sku || null;
+            variantWeight = variant.weight || null;
+        }
+
+        return {
+            productId: product?._id,
+            productName: item.productName,
+            variantId: variant?._id || null,
+            variantAttributes: variantFormattedAttributes,
+            variantImages,
+            variantSku,
+            variantWeight,
+            quantity: item.quantity,
+            unitPrice: item.unitPrice,
+            totalPrice: item.totalPrice
+        };
+    });
+
+    const formattedOrder = {
+        _id: order._id,
+        orderNumber: order.orderNumber,
+        customer: {
+            _id: order.customerId?._id,
+            fullName: order.customerId?.fullName,
+            email: order.customerId?.email,
+            phone: order.customerId?.phone
+        },
+        totalAmount: order.totalAmount,
+        currency: order.currency,
+        paymentStatus: order.paymentStatus,
+        shippingStatus: order.shippingStatus,
+        shippingMethod: order.shippingMethod,
+        shippingDetails: order.shippingDetails,
+        status: order.status,
+        shippingAddress: order.shippingAddress,
+        createdAt: order.createdAt,
+        items,
+        discountAmount: order.discountAmount,
+        couponUsed: order.couponUsed,
+        shippingCost: order.shippingCost
+    };
+
+    res.status(200).json({
+        success: true,
+        message: "تم جلب تفاصيل الطلب بنجاح ",
+        data: formattedOrder
+    });
+});
+
+export const getOrderDetailsAdmin = asyncHandelr(async (req, res, next) => {
+    const { orderId } = req.params;
+
+    // ✅ صلاحية أدمن فقط
+    if (!req.user || !["Admin", "Owner"].includes(req.user.accountType)) {
+        return next(new Error("❌ غير مصرح لك بعرض تفاصيل الطلب", { cause: 403 }));
+    }
+
+    // جلب الطلب بدون شرط vendorId
+    const order = await OrderModelUser.findById(orderId)
+        .populate("customerId", "fullName email phone")
+        .populate("vendorId", "fullName companyName") // إضافة معلومات التاجر
+        .populate({
+            path: "items.productId",
+            select: "name sku images mainPrice disCountPrice"
+        })
+        .populate({
+            path: "items.variantId",
+            select: "price disCountPrice attributes images weight sku",
+            populate: [
+                { path: "attributes.attributeId", select: "name type" },
+                { path: "attributes.valueId", select: "value hexCode" }
+            ]
+        })
+        .populate("couponUsed.couponId", "code discountType discountValue")
+        .lean();
+
+    if (!order) {
+        return next(new Error("❌ الطلب غير موجود", { cause: 404 }));
+    }
+
+    // تنسيق الـ items نفس الطريقة
+    const items = order.items.map(item => {
+        const product = item.productId;
+        const variant = item.variantId;
+
+        let variantFormattedAttributes = null;
+        let variantImages = product?.images || null;
+        let variantSku = product?.sku || null;
+        let variantWeight = product?.weight || null;
+
+        if (variant) {
+            variantFormattedAttributes = variant.attributes.map(attr => ({
+                name: attr.attributeId?.name || { ar: "غير معروف", en: "Unknown" },
+                type: attr.attributeId?.type || "text",
+                value: attr.valueId?.value || { ar: "غير معروف", en: "Unknown" },
+                hexCode: attr.valueId?.hexCode || null
+            }));
+            variantImages = variant.images || null;
+            variantSku = variant.sku || null;
+            variantWeight = variant.weight || null;
+        }
+
+        return {
+            productId: product?._id,
+            productName: item.productName,
+            variantId: variant?._id || null,
+            variantAttributes: variantFormattedAttributes,
+            variantImages,
+            variantSku,
+            variantWeight,
+            quantity: item.quantity,
+            unitPrice: item.unitPrice,
+            totalPrice: item.totalPrice
+        };
+    });
+
+    const formattedOrder = {
+        _id: order._id,
+        orderNumber: order.orderNumber,
+        vendor: {
+            _id: order.vendorId?._id,
+            fullName: order.vendorId?.fullName,
+            companyName: order.vendorId?.companyName
+        },
+        customer: {
+            _id: order.customerId?._id,
+            fullName: order.customerId?.fullName,
+            email: order.customerId?.email,
+            phone: order.customerId?.phone
+        },
+        totalAmount: order.totalAmount,
+        currency: order.currency,
+        paymentStatus: order.paymentStatus,
+        shippingStatus: order.shippingStatus,
+        shippingMethod: order.shippingMethod,
+        shippingDetails: order.shippingDetails,
+        status: order.status,
+        shippingAddress: order.shippingAddress,
+        createdAt: order.createdAt,
+        items,
+        discountAmount: order.discountAmount,
+        couponUsed: order.couponUsed,
+        shippingCost: order.shippingCost
+    };
+
+    res.status(200).json({
+        success: true,
+        message: "تم جلب تفاصيل الطلب بنجاح ",
+        data: formattedOrder
+    });
+});
+
+
 export const getVendorDashboardStats = asyncHandelr(async (req, res, next) => {
     // ✅ التحقق من توكن وبائع
     if (!req.user || req.user.accountType !== "vendor") {
@@ -5890,8 +6440,6 @@ export const getCustomersWithOrders = asyncHandelr(async (req, res, next) => {
 });
 
 
-
-
 export const getAllVendorsWithStats = asyncHandelr(async (req, res, next) => {
     // التحقق من صلاحية الأدمن
     // if (!req.user || !["Admin", "Owner"].includes(req.user.accountType)) {
@@ -5902,7 +6450,11 @@ export const getAllVendorsWithStats = asyncHandelr(async (req, res, next) => {
         page = 1,
         limit = 10,
         sortBy = "sales", // sales, rating, orders
-        period = "all"    // all, monthly
+        period = "all",    // all, monthly
+        status, // فلتر جديد: ACCEPTED, PENDING, REFUSED, SUSPENDED
+        search, // فلتر جديد: بحث بالاسم أو الإيميل
+        categoryId, // فلتر جديد: بحث بالقسم (ID)
+        lang = "en"
     } = req.query;
 
     const pageNum = Math.max(1, parseInt(page) || 1);
@@ -6086,9 +6638,42 @@ export const getAllVendorsWithStats = asyncHandelr(async (req, res, next) => {
         };
     });
 
-    // جلب التجار
-    const vendors = await Usermodel.find({ accountType: "vendor" })
+    // جلب التجار مع فلترة جديدة
+    let vendorsQuery = Usermodel.find({ accountType: "vendor" });
+
+    // فلتر الحالة
+    if (status) {
+        const validStatuses = ["ACCEPTED", "PENDING", "REFUSED", "SUSPENDED"];
+        if (!validStatuses.includes(status)) {
+            return next(new Error("حالة غير صحيحة: استخدم ACCEPTED, PENDING, REFUSED, SUSPENDED", { cause: 400 }));
+        }
+        vendorsQuery = vendorsQuery.where("status", status);
+    }
+
+    // بحث بالاسم أو الإيميل
+    if (search) {
+        const searchRegex = new RegExp(search.trim(), "i");
+        vendorsQuery = vendorsQuery.or([
+            { fullName: searchRegex },
+            { email: searchRegex }
+        ]);
+    }
+
+    // فلتر بالقسم (categoryId)
+    if (categoryId) {
+        if (!mongoose.Types.ObjectId.isValid(categoryId)) {
+            return next(new Error("❌ معرف القسم غير صحيح", { cause: 400 }));
+        }
+        vendorsQuery = vendorsQuery.where("categories").in([categoryId]);
+    }
+
+    const vendors = await vendorsQuery
         .select("fullName email phone companyName status createdAt")
+        .populate({
+            path: "categories",
+            match: { isActive: true },
+            select: "name slug"
+        })
         .lean();
 
     let formattedVendors = vendors.map(vendor => {
@@ -6112,6 +6697,11 @@ export const getAllVendorsWithStats = asyncHandelr(async (req, res, next) => {
             companyName: vendor.companyName || null,
             status: vendor.status,
             createdAt: vendor.createdAt,
+            categories: (vendor.categories || []).map(cat => ({
+                _id: cat._id,
+                name: cat.name[lang] || cat.name.en,
+                slug: cat.slug
+            })),
             stats: {
                 totalSales: stat.totalSales,
                 totalOrders: stat.totalOrders,
@@ -6157,7 +6747,6 @@ export const getAllVendorsWithStats = asyncHandelr(async (req, res, next) => {
         data: paginatedVendors
     });
 });
-
 
 import mongoose from "mongoose";
 import { CategoryRequestModel } from "../../../DB/models/categoryRequestSchemaaa.js";
@@ -6328,6 +6917,11 @@ export const getVendorDetailedStats = asyncHandelr(async (req, res, next) => {
         };
     }
 
+    // ✅ جلب بيانات التاجر (الإضافة الجديدة)
+    const vendor = await Usermodel.findById(vendorObjectId)
+        .select("fullName email phone companyName status createdAt")
+        .lean();
+
     const summary = {
         totalSales: `${displaySales.toLocaleString()} ر.س`,
         salesGrowth: growthText,
@@ -6357,6 +6951,14 @@ export const getVendorDetailedStats = asyncHandelr(async (req, res, next) => {
         message: "تم جلب تحليلات التاجر بنجاح ✅",
         data: {
             vendorId,
+            vendor: vendor ? {
+                fullName: vendor.fullName,
+                email: vendor.email,
+                phone: vendor.phone || null,
+                companyName: vendor.companyName || null,
+                status: vendor.status,
+                joinedAt: vendor.createdAt
+            } : null,
             summary,
             products: showProducts === "true" ? {
                 count: vendorProducts.length,
