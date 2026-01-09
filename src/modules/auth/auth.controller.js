@@ -454,7 +454,7 @@ routr.delete("/deleteUserByAdmin/userId", deleteUserByAdmin)
 routr.delete("/deleteVariant/variantId", deleteVariant)
 
 
-routr.get("/GetAllProducts", GetAllProducts)
+routr.get("/GetAllProducts",authentication(), GetAllProducts)
 
 routr.get("/getCategoriesLocalized", getCategoriesLocalized)
 

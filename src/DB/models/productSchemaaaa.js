@@ -1,113 +1,123 @@
 import mongoose from "mongoose";
 
-const productSchema = new mongoose.Schema({
+const productSchema = new mongoose.Schema(
+  {
     name: {
-        ar: { type: String, required: true, trim: true },
-        en: { type: String, required: true, trim: true }
+      ar: { type: String, required: true, trim: true },
+      en: { type: String, required: true, trim: true },
     },
 
     description: {
-        ar: { type: String },
-        en: { type: String }
+      ar: { type: String },
+      en: { type: String },
     },
 
-    categories: [{
+    categories: [
+      {
         type: mongoose.Schema.Types.ObjectId,
         ref: "Categoryyyy",
-        required: true
-    }],
+        required: true,
+      },
+    ],
 
-    brands: [{
+    brands: [
+      {
         type: mongoose.Schema.Types.ObjectId,
         ref: "Brand",
-     
-    }],
+      },
+    ],
     rating: {
-        average: { type: Number, default: 0 },
-        count: { type: Number, default: 0 }
+      average: { type: Number, default: 0 },
+      count: { type: Number, default: 0 },
     },
 
-           createdBy: {
-                type: mongoose.Schema.Types.ObjectId,
-                ref: "User", 
-                required: true
-            },
+    createdBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      required: true,
+    },
 
     sku: { type: String, unique: true },
     // barcode: { type: String, unique: true, sparse: true },
 
-    mainPrice: { type: String, },
-    weight: { type: String, },
+    mainPrice: { type: String },
+    weight: { type: String },
 
-    disCountPrice: { type: String, },
+    disCountPrice: { type: String },
 
-    images: [String], 
+    images: [String],
 
     status: {
-        type: String,
-        enum: ["published", "inactive"],
-        default: "published"
+      type: String,
+      enum: ["published", "inactive"],
+      default: "published",
     },
     tax: {
-        enabled: { type: Boolean, default: false },
-        rate: { type: Number, default: 0}
+      enabled: { type: Boolean, default: false },
+      rate: { type: Number, default: 0 },
     },
 
     inStock: {
-        type: Boolean,
-        default: true
+      type: Boolean,
+      default: true,
     },
     unlimitedStock: {
-        type: Boolean,
-        default: false
+      type: Boolean,
+      default: false,
     },
-    tags: [{
+    tags: [
+      {
         type: String,
         trim: true,
-        lowercase: true
-    }],
+        lowercase: true,
+      },
+    ],
 
-    bulkDiscounts: [{
+    bulkDiscounts: [
+      {
         minQty: {
-            type: Number,
-            required: true
+          type: Number,
+          required: true,
         },
         maxQty: {
-            type: Number,
-            required: true
+          type: Number,
+          required: true,
         },
         discountPercent: {
-            type: Number,
-            min: 1,
-            max: 100,
-            required: true
-        }
-    }],
+          type: Number,
+          min: 1,
+          max: 100,
+          required: true,
+        },
+      },
+    ],
     currency: {
-        type: String,
+      type: String,
 
-        default: "USD"
+      default: "USD",
     },
     hasVariants: {
-        type: Boolean,
-        default: false
+      type: Boolean,
+      default: false,
     },
 
     stock: {
-        type: Number,
-        default: 0,
-        min: 0
+      type: Number,
+      default: 0,
+      min: 0,
     },
     seo: {
-        title: String,
-        description: String,
-        slug: { type: String, unique: true }
+      title: String,
+      description: String,
+      slug: { type: String, unique: true },
     },
 
     isActive: {
-        type: Boolean,
-        default: true
-    }
-}, { timestamps: true });
+      type: Boolean,
+      default: true,
+    },
+  },
+  { timestamps: true }
+);
 
 export const ProductModellll = mongoose.model("Producttttt", productSchema);

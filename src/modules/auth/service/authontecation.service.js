@@ -17,6 +17,7 @@ import AppSettingsSchema from "../../../DB/models/AppSettingsSchema.js";
 import { sendOTP } from "./regestration.service.js";
 import { CategoryModellll } from "../../../DB/models/categorySchemaaa.js";
 const AUTHENTICA_OTP_URL = "https://api.authentica.sa/api/v1/send-otp";
+import {convertProductPrices} from "./changeCurrencyHelper.service.js"
 import cloud from "../../../utlis/multer/cloudinary.js";
 import fs from 'fs';
 // export const login = asyncHandelr(async (req, res, next) => {
@@ -3027,10 +3028,11 @@ export const filterProducts = asyncHandelr(async (req, res, next) => {
 
 export const GetAllProducts = asyncHandelr(async (req, res, next) => {
     const {
-        lang = "en",
         page = 1,
         limit = 10
     } = req.query;
+
+    const userLanguage = req.user.lang;
 
     // تحويل وتأمين القيم
     const pageNum = Math.max(1, parseInt(page) || 1);
@@ -3094,8 +3096,8 @@ export const GetAllProducts = asyncHandelr(async (req, res, next) => {
             const formattedAttributes = variant.attributes
                 .filter(attr => attr.attributeId && attr.valueId)
                 .map(attr => ({
-                    attributeName: attr.attributeId.name[lang] || attr.attributeId.name.en,
-                    value: attr.valueId.value[lang] || attr.valueId.value.en,
+                    attributeName: attr.attributeId.name[userLanguage] || attr.attributeId.name.en,
+                    value: attr.valueId.value[userLanguage] || attr.valueId.value.en,
                     hexCode: attr.valueId.hexCode || null
                 }));
 
@@ -3113,16 +3115,16 @@ export const GetAllProducts = asyncHandelr(async (req, res, next) => {
     const formattedProducts = products.map(product => {
         const baseProduct = {
             _id: product._id,
-            name: product.name[lang] || product.name.en,
-            description: product.description?.[lang] || product.description?.en || "",
+            name: product.name[userLanguage] || product.name.en,
+            description: product.description?.[userLanguage] || product.description?.en || "",
             categories: (product.categories || []).map(cat => ({
                 _id: cat._id,
-                name: cat.name[lang] || cat.name.en,
+                name: cat.name[userLanguage] || cat.name.en,
                 slug: cat.slug
             })),
             brands: (product.brands || []).map(brand => ({
                 _id: brand._id,
-                name: brand.name[lang] || brand.name.en,
+                name: brand.name[userLanguage] || brand.name.en,
                 image: brand.image
             })),
             images: product.images || [],
@@ -3165,15 +3167,23 @@ export const GetAllProducts = asyncHandelr(async (req, res, next) => {
         hasNext: pageNum < Math.ceil(totalProducts / limitNum),
         hasPrev: pageNum > 1
     };
+    // as a test 
+    const finalProducts = await convertProductPrices(formattedProducts , req.user.currency)
 
     res.status(200).json({
         success: true,
         message: "تم جلب المنتجات بنجاح مع التصفح الصفحي ",
         count: formattedProducts.length,
         pagination,
-        data: formattedProducts
+        data: finalProducts
     });
 });
+
+
+///////////////////////////////////////////////////
+
+
+///////////////////////////////////////////////////
 
 
 

@@ -23,7 +23,7 @@ export const decodedToken = async ({ authorization = "", tokenType = tokenTypes.
     if (!bearer || !token) {
         return next(new Error("Invalid authorization format", { cause: 400 }));
     }
- 
+    
     const decoded = verifytoken({
         token,
         signature: process.env.JWT_SECRET,
@@ -32,11 +32,12 @@ export const decodedToken = async ({ authorization = "", tokenType = tokenTypes.
         return next(new Error("Invalid token", { cause: 401 }));
     }
 
-  
+    console.log(decoded.id)
     const user = await dbservice.findOne({
         model: Usermodel,
         filter: { _id: decoded.id,  }
     });
+    
     if (!user) {
         return next(new Error("User not found", { cause: 404 }));
     }
