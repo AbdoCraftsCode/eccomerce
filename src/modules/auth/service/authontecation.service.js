@@ -5077,6 +5077,103 @@ export const getMyCoupons = asyncHandelr(async (req, res, next) => {
     });
 });
 
+export const getCouponDetails = asyncHandelr(async (req, res, next) => {
+    const { couponId } = req.params;
+
+    // ✅ التحقق من توكن وبائع
+    if (!req.user || req.user.accountType !== "vendor") {
+        return next(new Error("❌ غير مصرح لك بعرض تفاصيل الكوبون", { cause: 401 }));
+    }
+
+    // جلب الكوبون مع التحقق من الانتماء للبائع
+    const coupon = await CouponModel.findOne({
+        _id: couponId,
+        vendorId: req.user._id
+    })
+        .populate({
+            path: "productId",
+            match: { isActive: true },
+            select: "name sku images mainPrice"
+        })
+        .lean();
+
+    if (!coupon) {
+        return next(new Error("❌ الكوبون غير موجود أو لا يخصك", { cause: 404 }));
+    }
+
+    // تنسيق الكوبون زي getMyCoupons
+    const formattedCoupon = {
+        _id: coupon._id,
+        code: coupon.code,
+        discountType: coupon.discountType,
+        discountValue: coupon.discountValue,
+        appliesTo: coupon.appliesTo,
+        product: coupon.productId ? {
+            _id: coupon.productId._id,
+            name: coupon.productId.name,
+            sku: coupon.productId.sku,
+            mainPrice: coupon.productId.mainPrice,
+            image: coupon.productId.images[0] || null
+        } : null,
+        maxUses: coupon.maxUses,
+        usesCount: coupon.usesCount,
+        remainingUses: coupon.maxUses - coupon.usesCount,
+        expiryDate: coupon.expiryDate,
+        isActive: coupon.isActive,
+        isExpired: coupon.expiryDate ? new Date(coupon.expiryDate) < new Date() : false,
+        createdAt: coupon.createdAt,
+        updatedAt: coupon.updatedAt
+    };
+
+    // ✅ حساب الإحصائيات العامة (نفس اللي في getMyCoupons، لكن لكوبون واحد)
+    const stats = await CouponModel.aggregate([
+        { $match: { _id: coupon._id } },
+        {
+            $group: {
+                _id: null,
+                totalCoupons: { $sum: 1 },
+                activeCoupons: { $sum: { $cond: [{ $eq: ["$isActive", true] }, 1, 0] } },
+                expiredCoupons: {
+                    $sum: {
+                        $cond: [
+                            {
+                                $and: [
+                                    { $ifNull: ["$expiryDate", false] },
+                                    { $lt: ["$expiryDate", new Date()] }
+                                ]
+                            },
+                            1,
+                            0
+                        ]
+                    }
+                },
+                totalUses: { $sum: "$usesCount" }
+            }
+        }
+    ]);
+
+    const couponStats = stats[0] || {
+        totalCoupons: 0,
+        activeCoupons: 0,
+        expiredCoupons: 0,
+        totalUses: 0
+    };
+
+    res.status(200).json({
+        success: true,
+        message: "تم جلب تفاصيل الكوبون بنجاح ",
+        summary: {
+            totalCoupons: couponStats.totalCoupons,
+            activeCoupons: couponStats.activeCoupons,
+            expiredCoupons: couponStats.expiredCoupons,
+            totalUses: couponStats.totalUses
+        },
+        data: formattedCoupon
+    });
+});
+
+
+
 export const updateCoupon = asyncHandelr(async (req, res, next) => {
     const { couponId } = req.params;
     const {
