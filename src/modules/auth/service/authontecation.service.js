@@ -5028,9 +5028,49 @@ export const getMyCoupons = asyncHandelr(async (req, res, next) => {
         hasPrev: pageNum > 1
     };
 
+    // ✅ حساب الإحصائيات العامة (الإضافة الجديدة فقط)
+    const stats = await CouponModel.aggregate([
+        { $match: { vendorId: req.user._id } },
+        {
+            $group: {
+                _id: null,
+                totalCoupons: { $sum: 1 },
+                activeCoupons: { $sum: { $cond: [{ $eq: ["$isActive", true] }, 1, 0] } },
+                expiredCoupons: {
+                    $sum: {
+                        $cond: [
+                            {
+                                $and: [
+                                    { $ifNull: ["$expiryDate", false] },
+                                    { $lt: ["$expiryDate", new Date()] }
+                                ]
+                            },
+                            1,
+                            0
+                        ]
+                    }
+                },
+                totalUses: { $sum: "$usesCount" }
+            }
+        }
+    ]);
+
+    const couponStats = stats[0] || {
+        totalCoupons: 0,
+        activeCoupons: 0,
+        expiredCoupons: 0,
+        totalUses: 0
+    };
+
     res.status(200).json({
         success: true,
         message: "تم جلب كوبوناتك بنجاح ",
+        summary: {
+            totalCoupons: couponStats.totalCoupons,
+            activeCoupons: couponStats.activeCoupons,
+            expiredCoupons: couponStats.expiredCoupons,
+            totalUses: couponStats.totalUses
+        },
         count: formattedCoupons.length,
         pagination,
         data: formattedCoupons
@@ -6968,6 +7008,7 @@ export const getVendorDetailedStats = asyncHandelr(async (req, res, next) => {
         }
     });
 });
+
 
 
 export const getVendorSalesChart = asyncHandelr(async (req, res, next) => {
