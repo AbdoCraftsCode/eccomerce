@@ -43,12 +43,8 @@ const productSchema = new mongoose.Schema(
     mainPrice: { type: String },
     weight: { type: String },
 
-<<<<<<< HEAD
     disCountPrice: { type: String },
-=======
-    disCountPrice: { type: String, },
-    finalPrice: { type: String, },
->>>>>>> 9aeac05044f1e64ad925dc220bcb19351f17696d
+    finalPrice: { type: String },
 
     images: [String],
 
