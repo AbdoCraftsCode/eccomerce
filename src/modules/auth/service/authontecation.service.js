@@ -1885,7 +1885,6 @@ export const CreateProdut = asyncHandelr(async (req, res, next) => {
 
 
 
-
 export const getProducts = asyncHandelr(async (req, res, next) => {
     // ✅ التحقق من وجود توكن
     if (!req.user) {
@@ -1904,7 +1903,8 @@ export const getProducts = asyncHandelr(async (req, res, next) => {
         category,
         status,
         page = 1,
-        limit = 10
+        limit = 10,
+        search,      // ← فلتر جديد: بحث بالاسم أو الـ SKU
     } = req.query;
 
     const pageNum = Math.max(1, parseInt(page) || 1);
@@ -1956,6 +1956,18 @@ export const getProducts = asyncHandelr(async (req, res, next) => {
         filter.categories = { $in: allCategoryIds };
     }
 
+    // ✅ فلتر البحث الجديد (بالاسم أو الـ SKU)
+    if (search) {
+        const searchTerm = search.trim();
+        const searchRegex = new RegExp(searchTerm, "i"); // بحث غير حساس لحالة الحروف
+
+        filter.$or = [
+            { "name.ar": searchRegex },
+            { "name.en": searchRegex },
+            { sku: searchRegex }
+        ];
+    }
+
     // ✅ جلب المنتجات مع الفلترة والـ pagination
     let productsQuery = ProductModellll.find(filter)
         .populate({
@@ -1979,8 +1991,6 @@ export const getProducts = asyncHandelr(async (req, res, next) => {
 
     // باقي الكود زي ما هو بالضبط (stock، variant، summary، pagination، children)
     // ... (كل الكود من variantStockMap لحد الـ res.json)
-
-    // (نفس الكود اللي عندك من هنا لحد النهاية بدون أي تغيير)
 
     // ✅ جلب stock الكلي من الـ variants
     const productsWithVariants = products.filter(p => p.hasVariants).map(p => p._id);
@@ -2086,7 +2096,7 @@ export const getProducts = asyncHandelr(async (req, res, next) => {
 
     res.status(200).json({
         success: true,
-        message: "تم جلب المنتجات بنجاح ✅",
+        message: "تم جلب المنتجات بنجاح ",
         count: products.length,
         summary,
         pagination,
