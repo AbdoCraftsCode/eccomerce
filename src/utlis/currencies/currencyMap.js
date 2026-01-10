@@ -1,4 +1,4 @@
-export const currencyMap = {
+const currencyMap = {
   // North America
   US: "USD",
   CA: "CAD",
@@ -134,3 +134,8 @@ export const currencyMap = {
   TM: "TMT",
   AF: "AFN",
 };
+
+
+export const supportedCurrencies = new Set(
+  Object.values(currencyMap)
+);

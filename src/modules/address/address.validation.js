@@ -11,8 +11,8 @@ export const createAddressValidation = Joi.object().keys({
 
 export const updateAddressValidation = Joi.object().keys({
   addressId: generalfields._id.required(),
-  addressName: generalfields.fullName.required(),
-  addressDetails: generalfields.fullName.required(),
+  addressName: generalfields.fullName,
+  addressDetails: generalfields.fullName,
   latitude: Joi.number().min(-90).max(90).optional(),
   longitude: Joi.number().min(-180).max(180).optional(),
   isDefault: Joi.boolean().optional()

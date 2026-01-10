@@ -1,12 +1,14 @@
 import axios from "axios";
 
-import { currencyMap } from "../../../utlis/currencies/currencyMap.js";
+import { supportedCurrencies } from "../../../utlis/currencies/currencyMap.js";
 
 export const convertProductPrices = async (products, countryCode) => {
   try {
-    const targetCurrency = countryCode ;
+    const targetCurrency = countryCode.toUpperCase() ;
 
-    if (targetCurrency.toUpperCase() === "USD") {
+    const isvalid = isValidCurrency(targetCurrency);
+
+    if (targetCurrency.toUpperCase() === "USD" ||!isvalid) {
       return products;
     }
 
@@ -58,7 +60,7 @@ export const convertProductPrices = async (products, countryCode) => {
           }));
         }
 
-        productCopy.currency = targetCurrency.toLowerCase();
+        productCopy.currency = targetCurrency.toUpperCase();
       }
 
       return productCopy;
@@ -115,5 +117,12 @@ const getExchangeRate = async (fromCurrency, toCurrency) => {
     "All exchange rate APIs failed. No conversion will be performed."
   );
   return null;
+};
+
+
+export const isValidCurrency = (currency) => {
+  if (!currency) return false;
+
+  return supportedCurrencies.has(currency.toUpperCase());
 };
 

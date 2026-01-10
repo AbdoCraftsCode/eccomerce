@@ -38,13 +38,11 @@ const productSchema = new mongoose.Schema(
     },
 
     sku: { type: String, unique: true },
-    // barcode: { type: String, unique: true, sparse: true },
 
     mainPrice: { type: String },
     weight: { type: String },
 
     disCountPrice: { type: String },
-    finalPrice: { type: String },
 
     images: [String],
 
