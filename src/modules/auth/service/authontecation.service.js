@@ -3295,7 +3295,6 @@ export const GetAllProducts = asyncHandelr(async (req, res, next) => {
   });
 });
 
-
 export const getProductByIdForEndUser = asyncHandelr(async (req, res, next) => {
   const { productId } = req.params;
   const { lang = "en", currency } = req.query;
@@ -3386,7 +3385,7 @@ export const getProductByIdForEndUser = asyncHandelr(async (req, res, next) => {
     images: product.images || [],
     mainPrice: product.mainPrice,
     disCountPrice: product.disCountPrice || null,
-    finalPrice: finalPrice, 
+    finalPrice: finalPrice,
     currency: product.currency || "USD",
     sku: product.sku || null,
     weight: product.weight || null,
@@ -3419,9 +3418,6 @@ export const getProductByIdForEndUser = asyncHandelr(async (req, res, next) => {
       currency
     );
     finalProduct = convertedProducts[0];
-
-    
-    
   }
 
   res.status(200).json({
@@ -6175,6 +6171,7 @@ export const getVendorOrders = asyncHandelr(async (req, res, next) => {
   }
 
   // ✅ حساب الإحصائيات العامة
+
   const statsAggregation = await OrderModelUser.aggregate([
     { $match: { vendorId } },
     {
@@ -6209,7 +6206,7 @@ export const getVendorOrders = asyncHandelr(async (req, res, next) => {
     }
   });
 
-  // عدد الطلبات الكلي (للـ pagination)
+
   const totalOrders = await OrderModelUser.countDocuments(filter);
 
   const orders = await OrderModelUser.find(filter)

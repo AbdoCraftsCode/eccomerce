@@ -4,11 +4,11 @@ import { supportedCurrencies } from "../../../utlis/currencies/currencyMap.js";
 
 export const convertProductPrices = async (products, countryCode) => {
   try {
-    const targetCurrency = countryCode.toUpperCase() ;
+    const targetCurrency = countryCode.toUpperCase();
 
     const isvalid = isValidCurrency(targetCurrency);
 
-    if (targetCurrency.toUpperCase() === "USD" ||!isvalid) {
+    if (targetCurrency.toUpperCase() === "USD" || !isvalid) {
       return products;
     }
 
@@ -119,10 +119,8 @@ const getExchangeRate = async (fromCurrency, toCurrency) => {
   return null;
 };
 
-
 export const isValidCurrency = (currency) => {
   if (!currency) return false;
 
   return supportedCurrencies.has(currency.toUpperCase());
 };
-

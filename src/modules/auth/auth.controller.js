@@ -468,7 +468,7 @@ routr.delete("/DeleteVariant/variantId", DeleteVariant)
 
 routr.get("/GetAllProducts",authentication(), GetAllProducts)
 
-routr.get("/:productId",getProductByIdForEndUser);
+routr.get("/onlyProduct/:productId",getProductByIdForEndUser);
 
 routr.get("/getCategoriesLocalized", getCategoriesLocalized)
 
