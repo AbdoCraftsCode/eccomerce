@@ -32,7 +32,6 @@ export const decodedToken = async ({ authorization = "", tokenType = tokenTypes.
         return next(new Error("Invalid token", { cause: 401 }));
     }
 
-    console.log(decoded.id)
     const user = await dbservice.findOne({
         model: Usermodel,
         filter: { _id: decoded.id,  }

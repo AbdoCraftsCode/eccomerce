@@ -1,13 +1,13 @@
-// import express from "express";
-// import { checkout } from "./services/checkout.service.js";
-// import { authentication, authorization } from "../../middlewere/authontcation.middlewere.js";
+import express from "express";
+import { checkout } from "./services/checkout.service.js";
+import { authentication, authorization } from "../../middlewere/authontcation.middlewere.js";
 
-// const router = express.Router();
+const router = express.Router();
 
-// router.post(
-//   "/checkout",
-//   authentication(),        
-//   checkout                
-// );
+router.post(
+  "/checkout",
+  authentication(),        
+  checkout                
+);
 
-// export default router;
+export default router;

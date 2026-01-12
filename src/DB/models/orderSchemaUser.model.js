@@ -1,134 +1,167 @@
+// orderSchemaUser.model.js
 import mongoose from "mongoose";
+// import {releaseStockFromExpiredOrder} from "../../modules/orders/services/cleanup.service"
 
-const orderSchema = new mongoose.Schema({
+const orderSchema = new mongoose.Schema(
+  {
     orderNumber: {
-        type: String,
-        unique: true,
-        required: true
+      type: String,
+      unique: true,
+      required: true,
     },
     customerId: {
-        type: mongoose.Schema.Types.ObjectId,
-        ref: "User",
-        required: true
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      required: true,
     },
     vendorId: {
-        type: mongoose.Schema.Types.ObjectId,
-        ref: "User",
-        required: true
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      required: true,
     },
-    items: [{
+    items: [
+      {
         productId: {
-            type: mongoose.Schema.Types.ObjectId,
-            ref: "Producttttt",
-            required: true
+          type: mongoose.Schema.Types.ObjectId,
+          ref: "Producttttt",
+          required: true,
         },
         variantId: {
-            type: mongoose.Schema.Types.ObjectId,
-            ref: "Variant",
-            default: null
+          type: mongoose.Schema.Types.ObjectId,
+          ref: "Variant",
+          default: null,
         },
         productName: {
-            ar: String,
-            en: String
+          ar: String,
+          en: String,
         },
-        variantAttributes: [Object], // [{ name, value, hexCode }]
+        variantAttributes: [{ name: String, value: String, hexCode: String }], // Consistent array
         quantity: {
-            type: Number,
-            required: true,
-            min: 1
+          type: Number,
+          required: true,
+          min: 1,
+          validate: {
+            validator: Number.isInteger,
+            message: "Quantity must be integer",
+          },
         },
-        unitPrice: Number, // السعر اللي تم البيع بيه (بعد disCountPrice)
-        totalPrice: Number // unitPrice * quantity
-    }],
+        vendorAddress: {
+          addressName: String,
+          addressDetails: String,
+          latitude: { type: Number, required: true },
+          longitude: { type: Number, required: true },
+        },
+        unitPrice: Number,
+        totalPrice: Number,
+      },
+    ],
     subtotal: {
-        type: Number,
-        required: true
+      type: Number,
+      required: true,
     },
     discountAmount: {
-        type: Number,
-        default: 0
+      type: Number,
+      default: 0,
     },
     couponUsed: {
-        couponId: {
-            type: mongoose.Schema.Types.ObjectId,
-            ref: "Coupon",
-            default: null
-        },
-        code: String,
-        discountType: String,
-        discountValue: Number
+      couponId: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "Coupon",
+        default: null,
+      },
+      code: String,
+      discountType: String,
+      discountValue: Number,
     },
     shippingCost: {
-        type: Number,
-        default: 0 // هيتحسب لاحقًا من Aramex
+      type: Number,
+      default: 0,
     },
     totalAmount: {
-        type: Number,
-        required: true
+      type: Number,
+      required: true,
     },
     currency: {
-        type: String,
-        default: "USD"
+      type: String,
+      default: "USD",
     },
-  
     shippingAddress: {
-        addressName: String,
-        addressDetails: String,
-        latitude: { type: Number, required: true },
-        longitude: { type: Number, required: true }
+      addressName: String,
+      addressDetails: String,
+      latitude: { type: Number, required: true },
+      longitude: { type: Number, required: true },
     },
-    // حالة الدفع
     paymentStatus: {
-        type: String,
-        enum: ["pending", "paid", "failed", "refunded"],
-        default: "pending"
+      type: String,
+      enum: ["pending", "paid", "failed", "refunded"],
+      default: "pending",
     },
     paymentMethod: {
-        type: String,
-        enum: ["My Ko Kart", "credit_card", "cash_on_delivery", "bank_transfer", "wallet"],
-        default: "credit_card",
-        required: true
+      type: String,
+      enum: ["My Ko Kart", "credit_card"],
+      default: "credit_card",
+      required: true,
     },
     paymentDetails: {
-        type: mongoose.Schema.Types.Mixed, // مرن جدًا لأي بيانات إضافية
-        default: {}
+      type: mongoose.Schema.Types.Mixed,
+      default: {},
     },
-    // حالة الشحن
     shippingStatus: {
-        type: String,
-        enum: ["not_shipped", "preparing", "shipped", "in_transit", "delivered", "failed"],
-        default: "not_shipped"
+      type: String,
+      enum: [
+        "not_shipped",
+        "preparing",
+        "shipped",
+        "in_transit",
+        "delivered",
+        "failed",
+      ],
+      default: "not_shipped",
     },
     shippingMethod: {
-        type: String,
-        default: "aramex"
+      type: String,
+      default: "aramex",
     },
     shippingDetails: {
-        trackingNumber: String,
-        aramexShipmentId: String,
-        shippedAt: Date,
-        deliveredAt: Date
+      trackingNumber: String,
+      aramexShipmentId: String,
+      shippedAt: Date,
+      deliveredAt: Date,
     },
-    // حالة الطلب العامة
+    expireAt: {
+      type: Date,
+      default: () => new Date(Date.now() + 60 * 60 * 1000),
+    },
     status: {
-        type: String,
-        enum: ["pending", "confirmed", "processing", "shipped", "delivered", "cancelled"],
-        default: "pending"
+      type: String,
+      enum: [
+        "pending",
+        "confirmed",
+        "processing",
+        "shipped",
+        "delivered",
+        "cancelled",
+      ],
+      default: "pending",
     },
-    notes: String
-}, { timestamps: true });
+    notes: String,
+  },
+  { timestamps: true }
+);
 
-// توليد orderNumber فريد (مثل ORDER-2026-0001)
-orderSchema.pre("save", async function (next) {
-    if (!this.orderNumber) {
-        const date = new Date();
-        const year = date.getFullYear();
-        const count = await this.constructor.countDocuments({
-            createdAt: { $gte: new Date(year, 0, 1) }
-        });
-        this.orderNumber = `ORDER-${year}-${String(count + 1).padStart(4, "0")}`;
-    }
-    next();
+orderSchema.index({ paymentStatus: 1, status: 1, expireAt: 1 });
+
+orderSchema.pre("validate", async function (next) {
+  if (!this.orderNumber) {
+    const date = new Date();
+    const year = date.getFullYear();
+    const count = await this.constructor.countDocuments({
+      createdAt: { $gte: new Date(year, 0, 1) },
+    });
+    this.orderNumber = `ORDER-${year}-${String(count + 1).padStart(4, "0")}`;
+  }
+  next();
 });
+
 
 export const OrderModelUser = mongoose.model("OrderUser", orderSchema);

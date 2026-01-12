@@ -9,6 +9,7 @@ import { Server } from "socket.io";
 import { authenticationSocket, authorization } from "./src/middlewere/auth.socket.middlewere.js";
 import { scketConnections } from "./src/DB/models/User.model.js";
 import { runIo } from "./src/modules/chat/chat.socket.controller.js";
+import { startOrderCleanupJob } from "./src/modules/orders/services/cleanup.service.js";
 
 
 const app = express()
@@ -18,7 +19,7 @@ console.log("Email:", process.env.EMAIL);
 console.log("Password exists?", !!process.env.EMAIL_PASSWORD);
 bootstap(app ,express)
 
-
+startOrderCleanupJob();
 
 const httpServer = app.listen(port, () => {
     console.log(`server is runing on port ${port} mr abdo welcome`);

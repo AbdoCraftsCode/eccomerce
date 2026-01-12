@@ -11,3 +11,8 @@ export const updateQuantityValidation = Joi.object().keys({
   variantId: generalfields._id.optional(),
   action: Joi.string().valid("increase", "decrease").required()
 });
+
+export const deleteItemFromCartValidation = Joi.object().keys({
+  productId: generalfields._id.required(),
+  variantId: generalfields._id.optional()
+});

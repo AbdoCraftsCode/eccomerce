@@ -6238,6 +6238,7 @@ export const getVendorOrders = asyncHandelr(async (req, res, next) => {
       let variantImages = product?.images || null;
       let variantSku = product?.sku || null;
       let variantWeight = product?.weight || null;
+      let vendorAddress = item.vendorAddress
 
       if (variant) {
         variantFormattedAttributes = variant.attributes.map((attr) => ({
@@ -6257,6 +6258,7 @@ export const getVendorOrders = asyncHandelr(async (req, res, next) => {
         variantId: variant?._id || null,
         variantAttributes: variantFormattedAttributes,
         variantImages,
+        vendorAddress,
         variantSku,
         variantWeight,
         quantity: item.quantity,

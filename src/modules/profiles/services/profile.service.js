@@ -51,7 +51,6 @@ export const updateMyProfile = asyncHandelr(async (req, res, next) => {
     "fullName",
     "email",
     "phone",
-    "password",
     "country",
     "currency",
     "lang",

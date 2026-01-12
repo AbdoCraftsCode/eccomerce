@@ -1,3 +1,4 @@
+// productSchemaaaa.js
 import mongoose from "mongoose";
 
 const productSchema = new mongoose.Schema(
@@ -6,12 +7,10 @@ const productSchema = new mongoose.Schema(
       ar: { type: String, required: true, trim: true },
       en: { type: String, required: true, trim: true },
     },
-
     description: {
       ar: { type: String },
       en: { type: String },
     },
-
     categories: [
       {
         type: mongoose.Schema.Types.ObjectId,
@@ -19,7 +18,6 @@ const productSchema = new mongoose.Schema(
         required: true,
       },
     ],
-
     brands: [
       {
         type: mongoose.Schema.Types.ObjectId,
@@ -30,22 +28,16 @@ const productSchema = new mongoose.Schema(
       average: { type: Number, default: 0 },
       count: { type: Number, default: 0 },
     },
-
     createdBy: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",
       required: true,
     },
-
     sku: { type: String, unique: true },
-
     mainPrice: { type: String },
     weight: { type: String },
-
     disCountPrice: { type: String },
-
     images: [String],
-
     status: {
       type: String,
       enum: ["published", "inactive"],
@@ -55,7 +47,6 @@ const productSchema = new mongoose.Schema(
       enabled: { type: Boolean, default: false },
       rate: { type: Number, default: 0 },
     },
-
     inStock: {
       type: Boolean,
       default: true,
@@ -71,7 +62,6 @@ const productSchema = new mongoose.Schema(
         lowercase: true,
       },
     ],
-
     bulkDiscounts: [
       {
         minQty: {
@@ -92,25 +82,29 @@ const productSchema = new mongoose.Schema(
     ],
     currency: {
       type: String,
-
       default: "USD",
     },
     hasVariants: {
       type: Boolean,
       default: false,
     },
-
     stock: {
       type: Number,
       default: 0,
       min: 0,
+      validate: { validator: Number.isInteger, message: 'Stock must be integer' }
+    },
+    reservedStock: {
+      type: Number,
+      default: 0,
+      min: 0,
+      validate: { validator: Number.isInteger, message: 'Reserved stock must be integer' }
     },
     seo: {
       title: String,
       description: String,
       slug: { type: String, unique: true },
     },
-
     isActive: {
       type: Boolean,
       default: true,
