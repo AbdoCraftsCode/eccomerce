@@ -303,60 +303,80 @@ const convertCartToUserPreferences = async (cart, currency, lang) => {
   if (!cart || !cart.items || cart.items.length === 0) return cart;
 
   const fromCurrency = "USD"; // Assuming base is USD
-  const exchangeRate = await getExchangeRate(fromCurrency, currency.toUpperCase());
+  const targetCurrency = currency.toUpperCase();
+  const exchangeRate = await getExchangeRate(fromCurrency, targetCurrency);
+
+  // Use toObject() to avoid modifying Mongoose doc
+  const cartObj = cart.toObject();
 
   let newSubTotal = 0;
 
-  // Convert to plain object to make modifications easier
-  const cartObj = cart.toObject();
-
-  cartObj.items.forEach(item => {
-    // Convert prices if exchangeRate available
-    if (exchangeRate) {
-      if (item.productId) {
-        if (item.productId.mainPrice) {
-          item.productId.mainPrice = (parseFloat(item.productId.mainPrice) * exchangeRate).toFixed(2).toString();
-        }
-        if (item.productId.disCountPrice) {
-          item.productId.disCountPrice = (parseFloat(item.productId.disCountPrice) * exchangeRate).toFixed(2).toString();
-        }
-        item.productId.currency = currency.toUpperCase(); // Set transformed currency
+  cartObj.items.forEach((item) => {
+    // Convert product prices if needed
+    if (
+      item.productId &&
+      exchangeRate &&
+      item.productId.currency !== targetCurrency
+    ) {
+      if (item.productId.mainPrice) {
+        item.productId.mainPrice = (
+          parseFloat(item.productId.mainPrice) * exchangeRate
+        )
+          .toFixed(2)
+          .toString();
       }
-
-      if (item.variantId) {
-        if (item.variantId.price) {
-          item.variantId.price = (parseFloat(item.variantId.price) * exchangeRate).toFixed(2).toString();
-        }
-        if (item.variantId.disCountPrice) {
-          item.variantId.disCountPrice = (parseFloat(item.variantId.disCountPrice) * exchangeRate).toFixed(2).toString();
-        }
-        item.variantId.currency = currency.toUpperCase(); // Set transformed currency
+      if (item.productId.disCountPrice) {
+        item.productId.disCountPrice = (
+          parseFloat(item.productId.disCountPrice) * exchangeRate
+        )
+          .toFixed(2)
+          .toString();
       }
-    } else {
-      // If no conversion, default to USD
-      if (item.productId) {
-        item.productId.currency = 'USD';
-      }
-      if (item.variantId) {
-        item.variantId.currency = 'USD';
-      }
+      item.productId.currency = targetCurrency;
+    } else if (!exchangeRate && item.productId) {
+      item.productId.currency = "USD";
     }
 
-    // Select name based on lang and replace the object with string
+    // Convert variant prices if needed (separate check)
+    if (
+      item.variantId &&
+      exchangeRate &&
+      item.variantId.currency !== targetCurrency
+    ) {
+      if (item.variantId.price) {
+        item.variantId.price = (parseFloat(item.variantId.price) * exchangeRate)
+          .toFixed(2)
+          .toString();
+      }
+      if (item.variantId.disCountPrice) {
+        item.variantId.disCountPrice = (
+          parseFloat(item.variantId.disCountPrice) * exchangeRate
+        )
+          .toFixed(2)
+          .toString();
+      }
+      item.variantId.currency = targetCurrency;
+    } else if (!exchangeRate && item.variantId) {
+      item.variantId.currency = "USD";
+    }
+
     if (item.productId.name) {
       if (item.productId.name[lang]) {
         item.productId.name = item.productId.name[lang];
       } else {
-        item.productId.name = item.productId.name.en || item.productId.name.ar ;
+        item.productId.name = item.productId.name.en || item.productId.name.ar;
       }
     }
 
-    // Calculate item price for subTotal (use disCountPrice if exists, else mainPrice/price)
     let itemPrice = 0;
     if (item.variantId) {
-      itemPrice = parseFloat(item.variantId.disCountPrice || item.variantId.price );
+      itemPrice = parseFloat(
+        item.variantId.disCountPrice || item.variantId.price
+      );
     } else {
-      itemPrice = parseFloat(item.productId.disCountPrice || item.productId.mainPrice );
+      itemPrice = parseFloat(
+        item.productId.disCountPrice || item.productId.mainPrice
+      );
     }
     newSubTotal += itemPrice * item.quantity;
   });
