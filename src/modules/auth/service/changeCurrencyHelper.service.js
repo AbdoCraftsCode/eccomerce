@@ -71,12 +71,7 @@ export const convertProductPrices = async (products, countryCode) => {
   }
 };
 
-const getCurrencyCode = (countryCode) => {
-  const normalizedCode = countryCode.toUpperCase();
-  return currencyMap[normalizedCode] || "USD";
-};
-
-const getExchangeRate = async (fromCurrency, toCurrency) => {
+export const getExchangeRate = async (fromCurrency, toCurrency) => {
   const apiEndpoints = [
     {
       name: "ExchangeRate-API",

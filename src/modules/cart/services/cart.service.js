@@ -3,12 +3,25 @@ import mongoose from "mongoose";
 import { CartModel } from "../../../DB/models/cart.model.js";
 import { ProductModellll } from "../../../DB/models/productSchemaaaa.js";
 import { VariantModel } from "../../../DB/models/variantSchema.js";
+import { getExchangeRate } from "../../auth/service/changeCurrencyHelper.service.js";
 
 export const getCart = asyncHandelr(async (req, res, next) => {
   const userId = req.user._id;
-
-  const cart = await CartModel.getOrCreateCart(userId);
-
+  let cart = await CartModel.getOrCreateCart(userId);
+  cart = await CartModel.findById(cart._id)
+    .populate({
+      path: "items.productId",
+      select: "name images mainPrice disCountPrice stock",
+    })
+    .populate({
+      path: "items.variantId",
+      select: "price disCountPrice stock images",
+    });
+  cart = await convertCartToUserPreferences(
+    cart,
+    req.user.currency,
+    req.user.lang
+  );
   res.status(200).json({
     success: true,
     data: cart,
@@ -83,7 +96,7 @@ export const addToCart = asyncHandelr(async (req, res, next) => {
 
   await cart.save();
 
-  const updatedCart = await CartModel.findById(cart._id)
+  let updatedCart = await CartModel.findById(cart._id)
     .populate({
       path: "items.productId",
       select: "name images mainPrice disCountPrice stock",
@@ -92,7 +105,11 @@ export const addToCart = asyncHandelr(async (req, res, next) => {
       path: "items.variantId",
       select: "price disCountPrice stock images",
     });
-
+  updatedCart = await convertCartToUserPreferences(
+    updatedCart,
+    req.user.currency,
+    req.user.lang
+  );
   res.status(200).json({
     success: true,
     message: "Item added to cart successfully",
@@ -128,7 +145,7 @@ export const deleteItemFromCart = asyncHandelr(async (req, res, next) => {
   if (cart.items.length === 0) {
     await cart.save();
 
-    const emptyCart = await CartModel.findById(cart._id)
+    let emptyCart = await CartModel.findById(cart._id)
       .populate({
         path: "items.productId",
         select: "name images mainPrice disCountPrice stock",
@@ -137,7 +154,11 @@ export const deleteItemFromCart = asyncHandelr(async (req, res, next) => {
         path: "items.variantId",
         select: "price disCountPrice stock images",
       });
-
+    emptyCart = await convertCartToUserPreferences(
+      emptyCart,
+      req.user.currency,
+      req.user.lang
+    );
     return res.status(200).json({
       success: true,
       message: "Item removed from cart successfully. Cart is now empty.",
@@ -147,7 +168,7 @@ export const deleteItemFromCart = asyncHandelr(async (req, res, next) => {
 
   await cart.save();
 
-  const updatedCart = await CartModel.findById(cart._id)
+  let updatedCart = await CartModel.findById(cart._id)
     .populate({
       path: "items.productId",
       select: "name images mainPrice disCountPrice stock",
@@ -156,7 +177,11 @@ export const deleteItemFromCart = asyncHandelr(async (req, res, next) => {
       path: "items.variantId",
       select: "price disCountPrice stock images",
     });
-
+  updatedCart = await convertCartToUserPreferences(
+    updatedCart,
+    req.user.currency,
+    req.user.lang
+  );
   res.status(200).json({
     success: true,
     message: "Item removed from cart successfully",
@@ -219,7 +244,7 @@ export const updateQuantity = asyncHandelr(async (req, res, next) => {
       cart.items.splice(itemIndex, 1);
       await cart.save();
 
-      const updatedCart = await CartModel.findById(cart._id)
+      let updatedCart = await CartModel.findById(cart._id)
         .populate({
           path: "items.productId",
           select: "name images mainPrice disCountPrice stock",
@@ -228,7 +253,11 @@ export const updateQuantity = asyncHandelr(async (req, res, next) => {
           path: "items.variantId",
           select: "price disCountPrice stock images",
         });
-
+      updatedCart = await convertCartToUserPreferences(
+        updatedCart,
+        req.user.currency,
+        req.user.lang
+      );
       return res.status(200).json({
         success: true,
         message: "Item removed from cart (quantity reached 0)",
@@ -246,7 +275,7 @@ export const updateQuantity = asyncHandelr(async (req, res, next) => {
   cart.items[itemIndex].quantity = newQuantity;
   await cart.save();
 
-  const updatedCart = await CartModel.findById(cart._id)
+  let updatedCart = await CartModel.findById(cart._id)
     .populate({
       path: "items.productId",
       select: "name images mainPrice disCountPrice stock",
@@ -255,7 +284,11 @@ export const updateQuantity = asyncHandelr(async (req, res, next) => {
       path: "items.variantId",
       select: "price disCountPrice stock images",
     });
-
+  updatedCart = await convertCartToUserPreferences(
+    updatedCart,
+    req.user.currency,
+    req.user.lang
+  );
   res.status(200).json({
     success: true,
     message:
@@ -266,13 +299,79 @@ export const updateQuantity = asyncHandelr(async (req, res, next) => {
   });
 });
 
+const convertCartToUserPreferences = async (cart, currency, lang) => {
+  if (!cart || !cart.items || cart.items.length === 0) return cart;
 
+  const fromCurrency = "USD"; // Assuming base is USD
+  const exchangeRate = await getExchangeRate(fromCurrency, currency.toUpperCase());
+
+  let newSubTotal = 0;
+
+  // Convert to plain object to make modifications easier
+  const cartObj = cart.toObject();
+
+  cartObj.items.forEach(item => {
+    // Convert prices if exchangeRate available
+    if (exchangeRate) {
+      if (item.productId) {
+        if (item.productId.mainPrice) {
+          item.productId.mainPrice = (parseFloat(item.productId.mainPrice) * exchangeRate).toFixed(2).toString();
+        }
+        if (item.productId.disCountPrice) {
+          item.productId.disCountPrice = (parseFloat(item.productId.disCountPrice) * exchangeRate).toFixed(2).toString();
+        }
+        item.productId.currency = currency.toUpperCase(); // Set transformed currency
+      }
+
+      if (item.variantId) {
+        if (item.variantId.price) {
+          item.variantId.price = (parseFloat(item.variantId.price) * exchangeRate).toFixed(2).toString();
+        }
+        if (item.variantId.disCountPrice) {
+          item.variantId.disCountPrice = (parseFloat(item.variantId.disCountPrice) * exchangeRate).toFixed(2).toString();
+        }
+        item.variantId.currency = currency.toUpperCase(); // Set transformed currency
+      }
+    } else {
+      // If no conversion, default to USD
+      if (item.productId) {
+        item.productId.currency = 'USD';
+      }
+      if (item.variantId) {
+        item.variantId.currency = 'USD';
+      }
+    }
+
+    // Select name based on lang and replace the object with string
+    if (item.productId.name) {
+      if (item.productId.name[lang]) {
+        item.productId.name = item.productId.name[lang];
+      } else {
+        item.productId.name = item.productId.name.en || item.productId.name.ar ;
+      }
+    }
+
+    // Calculate item price for subTotal (use disCountPrice if exists, else mainPrice/price)
+    let itemPrice = 0;
+    if (item.variantId) {
+      itemPrice = parseFloat(item.variantId.disCountPrice || item.variantId.price );
+    } else {
+      itemPrice = parseFloat(item.productId.disCountPrice || item.productId.mainPrice );
+    }
+    newSubTotal += itemPrice * item.quantity;
+  });
+
+  cartObj.subTotal = parseFloat(newSubTotal.toFixed(2));
+
+  return cartObj;
+};
 
 export const getCartWithDetails = async (customerId) => {
   return await CartModel.findOne({ userId: customerId })
     .populate({
       path: "items.productId",
-      select: "name images mainPrice disCountPrice stock createdBy hasVariants status isActive",
+      select:
+        "name images mainPrice disCountPrice stock createdBy hasVariants status isActive",
     })
     .populate({
       path: "items.variantId",
