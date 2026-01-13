@@ -302,21 +302,19 @@ export const updateQuantity = asyncHandelr(async (req, res, next) => {
 const convertCartToUserPreferences = async (cart, currency, lang) => {
   if (!cart || !cart.items || cart.items.length === 0) return cart;
 
-  const fromCurrency = "USD"; // Assuming base is USD
+  const fromCurrency = "USD";
   const targetCurrency = currency.toUpperCase();
   const exchangeRate = await getExchangeRate(fromCurrency, targetCurrency);
 
-  // Use toObject() to avoid modifying Mongoose doc
   const cartObj = cart.toObject();
 
   let newSubTotal = 0;
 
   cartObj.items.forEach((item) => {
-    // Convert product prices if needed
     if (
-      item.productId &&
       exchangeRate &&
-      item.productId.currency !== targetCurrency
+      item.productId &&
+      (!item.productId.currency || item.productId.currency !== targetCurrency)
     ) {
       if (item.productId.mainPrice) {
         item.productId.mainPrice = (
@@ -337,11 +335,10 @@ const convertCartToUserPreferences = async (cart, currency, lang) => {
       item.productId.currency = "USD";
     }
 
-    // Convert variant prices if needed (separate check)
     if (
-      item.variantId &&
       exchangeRate &&
-      item.variantId.currency !== targetCurrency
+      item.variantId &&
+      (!item.variantId.currency || item.variantId.currency !== targetCurrency)
     ) {
       if (item.variantId.price) {
         item.variantId.price = (parseFloat(item.variantId.price) * exchangeRate)
@@ -360,22 +357,30 @@ const convertCartToUserPreferences = async (cart, currency, lang) => {
       item.variantId.currency = "USD";
     }
 
-    if (item.productId.name) {
-      if (item.productId.name[lang]) {
-        item.productId.name = item.productId.name[lang];
-      } else {
-        item.productId.name = item.productId.name.en || item.productId.name.ar;
+    if (item.productId && item.productId.name) {
+      if (
+        typeof item.productId.name === "object" &&
+        item.productId.name !== null
+      ) {
+        if (lang && item.productId.name[lang]) {
+          item.productId.name = item.productId.name[lang];
+        } else {
+          item.productId.name = "Unnamed Product";
+        }
       }
+    } else {
+      item.productId.name = "Unnamed Product";
     }
 
+    // Calculate item price for subTotal
     let itemPrice = 0;
     if (item.variantId) {
       itemPrice = parseFloat(
-        item.variantId.disCountPrice || item.variantId.price
+        item.variantId.disCountPrice || item.variantId.price || 0
       );
     } else {
       itemPrice = parseFloat(
-        item.productId.disCountPrice || item.productId.mainPrice
+        item.productId.disCountPrice || item.productId.mainPrice || 0
       );
     }
     newSubTotal += itemPrice * item.quantity;
