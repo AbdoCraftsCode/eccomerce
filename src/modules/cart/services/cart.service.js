@@ -5,18 +5,29 @@ import { ProductModellll } from "../../../DB/models/productSchemaaaa.js";
 import { VariantModel } from "../../../DB/models/variantSchema.js";
 import { getExchangeRate } from "../../auth/service/changeCurrencyHelper.service.js";
 
-export const getCart = asyncHandelr(async (req, res, next) => {
-  const userId = req.user._id;
-  let cart = await CartModel.getOrCreateCart(userId);
-  cart = await CartModel.findById(cart._id)
+const getDetailedCart = async (cartId) => {
+  const cart = await CartModel.findById(cartId)
     .populate({
       path: "items.productId",
       select: "name images mainPrice disCountPrice stock",
     })
     .populate({
       path: "items.variantId",
-      select: "price disCountPrice stock images",
+      select: "price disCountPrice stock images attributes",
+      populate: {
+        path: "attributes.attributeId attributes.valueId",
+        select: "name value type",
+      },
     });
+  return cart;
+};
+
+export const getCart = asyncHandelr(async (req, res, next) => {
+  const userId = req.user._id;
+  let cart = await CartModel.getOrCreateCart(userId);
+  console.log("1");
+  cart = await getDetailedCart(cart._id);
+  console.log("2");
   cart = await convertCartToUserPreferences(
     cart,
     req.user.currency,
@@ -30,7 +41,12 @@ export const getCart = asyncHandelr(async (req, res, next) => {
 
 export const addToCart = asyncHandelr(async (req, res, next) => {
   const userId = req.user._id;
-  const { productId, variantId } = req.body;
+  const { productId, variantId, quantity = 1 } = req.body; // Add quantity with default 1
+
+  // Validate quantity
+  if (quantity < 1) {
+    return next(new Error("Quantity must be at least 1", { cause: 400 }));
+  }
 
   const product = await ProductModellll.findById(productId);
   if (!product) {
@@ -71,48 +87,47 @@ export const addToCart = asyncHandelr(async (req, res, next) => {
     return next(new Error("Item already exists in cart", { cause: 400 }));
   }
 
+  // Check stock with the requested initial quantity
   if (variantId) {
     const variant = await VariantModel.findById(variantId);
     const product = await ProductModellll.findById(productId);
 
-    if (!product.unlimitedStock && variant.stock < 1) {
+    if (!product.unlimitedStock && variant.stock < quantity) {
       return next(
-        new Error("Insufficient stock for this variant", { cause: 400 })
+        new Error(`Insufficient stock. Only ${variant.stock} available`, {
+          cause: 400,
+        })
       );
     }
   } else {
-    if (!product.unlimitedStock && product.stock < 1) {
+    if (!product.unlimitedStock && product.stock < quantity) {
       return next(
-        new Error("Insufficient stock for this product", { cause: 400 })
+        new Error(`Insufficient stock. Only ${product.stock} available`, {
+          cause: 400,
+        })
       );
     }
   }
 
+  // Add new item with the requested initial quantity
   cart.items.push({
     productId,
     variantId: variantId || null,
-    quantity: 1,
+    quantity, // Use the requested quantity instead of always 1
   });
 
   await cart.save();
 
-  let updatedCart = await CartModel.findById(cart._id)
-    .populate({
-      path: "items.productId",
-      select: "name images mainPrice disCountPrice stock",
-    })
-    .populate({
-      path: "items.variantId",
-      select: "price disCountPrice stock images",
-    });
+  let updatedCart = await getDetailedCart(cart.id);
   updatedCart = await convertCartToUserPreferences(
     updatedCart,
     req.user.currency,
     req.user.lang
   );
+  
   res.status(200).json({
     success: true,
-    message: "Item added to cart successfully",
+    message: `Item added to cart with quantity ${quantity}`,
     data: updatedCart,
   });
 });
@@ -145,15 +160,7 @@ export const deleteItemFromCart = asyncHandelr(async (req, res, next) => {
   if (cart.items.length === 0) {
     await cart.save();
 
-    let emptyCart = await CartModel.findById(cart._id)
-      .populate({
-        path: "items.productId",
-        select: "name images mainPrice disCountPrice stock",
-      })
-      .populate({
-        path: "items.variantId",
-        select: "price disCountPrice stock images",
-      });
+    let emptyCart = await getDetailedCart(cart.id);
     emptyCart = await convertCartToUserPreferences(
       emptyCart,
       req.user.currency,
@@ -168,15 +175,7 @@ export const deleteItemFromCart = asyncHandelr(async (req, res, next) => {
 
   await cart.save();
 
-  let updatedCart = await CartModel.findById(cart._id)
-    .populate({
-      path: "items.productId",
-      select: "name images mainPrice disCountPrice stock",
-    })
-    .populate({
-      path: "items.variantId",
-      select: "price disCountPrice stock images",
-    });
+  let updatedCart = await getDetailedCart(cart.id);
   updatedCart = await convertCartToUserPreferences(
     updatedCart,
     req.user.currency,
@@ -244,15 +243,7 @@ export const updateQuantity = asyncHandelr(async (req, res, next) => {
       cart.items.splice(itemIndex, 1);
       await cart.save();
 
-      let updatedCart = await CartModel.findById(cart._id)
-        .populate({
-          path: "items.productId",
-          select: "name images mainPrice disCountPrice stock",
-        })
-        .populate({
-          path: "items.variantId",
-          select: "price disCountPrice stock images",
-        });
+      let updatedCart = await getDetailedCart(cart.id);
       updatedCart = await convertCartToUserPreferences(
         updatedCart,
         req.user.currency,
@@ -275,15 +266,7 @@ export const updateQuantity = asyncHandelr(async (req, res, next) => {
   cart.items[itemIndex].quantity = newQuantity;
   await cart.save();
 
-  let updatedCart = await CartModel.findById(cart._id)
-    .populate({
-      path: "items.productId",
-      select: "name images mainPrice disCountPrice stock",
-    })
-    .populate({
-      path: "items.variantId",
-      select: "price disCountPrice stock images",
-    });
+  let updatedCart = await getDetailedCart(cart.id);
   updatedCart = await convertCartToUserPreferences(
     updatedCart,
     req.user.currency,

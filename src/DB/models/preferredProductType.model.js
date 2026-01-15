@@ -34,7 +34,7 @@ const preferredProductTypeSchema = new mongoose.Schema({
   },
   category: {
     type: String,
-    enum: ['food', 'beverage', 'snack', 'other'],
+    enum: ['food', 'beverage', 'snack', 'other' , 'electronics'],
     default: 'other'
   },
   sortOrder: {

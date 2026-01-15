@@ -41,7 +41,7 @@ router.get(
 
 router.get(
   '/:id',
-  validation(validations.getPreferencesValidation),
+  // validation(validations.getPreferencesValidation),
   services.getProductTypeById
 );
 
