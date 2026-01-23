@@ -1,4 +1,3 @@
-// user.helpers.js
 import Usermodel from "../../../DB/models/User.model.js";
 
 export const validateUser = async (customerId) => {
@@ -17,11 +16,14 @@ export const validateShippingAddress = (user, shippingAddressId) => {
   if (!shippingAddress) {
     throw new Error("Shipping address not found", { cause: 400 });
   }
+  if (!shippingAddress.latitude || !shippingAddress.longitude) {
+    throw new Error("Shipping address missing coordinates", { cause: 400 });
+  }
   return shippingAddress;
 };
 
 export const validatePaymentMethod = (paymentMethod) => {
-  const validMethods = ["My Ko Kart", "credit_card"];
+  const validMethods = ["My Ko Kart", "credit_card", "cash_on_delivery"];
   if (!paymentMethod || !validMethods.includes(paymentMethod)) {
     throw new Error("Invalid payment method", { cause: 400 });
   }

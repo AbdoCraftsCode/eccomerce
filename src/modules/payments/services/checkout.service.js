@@ -27,12 +27,13 @@ const getPayoneerConfig = () => {
 export const checkout = asyncHandelr(async (req, res, next) => {
   try {
     const userId = req.user._id;
-    const { shippingAddressId } = req.body;
+    const { shippingAddressId , couponCode } = req.body;
 
     const order = await createOrderforUser(
       userId,
       shippingAddressId,
-      "credit_card"
+      "cash_on_delivery",
+      couponCode
       // taxAmount, shippingAmount, etc. i will do them with aramex and coupon
     );
 

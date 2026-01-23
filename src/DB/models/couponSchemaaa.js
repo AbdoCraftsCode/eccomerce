@@ -1,3 +1,4 @@
+// Updated Coupon Schema - Added "category" to enum
 import mongoose from "mongoose";
 
 const couponSchema = new mongoose.Schema({
@@ -6,7 +7,7 @@ const couponSchema = new mongoose.Schema({
         required: true,
         unique: true,
         trim: true,
-        uppercase: true // لتجنب تكرار case-sensitive
+        uppercase: true
     },
     discountType: {
         type: String,
@@ -16,11 +17,11 @@ const couponSchema = new mongoose.Schema({
     discountValue: {
         type: Number,
         required: true,
-        min: 0 // للنسبة 0-100, للثابت 0+
+        min: 0
     },
     appliesTo: {
         type: String,
-        enum: ["single_product", "all_products"],
+        enum: ["single_product", "category", "all_products"],
         required: true
     },
     productId: {
@@ -30,15 +31,21 @@ const couponSchema = new mongoose.Schema({
             return this.appliesTo === "single_product";
         }
     },
+    categoryId: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "Category",
+        required: function () {
+            return this.appliesTo === "category";
+        }
+    },
     vendorId: {
         type: mongoose.Schema.Types.ObjectId,
         ref: "User",
-        required: true
     },
     maxUses: {
         type: Number,
         default: 1,
-        min: 1 // على الأقل مرة واحدة
+        min: 1
     },
     usesCount: {
         type: Number,
@@ -53,7 +60,6 @@ const couponSchema = new mongoose.Schema({
     }
 }, { timestamps: true });
 
-// ✅ التحقق من أن discountValue مناسب حسب النوع (اختياري: validation)
 couponSchema.pre("save", function (next) {
     if (this.discountType === "percentage" && (this.discountValue < 0 || this.discountValue > 100)) {
         return next(new Error("قيمة الخصم النسبي يجب أن تكون بين 0 و 100"));

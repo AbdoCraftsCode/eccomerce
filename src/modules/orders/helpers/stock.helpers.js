@@ -1,4 +1,4 @@
-// stock.helpers.js
+// helpers/stock.helpers.js - No changes
 import { ProductModellll } from "../../../DB/models/productSchemaaaa.js";
 import { VariantModel } from "../../../DB/models/variantSchema.js";
 
@@ -11,7 +11,7 @@ export const reserveStockAtomic = async (
   try {
     const updateOptions = { session, new: true };
     if (variantId) {
-      const variantBefore = await VariantModel.findById(variantId);
+      const variantBefore = await VariantModel.findById(variantId).session(session);
       if (variantBefore.unlimitedStock) {
         const result = await VariantModel.findByIdAndUpdate(
           variantId,
@@ -32,23 +32,16 @@ export const reserveStockAtomic = async (
         updateOptions
       );
       if (!result) {
-        const variant = await VariantModel.findById(variantId);
+        const variant = await VariantModel.findById(variantId).session(session);
         const available = variant ? variant.stock - variant.reservedStock : 0;
         throw new Error(
-          `Insufficient variant stock. Available: ${available}, Requested: ${quantity}`
+          `Insufficient variant stock. Available: ${available}, Requested: ${quantity}`,
+          { cause: 400 }
         );
       }
       return { type: "variant", document: result };
     } else {
-      const productBefore = await ProductModellll.findById(productId).session(
-        session
-      );
-      console.log("Product before:", {
-        id: productId,
-        stock: productBefore?.stock,
-        reservedStock: productBefore?.reservedStock,
-        available: productBefore?.stock - productBefore?.reservedStock,
-      });
+      const productBefore = await ProductModellll.findById(productId).session(session);
       if (productBefore.unlimitedStock) {
         const result = await ProductModellll.findByIdAndUpdate(
           productId,
@@ -70,15 +63,13 @@ export const reserveStockAtomic = async (
         updateOptions
       );
       if (!result) {
-        const product = await ProductModellll.findById(productId).session(
-          session
-        );
+        const product = await ProductModellll.findById(productId).session(session);
         const available = product ? product.stock - product.reservedStock : 0;
         throw new Error(
-          `Insufficient product stock. Available: ${available}, Requested: ${quantity}`
+          `Insufficient product stock. Available: ${available}, Requested: ${quantity}`,
+          { cause: 400 }
         );
       }
-      console.log("Product reserved successfully");
       return { type: "product", document: result };
     }
   } catch (error) {
@@ -98,7 +89,7 @@ export const releaseReservedStock = async (
     if (variantId) {
       await VariantModel.findByIdAndUpdate(
         variantId,
-        { $inc: { reservedStock: -quantity }, $max: { reservedStock: 0 } }, // Prevent negative
+        { $inc: { reservedStock: -quantity }, $max: { reservedStock: 0 } },
         updateOptions
       );
     } else {
@@ -108,9 +99,9 @@ export const releaseReservedStock = async (
         updateOptions
       );
     }
-    console.log(`Released ${quantity} for ${variantId || productId}`);
   } catch (error) {
     console.error("Release error:", error);
+    throw error;
   }
 };
 
@@ -141,16 +132,14 @@ export const confirmStockReservation = async (
         updateOptions
       );
     }
-    console.log(`Confirmed ${quantity} for ${variantId || productId}`);
   } catch (error) {
     console.error("Confirm error:", error);
+    throw error;
   }
 };
 
-
 export const reserveAllItemsStock = async (formattedItems, session = null) => {
   const results = [];
-
   for (const item of formattedItems) {
     try {
       const result = await reserveStockAtomic(
@@ -162,70 +151,10 @@ export const reserveAllItemsStock = async (formattedItems, session = null) => {
       results.push({ success: true, item, reserved: result });
     } catch (error) {
       throw new Error(
-        `Reservation failed for ${item.productName?.en || item.productName?.ar || 'item'}: ${error.message}`
+        `Reservation failed for ${item.productName?.en || item.productName?.ar || 'item'}: ${error.message}`,
+        { cause: 400 }
       );
     }
   }
-
   return results;
 };
-
-
-
-
-
-
-// export const reserveAllItemsStock = async (formattedItems, session = null) => {
-//   for (const item of formattedItems) {
-//     const validation = await validateStockAvailability(
-//       item.productId,
-//       item.variantId,
-//       item.quantity,
-//       session
-//     );
-//     if (!validation.available) {
-//       throw new Error(
-//         `Pre-check failed for ${item.productId || item.variantId}: ${
-//           validation.message
-//         }`
-//       );
-//     }
-//   }
-
-//   const reservePromises = formattedItems.map(async (item) => {
-//     try {
-//       const result = await reserveStockAtomic(
-//         item.productId,
-//         item.variantId,
-//         item.quantity,
-//         session
-//       );
-//       return { success: true, item, reserved: result };
-//     } catch (error) {
-//       return {
-//         success: false,
-//         item,
-//         error: error.message,
-//         productName: item.productName.en || item.productName.ar,
-//       };
-//     }
-//   });
-//   const results = await Promise.all(reservePromises);
-//   const failedReservations = results.filter((r) => !r.success);
-//   if (failedReservations.length > 0) {
-//     const successfulReservations = results.filter((r) => r.success);
-//     for (const res of successfulReservations) {
-//       await releaseReservedStock(
-//         res.item.productId,
-//         res.item.variantId,
-//         res.item.quantity,
-//         session
-//       );
-//     }
-//     const errorMessages = failedReservations
-//       .map((fr) => `${fr.productName}: ${fr.error}`)
-//       .join(", ");
-//     throw new Error(`Reservation failed: ${errorMessages}`);
-//   }
-//   return results;
-// };

@@ -8,21 +8,33 @@ export const convertProductPrices = async (products, countryCode) => {
 
     const isvalid = isValidCurrency(targetCurrency);
 
-    if (targetCurrency.toUpperCase() === "USD" || !isvalid) {
-      return products;
+    if (!isvalid) {
+      return products;  // Skip if invalid, as per original behavior
     }
 
-    const exchangeRate = await getExchangeRate("USD", targetCurrency);
+    const rateCache = {}; // Cache for exchange rates to avoid redundant API calls
 
-    if (!exchangeRate) {
-      return products;
-    }
+    return await Promise.all(
+      products.map(async (product) => {
+        const productCopy = { ...product };
+        const productCurrency = productCopy.currency?.toUpperCase() || "USD";
 
-    return products.map((product) => {
-      const productCopy = { ...product };
-      const productCurrency = productCopy.currency?.toUpperCase() || "USD";
+        if (productCurrency === targetCurrency) {
+          return productCopy; // No conversion needed if currencies match
+        }
 
-      if (productCurrency === "USD") {
+        const cacheKey = `${productCurrency}_${targetCurrency}`;
+        let exchangeRate = rateCache[cacheKey];
+
+        if (!exchangeRate) {
+          exchangeRate = await getExchangeRate(productCurrency, targetCurrency);
+          if (exchangeRate) {
+            rateCache[cacheKey] = exchangeRate;
+          } else {
+            return productCopy;
+          }
+        }
+
         if (productCopy.mainPrice) {
           const originalPrice = parseFloat(productCopy.mainPrice);
           if (!isNaN(originalPrice)) {
@@ -41,30 +53,37 @@ export const convertProductPrices = async (products, countryCode) => {
           }
         }
 
-        if (productCopy.tax?.enabled === true && productCopy.tax?.rate) {
-          const taxRate = parseFloat(productCopy.tax.rate);
-          if (!isNaN(taxRate)) {
-            productCopy.tax = {
-              ...productCopy.tax,
-              rate: parseFloat((taxRate * exchangeRate).toFixed(2)),
-            };
-          }
-        }
+        // Do not convert tax.rate as it's a percentage, not a monetary value
+        // Removed the tax rate conversion block
 
         if (productCopy.hasVariants && productCopy.variants) {
-          productCopy.variants = productCopy.variants.map((variant) => ({
-            ...variant,
-            price: variant.price
-              ? parseFloat((variant.price * exchangeRate).toFixed(2))
-              : variant.price,
-          }));
+          productCopy.variants = productCopy.variants.map((variant) => {
+            const variantCopy = { ...variant };
+            if (variantCopy.price) {
+              const originalVariantPrice = parseFloat(variantCopy.price);
+              if (!isNaN(originalVariantPrice)) {
+                variantCopy.price = (originalVariantPrice * exchangeRate)
+                  .toFixed(2)
+                  .toString();
+              }
+            }
+            if (variantCopy.disCountPrice) {
+              const variantDiscountPrice = parseFloat(variantCopy.disCountPrice);
+              if (!isNaN(variantDiscountPrice)) {
+                variantCopy.disCountPrice = (variantDiscountPrice * exchangeRate)
+                  .toFixed(2)
+                  .toString();
+              }
+            }
+            return variantCopy;
+          });
         }
 
-        productCopy.currency = targetCurrency.toUpperCase();
-      }
+        productCopy.currency = targetCurrency;
 
-      return productCopy;
-    });
+        return productCopy;
+      })
+    );
   } catch (error) {
     console.error("Currency conversion failed:", error);
     return products;

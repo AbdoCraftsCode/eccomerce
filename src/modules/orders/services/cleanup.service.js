@@ -1,23 +1,21 @@
-// cleanupExpiredOrders.js (your original file)
 import { OrderModelUser } from "../../../DB/models/orderSchemaUser.model.js";
+import { SubOrderModel } from "../../../DB/models/subOrdersSchema.model.js";
 import { ProductModellll } from "../../../DB/models/productSchemaaaa.js";
 import { VariantModel } from "../../../DB/models/variantSchema.js";
+import { CouponModel } from "../../../DB/models/couponSchemaaa.js";
 
 export const cleanupExpiredOrders = async () => {
   try {
     const now = new Date();
-
     const expiredOrders = await OrderModelUser.find({
       paymentStatus: "pending",
       status: "pending",
       expireAt: { $lt: now }
     });
     console.log(`Found ${expiredOrders.length} expired orders`);
-
     for (const order of expiredOrders) {
       console.log(`Processing expired order ${order._id}`);
       await releaseStockFromExpiredOrder(order);
-
       if (order.couponUsed?.couponId) {
         const coupon = await CouponModel.findById(order.couponUsed.couponId);
         if (coupon) {
@@ -26,8 +24,8 @@ export const cleanupExpiredOrders = async () => {
           console.log(`Decreased usesCount for coupon ${coupon._id} to ${coupon.usesCount}`);
         }
       }
-
-      await order.deleteOne(); 
+      await SubOrderModel.deleteMany({ orderId: order._id });
+      await order.deleteOne();
     }
     console.log(`Cleaned up ${expiredOrders.length} expired orders`);
   } catch (error) {
@@ -64,7 +62,7 @@ export const releaseStockFromExpiredOrder = async (order) => {
     }
   } catch (error) {
     console.error("Release error for expired order:", error);
-    throw error; // Optional: Re-throw to halt deletion if release fails (prevents orphaned reservations)
+    throw error;
   }
 };
 

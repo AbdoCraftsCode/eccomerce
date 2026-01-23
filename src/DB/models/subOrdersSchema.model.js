@@ -1,13 +1,18 @@
 import mongoose from "mongoose";
 
-const orderSchema = new mongoose.Schema(
+const subOrderSchema = new mongoose.Schema(
   {
-    orderNumber: {
+    subOrderNumber: {
       type: String,
       unique: true,
       required: true,
     },
-    customerId: {
+    orderId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "OrderUser",
+      required: true,
+    },
+    vendorId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",
       required: true,
@@ -35,7 +40,7 @@ const orderSchema = new mongoose.Schema(
             attributeName: { en: String, ar: String },
             valueName: { en: String, ar: String },
           },
-        ], // Consistent array
+        ],
         quantity: {
           type: Number,
           required: true,
@@ -45,17 +50,13 @@ const orderSchema = new mongoose.Schema(
             message: "Quantity must be integer",
           },
         },
+        // Removed vendorAddress
         unitPrice: {
           type: Number,
           required: true,
           min: 0,
         },
         totalPrice: Number,
-        vendorId: {
-          type: mongoose.Schema.Types.ObjectId,
-          ref: "User",
-          required: true,
-        },
       },
     ],
     subtotal: {
@@ -172,10 +173,6 @@ const orderSchema = new mongoose.Schema(
       shippedAt: Date,
       deliveredAt: Date,
     },
-    expireAt: {
-      type: Date,
-      default: () => new Date(Date.now() + 60 * 60 * 1000),
-    },
     status: {
       type: String,
       enum: [
@@ -189,28 +186,13 @@ const orderSchema = new mongoose.Schema(
       default: "pending",
     },
     notes: String,
-    subOrders: [
-      {
-        type: mongoose.Schema.Types.ObjectId,
-        ref: "SubOrder",
-      },
-    ],
   },
   { timestamps: true },
 );
 
-orderSchema.index({ paymentStatus: 1, status: 1, expireAt: 1 });
+subOrderSchema.index({ vendorId: 1, status: 1, createdAt: 1 });
+subOrderSchema.index({ orderId: 1 });
+subOrderSchema.index({ paymentStatus: 1, shippingStatus: 1 });
 
-orderSchema.pre("validate", async function (next) {
-  if (!this.orderNumber) {
-    const date = new Date();
-    const year = date.getFullYear();
-    const count = await this.constructor.countDocuments({
-      createdAt: { $gte: new Date(year, 0, 1) },
-    });
-    this.orderNumber = `ORDER-${year}-${String(count + 1).padStart(4, "0")}`;
-  }
-  next();
-});
 
-export const OrderModelUser = mongoose.model("OrderUser", orderSchema);
+export const SubOrderModel = mongoose.model("SubOrder", subOrderSchema);

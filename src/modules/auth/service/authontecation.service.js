@@ -283,7 +283,7 @@ export const login = asyncHandelr(async (req, res, next) => {
         access_Token,
         refreshToken,
         checkUser,
-      }
+      },
     );
   }
 
@@ -304,7 +304,7 @@ export const login = asyncHandelr(async (req, res, next) => {
         res,
         "الحساب غير مفعل، تم إرسال رمز التحقق من جديد",
         200,
-        { status: "notverified" }
+        { status: "notverified" },
       );
     } catch (error) {
       console.error("❌ فشل في إرسال OTP أثناء تسجيل الدخول:", error.message);
@@ -501,7 +501,7 @@ export const resetpassword = asyncHandelr(async (req, res, next) => {
       isConfirmed: true,
       changeCredentialTime: Date.now(),
       $unset: { forgetpasswordOTP: 0, otpExpiresAt: 0, attemptCount: 0 },
-    }
+    },
   );
 
   return successresponse(res);
@@ -518,7 +518,7 @@ export const resendOTP = asyncHandelr(async (req, res, next) => {
 
   if (checkUser.otpExpiresAt && checkUser.otpExpiresAt > Date.now()) {
     return next(
-      new Error("Please wait before requesting a new code", { cause: 429 })
+      new Error("Please wait before requesting a new code", { cause: 429 }),
     );
   }
 
@@ -533,7 +533,7 @@ export const resendOTP = asyncHandelr(async (req, res, next) => {
       forgetpasswordOTP,
       otpExpiresAt,
       attemptCount: 0,
-    }
+    },
   );
 
   const html = vervicaionemailtemplet({ code: otp });
@@ -636,7 +636,7 @@ export async function verifyOTP(phone, otp) {
           "Content-Type": "application/json",
           Accept: "application/json",
         },
-      }
+      },
     );
 
     console.log("✅ OTP Verified:", response.data);
@@ -644,7 +644,7 @@ export async function verifyOTP(phone, otp) {
   } catch (error) {
     console.error(
       "❌ OTP Verification Failed:",
-      error.response?.data || error.message
+      error.response?.data || error.message,
     );
     throw error;
   }
@@ -791,7 +791,7 @@ export const confirOtp = asyncHandelr(async (req, res, next) => {
           "Content-Type": "application/json",
           Accept: "application/json",
         },
-      }
+      },
     );
 
     console.log("📩 AUTHENTICA response:", response.data);
@@ -823,7 +823,7 @@ export const confirOtp = asyncHandelr(async (req, res, next) => {
   } catch (error) {
     console.error(
       "❌ AUTHENTICA Error:",
-      error.response?.data || error.message
+      error.response?.data || error.message,
     );
     return next(new Error("❌ فشل التحقق من OTP عبر الهاتف", { cause: 500 }));
   }
@@ -860,7 +860,7 @@ export const forgetPasswordphone = asyncHandelr(async (req, res, next) => {
           "Content-Type": "application/json",
           Accept: "application/json",
         },
-      }
+      },
     );
 
     console.log("✅ OTP تم إرساله بنجاح:", response.data);
@@ -872,7 +872,7 @@ export const forgetPasswordphone = asyncHandelr(async (req, res, next) => {
   } catch (error) {
     console.error(
       "❌ فشل في إرسال OTP:",
-      error.response?.data || error.message
+      error.response?.data || error.message,
     );
     return res.status(500).json({
       success: false,
@@ -902,7 +902,7 @@ export const forgetPasswordphoneadmin = asyncHandelr(async (req, res, next) => {
     return next(
       new Error("❌ هذا الحساب غير مصرح له بإعادة تعيين كلمة المرور", {
         cause: 403,
-      })
+      }),
     );
   }
 
@@ -923,7 +923,7 @@ export const forgetPasswordphoneadmin = asyncHandelr(async (req, res, next) => {
           "Content-Type": "application/json",
           Accept: "application/json",
         },
-      }
+      },
     );
 
     console.log("✅ OTP تم إرساله بنجاح:", response.data);
@@ -935,7 +935,7 @@ export const forgetPasswordphoneadmin = asyncHandelr(async (req, res, next) => {
   } catch (error) {
     console.error(
       "❌ فشل في إرسال OTP:",
-      error.response?.data || error.message
+      error.response?.data || error.message,
     );
     return res.status(500).json({
       success: false,
@@ -952,7 +952,7 @@ export const resetPasswordphone = asyncHandelr(async (req, res, next) => {
     return next(
       new Error("❌ جميع الحقول مطلوبة: رقم الهاتف، كلمة المرور، والـ OTP", {
         cause: 400,
-      })
+      }),
     );
   }
 
@@ -971,7 +971,7 @@ export const resetPasswordphone = asyncHandelr(async (req, res, next) => {
           "Content-Type": "application/json",
           Accept: "application/json",
         },
-      }
+      },
     );
 
     console.log("📩 استجابة API:", response.data);
@@ -988,7 +988,7 @@ export const resetPasswordphone = asyncHandelr(async (req, res, next) => {
           password: hashpassword,
           isConfirmed: true,
           changeCredentialTime: Date.now(),
-        }
+        },
       );
 
       return successresponse(res, "✅ تم إعادة تعيين كلمة المرور بنجاح", 200);
@@ -998,7 +998,7 @@ export const resetPasswordphone = asyncHandelr(async (req, res, next) => {
   } catch (error) {
     console.error(
       "❌ فشل التحقق من OTP:",
-      error.response?.data || error.message
+      error.response?.data || error.message,
     );
     return res.status(500).json({
       success: false,
@@ -1024,16 +1024,16 @@ export const loginwithGmail = asyncHandelr(async (req, res, next) => {
         headers: {
           Authorization: `Bearer ${accessToken}`,
         },
-      }
+      },
     );
     userInfo = response.data;
   } catch (error) {
     console.error(
       "Failed to fetch user info from Google:",
-      error?.response?.data || error.message
+      error?.response?.data || error.message,
     );
     return next(
-      new Error("Failed to verify access token with Google", { cause: 401 })
+      new Error("Failed to verify access token with Google", { cause: 401 }),
     );
   }
 
@@ -1041,7 +1041,7 @@ export const loginwithGmail = asyncHandelr(async (req, res, next) => {
 
   if (!email) {
     return next(
-      new Error("Email is missing in Google response", { cause: 400 })
+      new Error("Email is missing in Google response", { cause: 400 }),
     );
   }
   if (!email_verified) {
@@ -1057,7 +1057,7 @@ export const loginwithGmail = asyncHandelr(async (req, res, next) => {
     return next(
       new Error("Invalid account. Please login using your email/password", {
         cause: 403,
-      })
+      }),
     );
   }
 
@@ -1188,7 +1188,7 @@ export const getMyProfile = async (req, res, next) => {
 
     // هات بيانات المستخدم من الـ DB مع الحقول اللي محتاجها بس
     const user = await Usermodel.findById(userId).select(
-      "fullName email phone totalPoints modelcar serviceType carImages profiePicture isAgree"
+      "fullName email phone totalPoints modelcar serviceType carImages profiePicture isAgree",
     );
 
     if (!user) {
@@ -1214,7 +1214,7 @@ export const getMyCompactProfile = async (req, res, next) => {
 
     // جلب الحقول المطلوبة بما فيها subscription
     const user = await Usermodel.findById(userId).select(
-      "fullName email phone profiePicture subscription"
+      "fullName email phone profiePicture subscription",
     );
 
     if (!user) {
@@ -1323,7 +1323,7 @@ export const createCategory = asyncHandelr(async (req, res, next) => {
   // ✅ Validation
   if (!name?.ar || !name?.en) {
     return next(
-      new Error("❌ اسم القسم مطلوب بالعربي والإنجليزي", { cause: 400 })
+      new Error("❌ اسم القسم مطلوب بالعربي والإنجليزي", { cause: 400 }),
     );
   }
 
@@ -1414,7 +1414,8 @@ export const getCategories = asyncHandelr(async (req, res, next) => {
   const getAllSubCategoryIds = (catId, allCats) => {
     const directChildren = allCats.filter(
       (c) =>
-        c.parentCategory && c.parentCategory._id.toString() === catId.toString()
+        c.parentCategory &&
+        c.parentCategory._id.toString() === catId.toString(),
     );
     let subs = directChildren.map((c) => c._id.toString());
     for (const child of directChildren) {
@@ -1523,7 +1524,7 @@ export const getCategoryTreeById = asyncHandelr(async (req, res, next) => {
 
   // التحقق من وجود القسم المطلوب
   const targetCategory = categories.find(
-    (c) => c._id.toString() === categoryId
+    (c) => c._id.toString() === categoryId,
   );
   if (!targetCategory) {
     return next(new Error("❌ القسم غير موجود أو غير مفعل", { cause: 404 }));
@@ -1567,7 +1568,8 @@ export const getCategoryTreeById = asyncHandelr(async (req, res, next) => {
   const getAllSubCategoryIds = (catId, allCats) => {
     const directChildren = allCats.filter(
       (c) =>
-        c.parentCategory && c.parentCategory._id.toString() === catId.toString()
+        c.parentCategory &&
+        c.parentCategory._id.toString() === catId.toString(),
     );
     let subs = directChildren.map((c) => c._id.toString());
     for (const child of directChildren) {
@@ -1603,7 +1605,7 @@ export const getCategoryTreeById = asyncHandelr(async (req, res, next) => {
     const stats = getCategoryStats(catId, categories);
     const children = categories
       .filter(
-        (c) => c.parentCategory && c.parentCategory._id.toString() === catId
+        (c) => c.parentCategory && c.parentCategory._id.toString() === catId,
       )
       .map((child) => buildSubTree(child._id.toString()))
       .filter(Boolean);
@@ -1632,8 +1634,8 @@ export const getCategoryTreeById = asyncHandelr(async (req, res, next) => {
   const mainInTree = allIdsInTree.filter(
     (id) =>
       !categories.find(
-        (c) => c.parentCategory && c.parentCategory._id.toString() === id
-      )
+        (c) => c.parentCategory && c.parentCategory._id.toString() === id,
+      ),
   ).length;
 
   const subInTree = allIdsInTree.length - mainInTree;
@@ -1760,7 +1762,7 @@ export const CreateProdut = asyncHandelr(async (req, res, next) => {
   // ✅ التأكد من أن البائع مقبول (اختياري للأمان الإضافي)
   if (req.user.status !== "ACCEPTED") {
     return next(
-      new Error("❌ طلب الانضمام كبائع لم يُقبل بعد", { cause: 403 })
+      new Error("❌ طلب الانضمام كبائع لم يُقبل بعد", { cause: 403 }),
     );
   }
 
@@ -1788,7 +1790,7 @@ export const CreateProdut = asyncHandelr(async (req, res, next) => {
   // Validations أساسية (نفس اللي عندك بدون تغيير)
   if (!name?.ar || !name?.en) {
     return next(
-      new Error("❌ اسم المنتج مطلوب بالعربي والإنجليزي", { cause: 400 })
+      new Error("❌ اسم المنتج مطلوب بالعربي والإنجليزي", { cause: 400 }),
     );
   }
 
@@ -1807,7 +1809,7 @@ export const CreateProdut = asyncHandelr(async (req, res, next) => {
   });
   if (categoriesCount !== categories.length) {
     return next(
-      new Error("❌ قسم أو أكثر غير موجود أو غير مفعل", { cause: 400 })
+      new Error("❌ قسم أو أكثر غير موجود أو غير مفعل", { cause: 400 }),
     );
   }
 
@@ -1834,7 +1836,7 @@ export const CreateProdut = asyncHandelr(async (req, res, next) => {
   const slugExists = await ProductModellll.findOne({ "seo.slug": seoSlug });
   if (slugExists) {
     return next(
-      new Error("❌ هذا الـ slug مستخدم بالفعل، اختر اسم آخر", { cause: 409 })
+      new Error("❌ هذا الـ slug مستخدم بالفعل، اختر اسم آخر", { cause: 409 }),
     );
   }
 
@@ -1922,8 +1924,8 @@ export const getProducts = asyncHandelr(async (req, res, next) => {
       return next(
         new Error(
           "قيمة status غير صحيحة. استخدم: published, inactive, scheduled",
-          { cause: 400 }
-        )
+          { cause: 400 },
+        ),
       );
     }
     filter.status = status;
@@ -2075,8 +2077,8 @@ export const getProducts = asyncHandelr(async (req, res, next) => {
       return next(
         new Error(
           "قيمة stock غير صحيحة. استخدم: available, low, out, inactive",
-          { cause: 400 }
-        )
+          { cause: 400 },
+        ),
       );
     }
     const statusMap = {
@@ -2086,12 +2088,12 @@ export const getProducts = asyncHandelr(async (req, res, next) => {
       inactive: "غير نشط",
     };
     products = products.filter(
-      (p) => p.stockStatus.status === statusMap[stock]
+      (p) => p.stockStatus.status === statusMap[stock],
     );
   }
 
   const categoryIds = products.flatMap((p) =>
-    p.categories.map((c) => c._id.toString())
+    p.categories.map((c) => c._id.toString()),
   );
   let childrenMap = {};
   if (categoryIds.length > 0) {
@@ -2120,12 +2122,12 @@ export const getProducts = asyncHandelr(async (req, res, next) => {
   const summary = {
     totalProducts: products.length,
     available: products.filter(
-      (p) => p.stockStatus.status === "متوفر في المخزون"
+      (p) => p.stockStatus.status === "متوفر في المخزون",
     ).length,
     lowStock: products.filter((p) => p.stockStatus.status === "قارب على النفاد")
       .length,
     outOfStock: products.filter(
-      (p) => p.stockStatus.status === "نفد من المخزون"
+      (p) => p.stockStatus.status === "نفد من المخزون",
     ).length,
     inactive: products.filter((p) => p.stockStatus.status === "غير نشط").length,
   };
@@ -2189,7 +2191,7 @@ export const GetProductById = asyncHandelr(async (req, res, next) => {
 
   if (!product) {
     return next(
-      new Error("❌ المنتج غير موجود أو غير متاح لك", { cause: 404 })
+      new Error("❌ المنتج غير موجود أو غير متاح لك", { cause: 404 }),
     );
   }
 
@@ -2320,7 +2322,7 @@ export const UpdateProduct = asyncHandelr(async (req, res, next) => {
       });
       if (slugExists) {
         return next(
-          new Error("❌ هذا الـ slug مستخدم في منتج آخر", { cause: 409 })
+          new Error("❌ هذا الـ slug مستخدم في منتج آخر", { cause: 409 }),
         );
       }
       product.seo.slug = newSlug;
@@ -2342,7 +2344,7 @@ export const UpdateProduct = asyncHandelr(async (req, res, next) => {
     });
     if (categoriesCount !== categories.length) {
       return next(
-        new Error("❌ قسم أو أكثر غير موجود أو غير مفعل", { cause: 400 })
+        new Error("❌ قسم أو أكثر غير موجود أو غير مفعل", { cause: 400 }),
       );
     }
     product.categories = categories;
@@ -2431,7 +2433,7 @@ export const UpdateProduct = asyncHandelr(async (req, res, next) => {
 
     if (Array.isArray(imagesToRemove)) {
       product.images = product.images.filter(
-        (img) => !imagesToRemove.includes(img)
+        (img) => !imagesToRemove.includes(img),
       );
     }
   }
@@ -2484,13 +2486,13 @@ export const createVariant = asyncHandelr(async (req, res, next) => {
 
   if (!price || isNaN(price) || Number(price) <= 0) {
     return next(
-      new Error("❌ السعر مطلوب ويجب أن يكون رقم موجب", { cause: 400 })
+      new Error("❌ السعر مطلوب ويجب أن يكون رقم موجب", { cause: 400 }),
     );
   }
 
   if (!disCountPrice || isNaN(disCountPrice) || Number(disCountPrice) <= 0) {
     return next(
-      new Error("❌ السعر مطلوب ويجب أن يكون رقم موجب", { cause: 400 })
+      new Error("❌ السعر مطلوب ويجب أن يكون رقم موجب", { cause: 400 }),
     );
   }
 
@@ -2501,13 +2503,13 @@ export const createVariant = asyncHandelr(async (req, res, next) => {
     Number(stock) < 0
   ) {
     return next(
-      new Error("❌ المخزون مطلوب ويجب أن يكون رقم غير سالب", { cause: 400 })
+      new Error("❌ المخزون مطلوب ويجب أن يكون رقم غير سالب", { cause: 400 }),
     );
   }
 
   if (!req.files || req.files.length === 0) {
     return next(
-      new Error("❌ يجب رفع صورة واحدة على الأقل للمتغير", { cause: 400 })
+      new Error("❌ يجب رفع صورة واحدة على الأقل للمتغير", { cause: 400 }),
     );
   }
 
@@ -2526,12 +2528,12 @@ export const createVariant = asyncHandelr(async (req, res, next) => {
       return next(
         new Error("❌ يجب اختيار متغير واحد على الأقل (attribute)", {
           cause: 400,
-        })
+        }),
       );
     }
   } catch (error) {
     return next(
-      new Error("❌ صيغة JSON للـ attributes غير صحيحة", { cause: 400 })
+      new Error("❌ صيغة JSON للـ attributes غير صحيحة", { cause: 400 }),
     );
   }
 
@@ -2547,7 +2549,7 @@ export const createVariant = asyncHandelr(async (req, res, next) => {
     return next(
       new Error("❌ هذا المنتج لا يدعم المتغيرات (hasVariants = false)", {
         cause: 400,
-      })
+      }),
     );
   }
 
@@ -2557,7 +2559,7 @@ export const createVariant = asyncHandelr(async (req, res, next) => {
       return next(
         new Error("❌ كل متغير يجب أن يحتوي على attributeId و valueId", {
           cause: 400,
-        })
+        }),
       );
     }
 
@@ -2570,8 +2572,8 @@ export const createVariant = asyncHandelr(async (req, res, next) => {
       return next(
         new Error(
           `❌ الخاصية (Attribute) غير موجودة أو غير مفعلة: ${attr.attributeId}`,
-          { cause: 400 }
-        )
+          { cause: 400 },
+        ),
       );
     }
 
@@ -2584,8 +2586,8 @@ export const createVariant = asyncHandelr(async (req, res, next) => {
       return next(
         new Error(
           `❌ القيمة (Value) غير موجودة أو غير مطابقة للخاصية: ${attr.valueId}`,
-          { cause: 400 }
-        )
+          { cause: 400 },
+        ),
       );
     }
   }
@@ -2665,7 +2667,7 @@ export const getVariants = asyncHandelr(async (req, res, next) => {
   const formattedVariants = variants.map((variant) => {
     // فلترة أي attribute فشل في الـ populate (لو attribute أو value محذوفة أو غير مفعلة)
     const validAttributes = variant.attributes.filter(
-      (attr) => attr.attributeId && attr.valueId
+      (attr) => attr.attributeId && attr.valueId,
     );
 
     // تحويل إلى شكل أوضح: array من objects مع كل التفاصيل
@@ -2735,7 +2737,7 @@ export const updateVariant = asyncHandelr(async (req, res, next) => {
         return next(
           new Error("❌ يجب إرسال متغير واحد على الأقل (attribute)", {
             cause: 400,
-          })
+          }),
         );
       }
 
@@ -2745,8 +2747,8 @@ export const updateVariant = asyncHandelr(async (req, res, next) => {
           return next(
             new Error(
               "❌ كل attribute يجب أن يحتوي على attributeId و valueId",
-              { cause: 400 }
-            )
+              { cause: 400 },
+            ),
           );
         }
       }
@@ -2761,8 +2763,8 @@ export const updateVariant = asyncHandelr(async (req, res, next) => {
           return next(
             new Error(
               `❌ الخاصية غير موجودة أو غير مفعلة: ${attr.attributeId}`,
-              { cause: 400 }
-            )
+              { cause: 400 },
+            ),
           );
         }
 
@@ -2775,7 +2777,7 @@ export const updateVariant = asyncHandelr(async (req, res, next) => {
           return next(
             new Error(`❌ القيمة غير موجودة أو غير مطابقة: ${attr.valueId}`, {
               cause: 400,
-            })
+            }),
           );
         }
       }
@@ -2786,7 +2788,7 @@ export const updateVariant = asyncHandelr(async (req, res, next) => {
       }));
     } catch (error) {
       return next(
-        new Error("❌ صيغة JSON للـ attributes غير صحيحة", { cause: 400 })
+        new Error("❌ صيغة JSON للـ attributes غير صحيحة", { cause: 400 }),
       );
     }
   }
@@ -2803,7 +2805,7 @@ export const updateVariant = asyncHandelr(async (req, res, next) => {
   if (stock !== undefined) {
     if (isNaN(stock) || Number(stock) < 0) {
       return next(
-        new Error("❌ المخزون يجب أن يكون رقم غير سالب", { cause: 400 })
+        new Error("❌ المخزون يجب أن يكون رقم غير سالب", { cause: 400 }),
       );
     }
     variant.stock = Number(stock);
@@ -2824,7 +2826,7 @@ export const updateVariant = asyncHandelr(async (req, res, next) => {
       });
       if (skuExists) {
         return next(
-          new Error("❌ هذا SKU مستخدم في متغير آخر", { cause: 409 })
+          new Error("❌ هذا SKU مستخدم في متغير آخر", { cause: 409 }),
         );
       }
       variant.sku = sku.trim();
@@ -2879,7 +2881,7 @@ export const updateVariant = asyncHandelr(async (req, res, next) => {
 
   // تنسيق الـ attributes للـ frontend
   const validAttributes = updatedVariant.attributes.filter(
-    (attr) => attr.attributeId && attr.valueId
+    (attr) => attr.attributeId && attr.valueId,
   );
 
   const formattedAttributes = validAttributes.map((attr) => ({
@@ -3283,7 +3285,7 @@ export const GetAllProducts = asyncHandelr(async (req, res, next) => {
 
   const finalProducts = await convertProductPrices(
     formattedProducts,
-    req.user.currency
+    req.user.currency,
   );
 
   res.status(200).json({
@@ -3415,7 +3417,7 @@ export const getProductByIdForEndUser = asyncHandelr(async (req, res, next) => {
   if (currency) {
     const convertedProducts = await convertProductPrices(
       [formattedProduct],
-      currency
+      currency,
     );
     finalProduct = convertedProducts[0];
   }
@@ -3683,7 +3685,7 @@ export const createBrand = asyncHandelr(async (req, res, next) => {
   // ✅ Validation
   if (!name?.ar || !name?.en) {
     return next(
-      new Error("❌ اسم البراند مطلوب بالعربي والإنجليزي", { cause: 400 })
+      new Error("❌ اسم البراند مطلوب بالعربي والإنجليزي", { cause: 400 }),
     );
   }
 
@@ -3814,7 +3816,7 @@ export const getBrandById = asyncHandelr(async (req, res, next) => {
 
   if (!brand) {
     return next(
-      new Error("❌ العلامة التجارية غير موجودة أو غير مفعلة", { cause: 404 })
+      new Error("❌ العلامة التجارية غير موجودة أو غير مفعلة", { cause: 404 }),
     );
   }
 
@@ -3979,7 +3981,7 @@ export const createAttribute = asyncHandelr(async (req, res, next) => {
   // ✅ التحقق من الحقول
   if (!name?.ar || !name?.en) {
     return next(
-      new Error("❌ اسم الخاصية مطلوب بالعربي والإنجليزي", { cause: 400 })
+      new Error("❌ اسم الخاصية مطلوب بالعربي والإنجليزي", { cause: 400 }),
     );
   }
 
@@ -4035,7 +4037,7 @@ export const deleteAttribute = asyncHandelr(async (req, res, next) => {
     return next(
       new Error("❌ لا يمكن حذف الخاصية لأنها مستخدمة في متغيرات منتجات", {
         cause: 400,
-      })
+      }),
     );
   }
 
@@ -4071,7 +4073,7 @@ export const updateAttribute = asyncHandelr(async (req, res, next) => {
   if (name) {
     if (!name.ar || !name.en) {
       return next(
-        new Error("❌ اسم الخاصية مطلوب بالعربي والإنجليزي", { cause: 400 })
+        new Error("❌ اسم الخاصية مطلوب بالعربي والإنجليزي", { cause: 400 }),
       );
     }
 
@@ -4116,7 +4118,7 @@ export const createAttributeValue = asyncHandelr(async (req, res, next) => {
   // ✅ التحقق من وجود مستخدم مسجل دخول
   if (!req.user) {
     return next(
-      new Error("❌ يجب تسجيل الدخول لإضافة قيمة خاصية", { cause: 401 })
+      new Error("❌ يجب تسجيل الدخول لإضافة قيمة خاصية", { cause: 401 }),
     );
   }
 
@@ -4132,7 +4134,7 @@ export const createAttributeValue = asyncHandelr(async (req, res, next) => {
 
   if (!value?.ar || !value?.en) {
     return next(
-      new Error("❌ قيمة الخاصية مطلوبة بالعربي والإنجليزي", { cause: 400 })
+      new Error("❌ قيمة الخاصية مطلوبة بالعربي والإنجليزي", { cause: 400 }),
     );
   }
 
@@ -4282,7 +4284,7 @@ export const getAttributesWithValues = asyncHandelr(async (req, res, next) => {
   let mostCommonType = { type: "-", count: 0 };
   if (Object.keys(typeCounts).length > 0) {
     const maxType = Object.keys(typeCounts).reduce((a, b) =>
-      typeCounts[a] > typeCounts[b] ? a : b
+      typeCounts[a] > typeCounts[b] ? a : b,
     );
     mostCommonType = { type: maxType, count: typeCounts[maxType] };
   }
@@ -4364,7 +4366,7 @@ export const becomeSeller = asyncHandelr(async (req, res, next) => {
   }
   if (!email && !phone) {
     return next(
-      new Error("يجب إدخال البريد الإلكتروني أو رقم الهاتف", { cause: 400 })
+      new Error("يجب إدخال البريد الإلكتروني أو رقم الهاتف", { cause: 400 }),
     );
   }
   if (!categories || !Array.isArray(categories) || categories.length === 0) {
@@ -4395,7 +4397,9 @@ export const becomeSeller = asyncHandelr(async (req, res, next) => {
   });
   if (validCategories !== categories.length) {
     return next(
-      new Error("واحد أو أكثر من الأقسام غير موجود أو غير مفعل", { cause: 400 })
+      new Error("واحد أو أكثر من الأقسام غير موجود أو غير مفعل", {
+        cause: 400,
+      }),
     );
   }
 
@@ -4451,7 +4455,7 @@ export const becomeSeller = asyncHandelr(async (req, res, next) => {
       status: "PENDING",
       isConfirmed: false,
       message: "يرجى تفعيل الحساب أولاً، ثم انتظار موافقة الإدارة",
-    }
+    },
   );
 });
 
@@ -4480,7 +4484,7 @@ export const sendOtpforeach = asyncHandelr(async (req, res, next) => {
     return next(
       new Error("هذا الحساب غير مصرح له بتسجيل الدخول بهذه الطريقة", {
         cause: 403,
-      })
+      }),
     );
   }
 
@@ -4489,7 +4493,7 @@ export const sendOtpforeach = asyncHandelr(async (req, res, next) => {
     return next(
       new Error("طلب الانضمام كبائع لم يُقبل بعد، لا يمكن إرسال كود التحقق", {
         cause: 400,
-      })
+      }),
     );
   }
 
@@ -4548,7 +4552,7 @@ export const verifyOtpLogin = asyncHandelr(async (req, res, next) => {
 
   if (!email || !otp) {
     return next(
-      new Error("البريد الإلكتروني وكود التحقق مطلوبين", { cause: 400 })
+      new Error("البريد الإلكتروني وكود التحقق مطلوبين", { cause: 400 }),
     );
   }
 
@@ -4564,12 +4568,12 @@ export const verifyOtpLogin = asyncHandelr(async (req, res, next) => {
   // التحقق من عدد المحاولات
   if (vendor.attemptCount >= 5 && vendor.blockUntil > Date.now()) {
     const minutesLeft = Math.ceil(
-      (vendor.blockUntil - Date.now()) / (60 * 1000)
+      (vendor.blockUntil - Date.now()) / (60 * 1000),
     );
     return next(
       new Error(`تم حظر الحساب مؤقتًا، حاول بعد ${minutesLeft} دقيقة`, {
         cause: 400,
-      })
+      }),
     );
   }
 
@@ -4603,7 +4607,7 @@ export const verifyOtpLogin = asyncHandelr(async (req, res, next) => {
       vendorId: vendor._id,
       isConfirmed: true,
       status: vendor.status,
-    }
+    },
   );
 });
 
@@ -4629,7 +4633,7 @@ export const getAllVendors = asyncHandelr(async (req, res, next) => {
       return next(
         new Error("حالة غير صحيحة، استخدم: PENDING, ACCEPTED, REFUSED", {
           cause: 400,
-        })
+        }),
       );
     }
     filter.status = status;
@@ -4690,7 +4694,7 @@ export const getAllVendors = asyncHandelr(async (req, res, next) => {
       select: "name slug",
     })
     .select(
-      "fullName email phone companyName categories status createdAt updatedAt"
+      "fullName email phone companyName categories status createdAt updatedAt",
     )
     .sort({ createdAt: -1 })
     .skip(skip)
@@ -4845,7 +4849,7 @@ export const getVendorDetails = asyncHandelr(async (req, res, next) => {
       select: "name slug",
     })
     .select(
-      "fullName email phone companyName categories status createdAt updatedAt"
+      "fullName email phone companyName categories status createdAt updatedAt",
     )
     .lean();
 
@@ -4918,7 +4922,7 @@ export const updateVendorStatus = asyncHandelr(async (req, res, next) => {
   // التحقق من الحالة المرسلة
   if (!status || !["ACCEPTED", "REFUSED"].includes(status)) {
     return next(
-      new Error("يجب إرسال حالة صحيحة: ACCEPTED أو REFUSED", { cause: 400 })
+      new Error("يجب إرسال حالة صحيحة: ACCEPTED أو REFUSED", { cause: 400 }),
     );
   }
 
@@ -4937,8 +4941,8 @@ export const updateVendorStatus = asyncHandelr(async (req, res, next) => {
     return next(
       new Error(
         `حالة البائع بالفعل ${status === "ACCEPTED" ? "مقبول" : "مرفوض"}`,
-        { cause: 400 }
-      )
+        { cause: 400 },
+      ),
     );
   }
 
@@ -5031,7 +5035,7 @@ export const updateVendorStatus = asyncHandelr(async (req, res, next) => {
       email: vendor.email,
       previousStatus: oldStatus,
       newStatus: status,
-    }
+    },
   );
 });
 
@@ -5040,7 +5044,7 @@ export const loginWithPassword = asyncHandelr(async (req, res, next) => {
 
   if (!email || !password) {
     return next(
-      new Error("البريد الإلكتروني وكلمة المرور مطلوبين", { cause: 400 })
+      new Error("البريد الإلكتروني وكلمة المرور مطلوبين", { cause: 400 }),
     );
   }
 
@@ -5064,7 +5068,7 @@ export const loginWithPassword = asyncHandelr(async (req, res, next) => {
       return next(
         new Error("الحساب غير مفعل، يرجى تفعيله أولاً عبر كود OTP", {
           cause: 400,
-        })
+        }),
       );
     }
     if (user.status !== "ACCEPTED") {
@@ -5121,7 +5125,7 @@ export const createCoupon = asyncHandelr(async (req, res, next) => {
     isActive = true, // حالة التفعيل
   } = req.body;
 
-  // ✅ التحقق من وجود توكن وبائع مسجل دخول
+  // ✅ التحقق من وجود  الكوبون على منتج واحد → تحقق من المنتجتوكن وبائع مسجل دخول
   if (!req.user) {
     return next(new Error("❌ يجب تسجيل الدخول لإنشاء كوبون", { cause: 401 }));
   }
@@ -5132,7 +5136,7 @@ export const createCoupon = asyncHandelr(async (req, res, next) => {
 
   if (req.user.status !== "ACCEPTED") {
     return next(
-      new Error("❌ طلب الانضمام كبائع لم يُقبل بعد", { cause: 403 })
+      new Error("❌ طلب الانضمام كبائع لم يُقبل بعد", { cause: 403 }),
     );
   }
 
@@ -5141,38 +5145,47 @@ export const createCoupon = asyncHandelr(async (req, res, next) => {
     return next(
       new Error("❌ نوع الخصم مطلوب ويجب أن يكون percentage أو fixed", {
         cause: 400,
-      })
+      }),
     );
   }
 
   if (!discountValue || isNaN(discountValue) || Number(discountValue) <= 0) {
     return next(
-      new Error("❌ قيمة الخصم مطلوبة ويجب أن تكون رقم موجب", { cause: 400 })
+      new Error("❌ قيمة الخصم مطلوبة ويجب أن تكون رقم موجب", { cause: 400 }),
     );
   }
 
   if (discountType === "percentage" && Number(discountValue) > 100) {
     return next(
-      new Error("❌ النسبة المئوية لا يمكن أن تتجاوز 100%", { cause: 400 })
+      new Error("❌ النسبة المئوية لا يمكن أن تتجاوز 100%", { cause: 400 }),
     );
   }
 
-  if (!appliesTo || !["single_product", "all_products"].includes(appliesTo)) {
+  if (
+    !appliesTo ||
+    !["single_product", "all_products", "category"].includes(appliesTo)
+  ) {
     return next(
       new Error(
-        "❌ appliesTo مطلوب ويجب أن يكون single_product أو all_products",
-        { cause: 400 }
-      )
+        "❌ appliesTo مطلوب ويجب أن يكون single_product أو all_products أو category",
+        { cause: 400 },
+      ),
     );
   }
 
-  // ✅ لو الكوبون على منتج واحد → تحقق من المنتج
+  if (appliesTo === "category") {
+    return next(
+      new Error("❌ خيار appliesTo = category متاح فقط للأدمن", { cause: 403 }),
+    );
+  }
+
+  // ✅ لو
   if (appliesTo === "single_product") {
     if (!productId) {
       return next(
         new Error("❌ productId مطلوب عند اختيار single_product", {
           cause: 400,
-        })
+        }),
       );
     }
 
@@ -5199,7 +5212,7 @@ export const createCoupon = asyncHandelr(async (req, res, next) => {
   const existingCoupon = await CouponModel.findOne({ code: couponCode });
   if (existingCoupon) {
     return next(
-      new Error("❌ كود الكوبون مستخدم بالفعل، جرب كود آخر", { cause: 409 })
+      new Error("❌ كود الكوبون مستخدم بالفعل، جرب كود آخر", { cause: 409 }),
     );
   }
 
@@ -5212,7 +5225,9 @@ export const createCoupon = asyncHandelr(async (req, res, next) => {
     }
     if (parsedExpiryDate < new Date()) {
       return next(
-        new Error("❌ تاريخ الانتهاء لا يمكن أن يكون في الماضي", { cause: 400 })
+        new Error("❌ تاريخ الانتهاء لا يمكن أن يكون في الماضي", {
+          cause: 400,
+        }),
       );
     }
   }
@@ -5373,7 +5388,7 @@ export const getCouponDetails = asyncHandelr(async (req, res, next) => {
   // ✅ التحقق من توكن وبائع
   if (!req.user || req.user.accountType !== "vendor") {
     return next(
-      new Error("❌ غير مصرح لك بعرض تفاصيل الكوبون", { cause: 401 })
+      new Error("❌ غير مصرح لك بعرض تفاصيل الكوبون", { cause: 401 }),
     );
   }
 
@@ -5488,6 +5503,14 @@ export const updateCoupon = asyncHandelr(async (req, res, next) => {
     return next(new Error("❌ الكوبون غير موجود أو لا يخصك", { cause: 404 }));
   }
 
+  if (coupon.appliesTo === "category") {
+    return next(
+      new Error("❌ غير مصرح لك بتعديل كوبونات من نوع category", {
+        cause: 403,
+      }),
+    );
+  }
+
   // تحديث الكود (مع فحص التكرار)
   if (code) {
     const trimmedCode = code.trim().toUpperCase();
@@ -5512,12 +5535,12 @@ export const updateCoupon = asyncHandelr(async (req, res, next) => {
     const value = Number(discountValue);
     if (isNaN(value) || value <= 0) {
       return next(
-        new Error("❌ قيمة الخصم يجب أن تكون رقم موجب", { cause: 400 })
+        new Error("❌ قيمة الخصم يجب أن تكون رقم موجب", { cause: 400 }),
       );
     }
     if (coupon.discountType === "percentage" && value > 100) {
       return next(
-        new Error("❌ النسبة لا يمكن أن تتجاوز 100%", { cause: 400 })
+        new Error("❌ النسبة لا يمكن أن تتجاوز 100%", { cause: 400 }),
       );
     }
     coupon.discountValue = value;
@@ -5529,8 +5552,8 @@ export const updateCoupon = asyncHandelr(async (req, res, next) => {
       return next(
         new Error(
           `❌ عدد الاستخدامات لا يمكن أن يكون أقل من المستخدم بالفعل (${coupon.usesCount})`,
-          { cause: 400 }
-        )
+          { cause: 400 },
+        ),
       );
     }
     coupon.maxUses = uses;
@@ -5592,17 +5615,570 @@ export const deleteCoupon = asyncHandelr(async (req, res, next) => {
   });
 });
 
-export const applyCoupon = asyncHandelr(async (req, res, next) => {
-  const { couponCode, cartItems } = req.body;
+export const createAdminCoupon = asyncHandelr(async (req, res, next) => {
+  const {
+    code, // اختياري: لو مش بعته، هيتولد تلقائيًا
+    discountType, // "percentage" أو "fixed"
+    discountValue, // رقم (1-100 للنسبة، أي رقم للثابت)
+    appliesTo, // "single_product" أو "category" أو "all_products"
+    productId, // مطلوب لو appliesTo = single_product
+    categoryId, // مطلوب لو appliesTo = category
+    maxUses = 1, // عدد الاستخدامات (default 1)
+    expiryDate, // تاريخ الانتهاء (ISO string)
+    isActive = true, // حالة التفعيل
+  } = req.body;
 
-  const customerId = req.user?._id || null;
+  // ✅ التحقق من وجود توكن وأدمن مسجل دخول
+  if (!req.user) {
+    return next(new Error("you have to login first", { cause: 401 }));
+  }
+
+  if (req.user.accountType !== "admin") {
+    return next(new Error("you are not admin", { cause: 403 }));
+  }
+
+  if (!discountType || !["percentage", "fixed"].includes(discountType)) {
+    return next(
+      new Error("❌ نوع الخصم مطلوب ويجب أن يكون percentage أو fixed", {
+        cause: 400,
+      }),
+    );
+  }
+
+  if (!discountValue || isNaN(discountValue) || Number(discountValue) <= 0) {
+    return next(
+      new Error("❌ قيمة الخصم مطلوبة ويجب أن تكون رقم موجب", { cause: 400 }),
+    );
+  }
+
+  if (discountType === "percentage" && Number(discountValue) > 100) {
+    return next(
+      new Error("❌ النسبة المئوية لا يمكن أن تتجاوز 100%", { cause: 400 }),
+    );
+  }
+
+  if (
+    !appliesTo ||
+    !["single_product", "category", "all_products"].includes(appliesTo)
+  ) {
+    return next(
+      new Error(
+        "❌ appliesTo مطلوب ويجب أن يكون single_product أو category أو all_products",
+        { cause: 400 },
+      ),
+    );
+  }
+
+  // ✅ لو الكوبون على منتج واحد → تحقق من المنتج (بدون قيد البائع)
+  if (appliesTo === "single_product") {
+    if (!productId) {
+      return next(
+        new Error("❌ productId مطلوب عند اختيار single_product", {
+          cause: 400,
+        }),
+      );
+    }
+
+    const product = await ProductModel.findOne({
+      _id: productId,
+      isActive: true,
+    });
+
+    if (!product) {
+      return next(new Error("❌ المنتج غير موجود", { cause: 404 }));
+    }
+  }
+
+  // ✅ لو الكوبون على فئة → تحقق من الفئة
+  if (appliesTo === "category") {
+    if (!categoryId) {
+      return next(
+        new Error("❌ categoryId مطلوب عند اختيار category", {
+          cause: 400,
+        }),
+      );
+    }
+
+    const category = await CategoryModel.findOne({
+      _id: categoryId,
+      isActive: true, // افتراضيًا، لو عندك حقل isActive في الفئات
+    });
+
+    if (!category) {
+      return next(new Error("❌ الفئة غير موجودة", { cause: 404 }));
+    }
+  }
+
+  // ✅ توليد كود الكوبون (لو مش بعته)
+  let couponCode = code?.trim().toUpperCase();
+  if (!couponCode) {
+    // توليد كود عشوائي فريد: ADMIN-XXXXXX
+    const randomPart = Math.random().toString(36).substring(2, 8).toUpperCase();
+    couponCode = `ADMIN-${randomPart}`;
+  }
+
+  // ✅ التحقق من عدم تكرار الكود
+  const existingCoupon = await CouponModel.findOne({ code: couponCode });
+  if (existingCoupon) {
+    return next(
+      new Error("❌ كود الكوبون مستخدم بالفعل، جرب كود آخر", { cause: 409 }),
+    );
+  }
+
+  // ✅ تحويل expiryDate إلى Date لو موجود
+  let parsedExpiryDate = null;
+  if (expiryDate) {
+    parsedExpiryDate = new Date(expiryDate);
+    if (isNaN(parsedExpiryDate.getTime())) {
+      return next(new Error("❌ تاريخ الانتهاء غير صالح", { cause: 400 }));
+    }
+    if (parsedExpiryDate < new Date()) {
+      return next(
+        new Error("❌ تاريخ الانتهاء لا يمكن أن يكون في الماضي", {
+          cause: 400,
+        }),
+      );
+    }
+  }
+
+  // ✅ إنشاء الكوبون (بدون vendorId)
+  const coupon = await CouponModel.create({
+    code: couponCode,
+    discountType,
+    discountValue: Number(discountValue),
+    appliesTo,
+    productId: appliesTo === "single_product" ? productId : null,
+    categoryId: appliesTo === "category" ? categoryId : null,
+    vendorId: null, // للأدمن
+    maxUses: Math.max(1, Number(maxUses)),
+    usesCount: 0,
+    expiryDate: parsedExpiryDate,
+    isActive: !!isActive,
+  });
+
+  res.status(201).json({
+    success: true,
+    message: "تم إنشاء كوبون الخصم بنجاح ✅",
+    data: coupon,
+  });
+});
+
+export const getAdminCoupons = asyncHandelr(async (req, res, next) => {
+  // ✅ التحقق من توكن وأدمن
+  if (!req.user || req.user.accountType !== "admin") {
+    return next(new Error("❌ غير مصرح لك بعرض الكوبونات", { cause: 401 }));
+  }
+
+  const {
+    page = 1,
+    limit = 10,
+    isActive, // true / false
+    expired, // true للمنتهية، false للغير منتهية
+  } = req.query;
+
+  const pageNum = Math.max(1, parseInt(page) || 1);
+  const limitNum = Math.min(50, Math.max(1, parseInt(limit) || 10));
+  const skip = (pageNum - 1) * limitNum;
+
+  let filter = { vendorId: null }; // كوبونات الأدمن فقط
+
+  if (isActive !== undefined) {
+    filter.isActive = isActive === "true" || isActive === true;
+  }
+
+  if (expired === "true") {
+    filter.expiryDate = { $lt: new Date() };
+  } else if (expired === "false") {
+    filter.$or = [{ expiryDate: { $gte: new Date() } }, { expiryDate: null }];
+  }
+
+  const totalCoupons = await CouponModel.countDocuments(filter);
+
+  const coupons = await CouponModel.find(filter)
+    .populate({
+      path: "productId",
+      match: { isActive: true },
+      select: "name sku images mainPrice",
+    })
+    .populate({
+      path: "categoryId",
+      select: "name", // افتراضيًا، حسب حقول الفئة
+    })
+    .sort({ createdAt: -1 })
+    .skip(skip)
+    .limit(limitNum)
+    .lean();
+
+  const formattedCoupons = coupons.map((coupon) => ({
+    _id: coupon._id,
+    code: coupon.code,
+    discountType: coupon.discountType,
+    discountValue: coupon.discountValue,
+    appliesTo: coupon.appliesTo,
+    product: coupon.productId
+      ? {
+          _id: coupon.productId._id,
+          name: coupon.productId.name,
+          sku: coupon.productId.sku,
+          mainPrice: coupon.productId.mainPrice,
+          image: coupon.productId.images[0] || null,
+        }
+      : null,
+    category: coupon.categoryId
+      ? {
+          _id: coupon.categoryId._id,
+          name: coupon.categoryId.name,
+        }
+      : null,
+    maxUses: coupon.maxUses,
+    usesCount: coupon.usesCount,
+    remainingUses: coupon.maxUses - coupon.usesCount,
+    expiryDate: coupon.expiryDate,
+    isActive: coupon.isActive,
+    isExpired: coupon.expiryDate
+      ? new Date(coupon.expiryDate) < new Date()
+      : false,
+    createdAt: coupon.createdAt,
+    updatedAt: coupon.updatedAt,
+  }));
+
+  const pagination = {
+    currentPage: pageNum,
+    totalPages: Math.ceil(totalCoupons / limitNum),
+    totalItems: totalCoupons,
+    itemsPerPage: limitNum,
+    hasNext: pageNum < Math.ceil(totalCoupons / limitNum),
+    hasPrev: pageNum > 1,
+  };
+
+  // ✅ حساب الإحصائيات العامة
+  const stats = await CouponModel.aggregate([
+    { $match: { vendorId: null } },
+    {
+      $group: {
+        _id: null,
+        totalCoupons: { $sum: 1 },
+        activeCoupons: {
+          $sum: { $cond: [{ $eq: ["$isActive", true] }, 1, 0] },
+        },
+        expiredCoupons: {
+          $sum: {
+            $cond: [
+              {
+                $and: [
+                  { $ifNull: ["$expiryDate", false] },
+                  { $lt: ["$expiryDate", new Date()] },
+                ],
+              },
+              1,
+              0,
+            ],
+          },
+        },
+        totalUses: { $sum: "$usesCount" },
+      },
+    },
+  ]);
+
+  const couponStats = stats[0] || {
+    totalCoupons: 0,
+    activeCoupons: 0,
+    expiredCoupons: 0,
+    totalUses: 0,
+  };
+
+  res.status(200).json({
+    success: true,
+    message: "تم جلب كوبونات الأدمن بنجاح ",
+    summary: {
+      totalCoupons: couponStats.totalCoupons,
+      activeCoupons: couponStats.activeCoupons,
+      expiredCoupons: couponStats.expiredCoupons,
+      totalUses: couponStats.totalUses,
+    },
+    count: formattedCoupons.length,
+    pagination,
+    data: formattedCoupons,
+  });
+});
+
+export const getAdminCouponDetails = asyncHandelr(async (req, res, next) => {
+  const { couponId } = req.params;
+
+  // ✅ التحقق من توكن وأدمن
+  if (!req.user || req.user.accountType !== "admin") {
+    return next(
+      new Error("❌ غير مصرح لك بعرض تفاصيل الكوبون", { cause: 401 }),
+    );
+  }
+
+  // جلب الكوبون مع التحقق من أنه للأدمن (vendorId: null)
+  const coupon = await CouponModel.findOne({
+    _id: couponId,
+    vendorId: null,
+  })
+    .populate({
+      path: "productId",
+      match: { isActive: true },
+      select: "name sku images mainPrice",
+    })
+    .populate({
+      path: "categoryId",
+      select: "name",
+    })
+    .lean();
+
+  if (!coupon) {
+    return next(new Error("❌ الكوبون غير موجود", { cause: 404 }));
+  }
+
+  // تنسيق الكوبون
+  const formattedCoupon = {
+    _id: coupon._id,
+    code: coupon.code,
+    discountType: coupon.discountType,
+    discountValue: coupon.discountValue,
+    appliesTo: coupon.appliesTo,
+    product: coupon.productId
+      ? {
+          _id: coupon.productId._id,
+          name: coupon.productId.name,
+          sku: coupon.productId.sku,
+          mainPrice: coupon.productId.mainPrice,
+          image: coupon.productId.images[0] || null,
+        }
+      : null,
+    category: coupon.categoryId
+      ? {
+          _id: coupon.categoryId._id,
+          name: coupon.categoryId.name,
+        }
+      : null,
+    maxUses: coupon.maxUses,
+    usesCount: coupon.usesCount,
+    remainingUses: coupon.maxUses - coupon.usesCount,
+    expiryDate: coupon.expiryDate,
+    isActive: coupon.isActive,
+    isExpired: coupon.expiryDate
+      ? new Date(coupon.expiryDate) < new Date()
+      : false,
+    createdAt: coupon.createdAt,
+    updatedAt: coupon.updatedAt,
+  };
+
+  // ✅ حساب الإحصائيات العامة (للكوبون الواحد)
+  const stats = await CouponModel.aggregate([
+    { $match: { _id: coupon._id } },
+    {
+      $group: {
+        _id: null,
+        totalCoupons: { $sum: 1 },
+        activeCoupons: {
+          $sum: { $cond: [{ $eq: ["$isActive", true] }, 1, 0] },
+        },
+        expiredCoupons: {
+          $sum: {
+            $cond: [
+              {
+                $and: [
+                  { $ifNull: ["$expiryDate", false] },
+                  { $lt: ["$expiryDate", new Date()] },
+                ],
+              },
+              1,
+              0,
+            ],
+          },
+        },
+        totalUses: { $sum: "$usesCount" },
+      },
+    },
+  ]);
+
+  const couponStats = stats[0] || {
+    totalCoupons: 0,
+    activeCoupons: 0,
+    expiredCoupons: 0,
+    totalUses: 0,
+  };
+
+  res.status(200).json({
+    success: true,
+    message: "تم جلب تفاصيل الكوبون بنجاح ",
+    summary: {
+      totalCoupons: couponStats.totalCoupons,
+      activeCoupons: couponStats.activeCoupons,
+      expiredCoupons: couponStats.expiredCoupons,
+      totalUses: couponStats.totalUses,
+    },
+    data: formattedCoupon,
+  });
+});
+
+export const updateAdminCoupon = asyncHandelr(async (req, res, next) => {
+  const { couponId } = req.params;
+  const { code, discountType, discountValue, maxUses, expiryDate, isActive } =
+    req.body;
+
+  if (!req.user || req.user.accountType !== "admin") {
+    return next(new Error("❌ غير مصرح لك بتعديل الكوبونات", { cause: 401 }));
+  }
+
+  const coupon = await CouponModel.findOne({
+    _id: couponId,
+    vendorId: null,
+  });
+
+  if (!coupon) {
+    return next(new Error("❌ الكوبون غير موجود", { cause: 404 }));
+  }
+
+  // تحديث الكود (مع فحص التكرار)
+  if (code) {
+    const trimmedCode = code.trim().toUpperCase();
+    const codeExists = await CouponModel.findOne({
+      code: trimmedCode,
+      _id: { $ne: couponId },
+    });
+    if (codeExists) {
+      return next(new Error("❌ كود الكوبون مستخدم بالفعل", { cause: 409 }));
+    }
+    coupon.code = trimmedCode;
+  }
+
+  if (discountType) {
+    if (!["percentage", "fixed"].includes(discountType)) {
+      return next(new Error("❌ نوع الخصم غير صحيح", { cause: 400 }));
+    }
+    coupon.discountType = discountType;
+  }
+
+  if (discountValue !== undefined) {
+    const value = Number(discountValue);
+    if (isNaN(value) || value <= 0) {
+      return next(
+        new Error("❌ قيمة الخصم يجب أن تكون رقم موجب", { cause: 400 }),
+      );
+    }
+    if (coupon.discountType === "percentage" && value > 100) {
+      return next(
+        new Error("❌ النسبة لا يمكن أن تتجاوز 100%", { cause: 400 }),
+      );
+    }
+    coupon.discountValue = value;
+  }
+
+  if (maxUses !== undefined) {
+    const uses = Number(maxUses);
+    if (isNaN(uses) || uses < coupon.usesCount) {
+      return next(
+        new Error(
+          `❌ عدد الاستخدامات لا يمكن أن يكون أقل من المستخدم بالفعل (${coupon.usesCount})`,
+          { cause: 400 },
+        ),
+      );
+    }
+    coupon.maxUses = uses;
+  }
+
+  if (expiryDate !== undefined) {
+    if (expiryDate === null) {
+      coupon.expiryDate = null;
+    } else {
+      const date = new Date(expiryDate);
+      if (isNaN(date.getTime())) {
+        return next(new Error("❌ تاريخ الانتهاء غير صالح", { cause: 400 }));
+      }
+      coupon.expiryDate = date;
+    }
+  }
+
+  if (isActive !== undefined) {
+    coupon.isActive = !!isActive;
+  }
+
+  await coupon.save();
+
+  res.status(200).json({
+    success: true,
+    message: "تم تعديل الكوبون بنجاح ✅",
+    data: coupon,
+  });
+});
+
+export const deleteAdminCoupon = asyncHandelr(async (req, res, next) => {
+  const { couponId } = req.params;
+
+  // ✅ التحقق من توكن وأدمن
+  if (!req.user || req.user.accountType !== "admin") {
+    return next(new Error("❌ غير مصرح لك بحذف الكوبونات", { cause: 401 }));
+  }
+
+  // جلب الكوبون مع التحقق من أنه للأدمن
+  const coupon = await CouponModel.findOne({
+    _id: couponId,
+    vendorId: null,
+  });
+
+  if (!coupon) {
+    return next(new Error("❌ الكوبون غير موجود", { cause: 404 }));
+  }
+
+  // حذف نهائي من الداتابيز
+  await CouponModel.findByIdAndDelete(couponId);
+
+  res.status(200).json({
+    success: true,
+    message: "تم حذف الكوبون نهائيًا بنجاح ✅",
+    data: {
+      _id: coupon._id,
+      code: coupon.code,
+    },
+  });
+});
+
+import { CartModel } from "../../../DB/models/cart.model.js";
+
+export const applyCoupon = asyncHandelr(async (req, res, next) => {
+  const { couponCode } = req.body;
+
+  if (!req.user) {
+    return next(
+      new Error("❌ يجب تسجيل الدخول لتطبيق الكوبون", { cause: 401 }),
+    );
+  }
+
+  const customerId = req.user._id;
 
   if (!couponCode) {
     return next(new Error("❌ كود الكوبون مطلوب", { cause: 400 }));
   }
 
-  if (!cartItems || !Array.isArray(cartItems) || cartItems.length === 0) {
-    return next(new Error("❌ السلة فارغة أو غير صحيحة", { cause: 400 }));
+  // جلب السلة من الداتابيز
+  const cart = await CartModel.findOne({ userId: customerId })
+    .populate({
+      path: "items.productId",
+      select:
+        "name mainPrice disCountPrice createdBy categories hasVariants stock isActive status",
+      match: { isActive: true, status: "published" },
+    })
+    .populate({
+      path: "items.variantId",
+      select: "price disCountPrice attributes stock isActive",
+      match: { isActive: true },
+    });
+
+  if (!cart || cart.items.length === 0) {
+    return next(new Error("❌ السلة فارغة أو غير موجودة", { cause: 400 }));
+  }
+
+  // فلترة العناصر الصالحة فقط (لو الـ populate match عمل شغله)
+  const validItems = cart.items.filter(
+    (item) => item.productId && (!item.variantId || item.variantId),
+  );
+
+  if (validItems.length === 0) {
+    return next(new Error("❌ لا توجد عناصر صالحة في السلة", { cause: 400 }));
   }
 
   const trimmedCode = couponCode.trim().toUpperCase();
@@ -5610,11 +6186,11 @@ export const applyCoupon = asyncHandelr(async (req, res, next) => {
   const coupon = await CouponModel.findOne({
     code: trimmedCode,
     isActive: true,
-  }).populate("productId");
+  }).populate("productId categoryId");
 
   if (!coupon) {
     return next(
-      new Error("❌ كود الكوبون غير صحيح أو غير مفعل", { cause: 400 })
+      new Error("❌ كود الكوبون غير صحيح أو غير مفعل", { cause: 400 }),
     );
   }
 
@@ -5624,33 +6200,8 @@ export const applyCoupon = asyncHandelr(async (req, res, next) => {
 
   if (coupon.usesCount >= coupon.maxUses) {
     return next(
-      new Error("❌ تم استنفاد عدد استخدامات هذا الكوبون", { cause: 400 })
+      new Error("❌ تم استنفاد عدد استخدامات هذا الكوبون", { cause: 400 }),
     );
-  }
-
-  // جلب المنتجات الفريدة
-  const productIds = [...new Set(cartItems.map((item) => item.productId))];
-  const products = await ProductModellll.find({
-    _id: { $in: productIds },
-    isActive: true,
-    status: "published",
-  }).lean();
-
-  const productsMap = {};
-  products.forEach((p) => (productsMap[p._id.toString()] = p));
-
-  // جلب الـ variants
-  const variantIds = cartItems
-    .filter((item) => item.variantId)
-    .map((item) => item.variantId);
-  let variantsMap = {};
-  if (variantIds.length > 0) {
-    const variants = await VariantModel.find({
-      _id: { $in: variantIds },
-      isActive: true,
-    }).lean();
-
-    variants.forEach((v) => (variantsMap[v._id.toString()] = v));
   }
 
   // حساب الإجمالي والخصم
@@ -5658,34 +6209,21 @@ export const applyCoupon = asyncHandelr(async (req, res, next) => {
   let applicableSubtotal = 0;
   let appliedItems = [];
 
-  // داخل اللوب
-  for (const item of cartItems) {
-    const product = productsMap[item.productId?.toString()];
-    if (!product) continue;
+  for (const item of validItems) {
+    const product = item.productId;
+    const variant = item.variantId;
 
     let itemPrice = 0;
     let usedDiscountPrice = false;
-    let variant = null;
 
     // حالة 1: variant محدد
-    if (item.variantId && product.hasVariants) {
-      variant = variantsMap[item.variantId?.toString()];
-      if (variant) {
-        const variantDiscount = Number(variant.disCountPrice) || 0;
-        itemPrice =
-          variantDiscount > 0 ? variantDiscount : Number(variant.price || 0);
-        usedDiscountPrice = variantDiscount > 0;
-      } else {
-        // variant غير موجود → نستخدم سعر المنتج الأساسي (fallback)
-        const productDiscount = Number(product.disCountPrice) || 0;
-        itemPrice =
-          productDiscount > 0
-            ? productDiscount
-            : Number(product.mainPrice || 0);
-        usedDiscountPrice = productDiscount > 0;
-      }
+    if (variant && product.hasVariants) {
+      const variantDiscount = Number(variant.disCountPrice) || 0;
+      itemPrice =
+        variantDiscount > 0 ? variantDiscount : Number(variant.price || 0);
+      usedDiscountPrice = variantDiscount > 0;
     }
-    // حالة 2: المنتج الأساسي لوحده (بدون variantId)
+    // حالة 2: المنتج الأساسي
     else {
       const productDiscount = Number(product.disCountPrice) || 0;
       itemPrice =
@@ -5696,8 +6234,10 @@ export const applyCoupon = asyncHandelr(async (req, res, next) => {
     const itemTotal = itemPrice * item.quantity;
     subtotal += itemTotal;
 
-    // تطبيق الكوبون (نفس المنطق)
+    // تحديد إذا كان الكوبون ينطبق على هذا العنصر
     let isApplicable = false;
+
+    // التحقق الأساسي بناءً على appliesTo
     if (coupon.appliesTo === "all_products") {
       isApplicable = true;
     } else if (coupon.appliesTo === "single_product") {
@@ -5706,6 +6246,25 @@ export const applyCoupon = asyncHandelr(async (req, res, next) => {
         coupon.productId._id.toString() === product._id.toString()
       ) {
         isApplicable = true;
+      }
+    } else if (coupon.appliesTo === "category") {
+      if (
+        coupon.categoryId &&
+        product.categories.some(
+          (cat) => cat.toString() === coupon.categoryId._id.toString(),
+        )
+      ) {
+        isApplicable = true;
+      }
+    }
+
+    // التحقق الإضافي للـ vendorId (لو الكوبون للبائع، يجب أن يكون المنتج له)
+    if (isApplicable && coupon.vendorId) {
+      if (
+        !product.createdBy ||
+        product.createdBy.toString() !== coupon.vendorId.toString()
+      ) {
+        isApplicable = false;
       }
     }
 
@@ -5717,7 +6276,7 @@ export const applyCoupon = asyncHandelr(async (req, res, next) => {
         productName: product.name,
         variantId: variant?._id || null,
         variantAttributes: variant ? variant.attributes : null,
-        isBaseProduct: !item.variantId, // جديد: نوضح إذا كان المنتج الأساسي
+        isBaseProduct: !item.variantId,
         quantity: item.quantity,
         unitPrice: itemPrice,
         wasDiscounted: usedDiscountPrice,
@@ -5728,7 +6287,7 @@ export const applyCoupon = asyncHandelr(async (req, res, next) => {
 
   if (applicableSubtotal === 0) {
     return next(
-      new Error("❌ هذا الكوبون لا ينطبق على أي منتج في سلتك", { cause: 400 })
+      new Error("❌ هذا الكوبون لا ينطبق على أي منتج في سلتك", { cause: 400 }),
     );
   }
 
@@ -5754,7 +6313,9 @@ export const applyCoupon = asyncHandelr(async (req, res, next) => {
         appliedOn:
           coupon.appliesTo === "single_product"
             ? coupon.productId?.name || "منتج محدد"
-            : "جميع المنتجات",
+            : coupon.appliesTo === "category"
+              ? coupon.categoryId?.name || "فئة محددة"
+              : "جميع المنتجات",
         remainingUses: coupon.maxUses - coupon.usesCount - 1,
       },
       cartSummary: {
@@ -5787,7 +6348,7 @@ export const createOrderforUser = asyncHandelr(async (req, res, next) => {
     !shippingAddress.longitude
   ) {
     return next(
-      new Error("❌ عنوان التوصيل وإحداثياته مطلوبة", { cause: 400 })
+      new Error("❌ عنوان التوصيل وإحداثياته مطلوبة", { cause: 400 }),
     );
   }
 
@@ -5803,7 +6364,7 @@ export const createOrderforUser = asyncHandelr(async (req, res, next) => {
     return next(
       new Error("❌ واحد أو أكثر من المنتجات غير موجود أو غير متاح", {
         cause: 400,
-      })
+      }),
     );
   }
 
@@ -5843,7 +6404,7 @@ export const createOrderforUser = asyncHandelr(async (req, res, next) => {
       return next(
         new Error("❌ لا يمكن دمج منتجات من بائعين مختلفين في طلب واحد", {
           cause: 400,
-        })
+        }),
       );
     }
 
@@ -5888,7 +6449,7 @@ export const createOrderforUser = asyncHandelr(async (req, res, next) => {
       return next(
         new Error("❌ كود الكوبون غير صحيح أو غير مفعل أو لا يخص هذا البائع", {
           cause: 400,
-        })
+        }),
       );
     }
 
@@ -5898,7 +6459,7 @@ export const createOrderforUser = asyncHandelr(async (req, res, next) => {
 
     if (coupon.usesCount >= coupon.maxUses) {
       return next(
-        new Error("❌ تم استنفاد عدد استخدامات هذا الكوبون", { cause: 400 })
+        new Error("❌ تم استنفاد عدد استخدامات هذا الكوبون", { cause: 400 }),
       );
     }
 
@@ -5908,20 +6469,20 @@ export const createOrderforUser = asyncHandelr(async (req, res, next) => {
       applicableSubtotal = subtotal;
     } else if (coupon.appliesTo === "single_product") {
       const itemsFromProduct = formattedItems.filter(
-        (i) => i.productId.toString() === coupon.productId._id.toString()
+        (i) => i.productId.toString() === coupon.productId._id.toString(),
       );
       if (itemsFromProduct.length > 0) {
         isApplicable = true;
         applicableSubtotal = itemsFromProduct.reduce(
           (sum, i) => sum + i.totalPrice,
-          0
+          0,
         );
       }
     }
 
     if (!isApplicable) {
       return next(
-        new Error("❌ هذا الكوبون لا ينطبق على منتجات سلتك", { cause: 400 })
+        new Error("❌ هذا الكوبون لا ينطبق على منتجات سلتك", { cause: 400 }),
       );
     }
 
@@ -6206,7 +6767,6 @@ export const getVendorOrders = asyncHandelr(async (req, res, next) => {
     }
   });
 
-
   const totalOrders = await OrderModelUser.countDocuments(filter);
 
   const orders = await OrderModelUser.find(filter)
@@ -6238,7 +6798,7 @@ export const getVendorOrders = asyncHandelr(async (req, res, next) => {
       let variantImages = product?.images || null;
       let variantSku = product?.sku || null;
       let variantWeight = product?.weight || null;
-      let vendorAddress = item.vendorAddress
+      let vendorAddress = item.vendorAddress;
 
       if (variant) {
         variantFormattedAttributes = variant.attributes.map((attr) => ({
@@ -6921,7 +7481,7 @@ export const getCustomersWithOrders = asyncHandelr(async (req, res, next) => {
   // عدد العملاء الكلي
   const totalUniqueCustomers = await OrderModelUser.distinct(
     "customerId",
-    matchFilter
+    matchFilter,
   ).length;
 
   const pagination = {
@@ -7044,13 +7604,13 @@ export const getAllVendorsWithStats = asyncHandelr(async (req, res, next) => {
   const completionRate =
     orderStats.totalOrders > 0
       ? ((orderStats.completedOrders / orderStats.totalOrders) * 100).toFixed(
-          1
+          1,
         ) + "%"
       : "0%";
   const cancellationRate =
     orderStats.totalOrders > 0
       ? ((orderStats.cancelledOrders / orderStats.totalOrders) * 100).toFixed(
-          1
+          1,
         ) + "%"
       : "0%";
 
@@ -7189,8 +7749,8 @@ export const getAllVendorsWithStats = asyncHandelr(async (req, res, next) => {
       return next(
         new Error(
           "حالة غير صحيحة: استخدم ACCEPTED, PENDING, REFUSED, SUSPENDED",
-          { cause: 400 }
-        )
+          { cause: 400 },
+        ),
       );
     }
     vendorsQuery = vendorsQuery.where("status", status);
@@ -7620,7 +8180,7 @@ export const getVendorSalesChart = asyncHandelr(async (req, res, next) => {
     current = new Date(
       current.getFullYear(),
       current.getMonth(),
-      current.getDate()
+      current.getDate(),
     );
   }
 
@@ -7637,12 +8197,12 @@ export const getVendorSalesChart = asyncHandelr(async (req, res, next) => {
     if (type === "monthly") {
       key = current.toISOString().slice(0, 7); // YYYY-MM
       labels.push(
-        current.toLocaleDateString("ar-SA", { year: "numeric", month: "long" })
+        current.toLocaleDateString("ar-SA", { year: "numeric", month: "long" }),
       );
     } else {
       key = current.toISOString().slice(0, 10); // YYYY-MM-DD
       labels.push(
-        current.toLocaleDateString("ar-SA", { day: "numeric", month: "short" })
+        current.toLocaleDateString("ar-SA", { day: "numeric", month: "short" }),
       );
     }
 
@@ -7697,7 +8257,7 @@ export const createCategoryRequest = asyncHandelr(async (req, res, next) => {
   // ✅ التحقق من تسجيل الدخول
   if (!req.user) {
     return next(
-      new Error("❌ يجب تسجيل الدخول لتقديم طلب قسم جديد", { cause: 401 })
+      new Error("❌ يجب تسجيل الدخول لتقديم طلب قسم جديد", { cause: 401 }),
     );
   }
 
@@ -7706,19 +8266,19 @@ export const createCategoryRequest = asyncHandelr(async (req, res, next) => {
   // ✅ التحقق من الحقول الأساسية
   if (!categoryType || !["main", "sub"].includes(categoryType)) {
     return next(
-      new Error("❌ نوع القسم مطلوب ويجب أن يكون main أو sub", { cause: 400 })
+      new Error("❌ نوع القسم مطلوب ويجب أن يكون main أو sub", { cause: 400 }),
     );
   }
 
   if (!nameAr || !nameEn) {
     return next(
-      new Error("❌ اسم القسم مطلوب بالعربي والإنجليزي", { cause: 400 })
+      new Error("❌ اسم القسم مطلوب بالعربي والإنجليزي", { cause: 400 }),
     );
   }
 
   if (!descriptionAr || !descriptionEn) {
     return next(
-      new Error("❌ وصف القسم مطلوب بالعربي والإنجليزي", { cause: 400 })
+      new Error("❌ وصف القسم مطلوب بالعربي والإنجليزي", { cause: 400 }),
     );
   }
 
@@ -7726,7 +8286,7 @@ export const createCategoryRequest = asyncHandelr(async (req, res, next) => {
   if (categoryType === "sub") {
     if (!parentCategoryId) {
       return next(
-        new Error("❌ يجب تحديد القسم الرئيسي للقسم الفرعي", { cause: 400 })
+        new Error("❌ يجب تحديد القسم الرئيسي للقسم الفرعي", { cause: 400 }),
       );
     }
 
@@ -7737,7 +8297,7 @@ export const createCategoryRequest = asyncHandelr(async (req, res, next) => {
 
     if (!parent) {
       return next(
-        new Error("❌ القسم الرئيسي غير موجود أو غير مفعل", { cause: 404 })
+        new Error("❌ القسم الرئيسي غير موجود أو غير مفعل", { cause: 404 }),
       );
     }
   }
@@ -7876,7 +8436,7 @@ export const updateCategoryRequest = asyncHandelr(async (req, res, next) => {
 
   if (!["approved", "rejected"].includes(status)) {
     return next(
-      new Error("❌ الحالة يجب أن تكون approved أو rejected", { cause: 400 })
+      new Error("❌ الحالة يجب أن تكون approved أو rejected", { cause: 400 }),
     );
   }
 
@@ -7884,9 +8444,8 @@ export const updateCategoryRequest = asyncHandelr(async (req, res, next) => {
     return next(new Error("❌ سبب الرفض مطلوب عند الرفض", { cause: 400 }));
   }
 
-  const request = await CategoryRequestModel.findById(requestId).populate(
-    "userId"
-  );
+  const request =
+    await CategoryRequestModel.findById(requestId).populate("userId");
 
   if (!request) {
     return next(new Error("❌ طلب القسم غير موجود", { cause: 404 }));
@@ -7894,7 +8453,7 @@ export const updateCategoryRequest = asyncHandelr(async (req, res, next) => {
 
   if (request.status !== "pending") {
     return next(
-      new Error("❌ لا يمكن تحديث طلب تم معالجته بالفعل", { cause: 400 })
+      new Error("❌ لا يمكن تحديث طلب تم معالجته بالفعل", { cause: 400 }),
     );
   }
 
@@ -8099,7 +8658,7 @@ export const MarkAllNotificationsAsRead = asyncHandelr(
       },
       {
         $set: { isRead: true },
-      }
+      },
     );
 
     const updatedCount = result.modifiedCount || 0;
@@ -8115,5 +8674,5 @@ export const MarkAllNotificationsAsRead = asyncHandelr(
         unreadCountNow: 0, // بعد التحديث
       },
     });
-  }
+  },
 );

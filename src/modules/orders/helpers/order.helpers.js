@@ -1,21 +1,30 @@
-// order.helpers.js
 import { OrderModelUser } from "../../../DB/models/orderSchemaUser.model.js";
 
-export const calculateOrderTotals = (subtotal, discountAmount, shippingCost = 0) => {
+export const calculateOrderTotals = (
+  subtotal,
+  discountAmount,
+  shippingCost = 0,
+) => {
   const totalAmount = subtotal - discountAmount + shippingCost;
   return {
     subtotal: Number(subtotal.toFixed(2)),
     discountAmount: Number(discountAmount.toFixed(2)),
-    shippingCost,
+    shippingCost: Number(shippingCost.toFixed(2)),
     totalAmount: Number(totalAmount.toFixed(2)),
   };
 };
 
-export const createOrderItems = (formattedItems, coupon, couponAppliedItems, subtotal, discountAmount) => {
+export const createOrderItems = (
+  formattedItems,
+  coupon,
+  couponAppliedItems,
+  subtotal,
+  discountAmount,
+) => {
   return formattedItems.map((item) => {
     const isDiscounted = couponAppliedItems.includes(item.productId.toString());
     let itemDiscount = 0;
-    if (isDiscounted && coupon && subtotal > 0) { // Avoid division by 0
+    if (isDiscounted && coupon && subtotal > 0) {
       if (coupon.discountType === "percentage") {
         itemDiscount = (item.totalPrice * coupon.discountValue) / 100;
       } else if (coupon.discountType === "fixed") {
@@ -33,7 +42,9 @@ export const createOrderItems = (formattedItems, coupon, couponAppliedItems, sub
 };
 
 export const createOrder = async (orderData, session) => {
-  const order = await OrderModelUser.create([orderData], { session });
-  console.log(`Created order ${order[0]._id} with expireAt: ${order[0].expireAt}`);
+  const expireAt = new Date(Date.now() + 15 * 60 * 1000); // 15 minutes
+  const order = await OrderModelUser.create([{ ...orderData, expireAt }], {
+    session,
+  });
   return order[0];
 };

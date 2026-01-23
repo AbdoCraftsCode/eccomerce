@@ -1,7 +1,12 @@
-// coupon.helpers.js
 import { CouponModel } from "../../../DB/models/couponSchemaaa.js";
 
-export const validateAndApplyCoupon = async (couponCode, formattedItems, productsMap, subtotal, session = null) => {
+export const validateAndApplyCoupon = async (
+  couponCode,
+  formattedItems,
+  productsMap,
+  subtotal,
+  session = null,
+) => {
   if (!couponCode) {
     return { coupon: null, discountAmount: 0, couponAppliedItems: [] };
   }
@@ -9,7 +14,9 @@ export const validateAndApplyCoupon = async (couponCode, formattedItems, product
   const coupon = await CouponModel.findOne({
     code: trimmedCode,
     isActive: true,
-  }).populate("productId").session(session); // Add session for atomicity
+  })
+    .populate("productId categoryId")
+    .session(session);
   if (!coupon) {
     throw new Error("Coupon code is invalid or inactive", { cause: 400 });
   }
@@ -19,43 +26,28 @@ export const validateAndApplyCoupon = async (couponCode, formattedItems, product
   if (coupon.usesCount >= coupon.maxUses) {
     throw new Error("Coupon usage limit has been reached", { cause: 400 });
   }
-  let applicableItems = [];
-  let applicableSubtotal = 0;
-  if (coupon.appliesTo === "all_products") {
-    const itemsFromVendor = formattedItems.filter((item) => {
-      const product = productsMap[item.productId.toString()];
-      return (
-        product && product.createdBy.toString() === coupon.vendorId.toString()
-      );
-    });
-    if (itemsFromVendor.length > 0) {
-      applicableItems = itemsFromVendor;
-      applicableSubtotal = itemsFromVendor.reduce(
-        (sum, item) => sum + item.totalPrice,
-        0
+  let applicableItems = formattedItems.filter((item) => {
+    const product = productsMap[item.productId.toString()];
+    if (!product) return false;
+    const matchesVendor =
+      !coupon.vendorId ||
+      product.createdBy.toString() === coupon.vendorId.toString();
+    if (!matchesVendor) return false;
+    if (coupon.appliesTo === "all_products") {
+      return true;
+    } else if (coupon.appliesTo === "single_product") {
+      return product._id.toString() === coupon.productId?._id.toString();
+    } else if (coupon.appliesTo === "category") {
+      return product.categories.some(
+        (cat) => cat.toString() === coupon.categoryId?._id.toString(),
       );
     }
-  } else if (coupon.appliesTo === "single_product") {
-    const productForCoupon = Object.values(productsMap).find(
-      (p) => p._id.toString() === coupon.productId._id.toString()
-    );
-    if (
-      productForCoupon &&
-      productForCoupon.createdBy.toString() === coupon.vendorId.toString()
-    ) {
-      const itemsFromProduct = formattedItems.filter(
-        (item) =>
-          item.productId.toString() === coupon.productId._id.toString()
-      );
-      if (itemsFromProduct.length > 0) {
-        applicableItems = itemsFromProduct;
-        applicableSubtotal = itemsFromProduct.reduce(
-          (sum, item) => sum + item.totalPrice,
-          0
-        );
-      }
-    }
-  }
+    return false;
+  });
+  let applicableSubtotal = applicableItems.reduce(
+    (sum, item) => sum + item.totalPrice,
+    0,
+  );
   let discountAmount = 0;
   if (applicableItems.length > 0) {
     if (coupon.discountType === "percentage") {
@@ -64,10 +56,10 @@ export const validateAndApplyCoupon = async (couponCode, formattedItems, product
       discountAmount = Math.min(coupon.discountValue, applicableSubtotal);
     }
     coupon.usesCount += 1;
-    await coupon.save({ session }); 
+    await coupon.save({ session });
   }
   const couponAppliedItems = applicableItems.map((item) =>
-    item.productId.toString()
+    item.productId.toString(),
   );
   return { coupon, discountAmount, couponAppliedItems };
 };

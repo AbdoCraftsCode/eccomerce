@@ -1,5 +1,4 @@
 import { asyncHandelr } from "../../../utlis/response/error.response.js";
-import mongoose from "mongoose";
 import { CartModel } from "../../../DB/models/cart.model.js";
 import { ProductModellll } from "../../../DB/models/productSchemaaaa.js";
 import { VariantModel } from "../../../DB/models/variantSchema.js";
@@ -9,7 +8,7 @@ const getDetailedCart = async (cartId) => {
   const cart = await CartModel.findById(cartId)
     .populate({
       path: "items.productId",
-      select: "name images mainPrice disCountPrice stock",
+      select: "name images mainPrice disCountPrice stock currency",
     })
     .populate({
       path: "items.variantId",
@@ -31,7 +30,7 @@ export const getCart = asyncHandelr(async (req, res, next) => {
   cart = await convertCartToUserPreferences(
     cart,
     req.user.currency,
-    req.user.lang
+    req.user.lang,
   );
   res.status(200).json({
     success: true,
@@ -61,7 +60,7 @@ export const addToCart = asyncHandelr(async (req, res, next) => {
 
     if (!variant) {
       return next(
-        new Error("Variant not found for this product", { cause: 404 })
+        new Error("Variant not found for this product", { cause: 404 }),
       );
     }
   }
@@ -96,7 +95,7 @@ export const addToCart = asyncHandelr(async (req, res, next) => {
       return next(
         new Error(`Insufficient stock. Only ${variant.stock} available`, {
           cause: 400,
-        })
+        }),
       );
     }
   } else {
@@ -104,7 +103,7 @@ export const addToCart = asyncHandelr(async (req, res, next) => {
       return next(
         new Error(`Insufficient stock. Only ${product.stock} available`, {
           cause: 400,
-        })
+        }),
       );
     }
   }
@@ -122,9 +121,9 @@ export const addToCart = asyncHandelr(async (req, res, next) => {
   updatedCart = await convertCartToUserPreferences(
     updatedCart,
     req.user.currency,
-    req.user.lang
+    req.user.lang,
   );
-  
+
   res.status(200).json({
     success: true,
     message: `Item added to cart with quantity ${quantity}`,
@@ -164,7 +163,7 @@ export const deleteItemFromCart = asyncHandelr(async (req, res, next) => {
     emptyCart = await convertCartToUserPreferences(
       emptyCart,
       req.user.currency,
-      req.user.lang
+      req.user.lang,
     );
     return res.status(200).json({
       success: true,
@@ -179,7 +178,7 @@ export const deleteItemFromCart = asyncHandelr(async (req, res, next) => {
   updatedCart = await convertCartToUserPreferences(
     updatedCart,
     req.user.currency,
-    req.user.lang
+    req.user.lang,
   );
   res.status(200).json({
     success: true,
@@ -201,7 +200,7 @@ export const updateQuantity = asyncHandelr(async (req, res, next) => {
   const itemIndex = cart.items.findIndex(
     (item) =>
       item.productId.toString() === productId &&
-      (!variantId || item.variantId?.toString() === variantId)
+      (!variantId || item.variantId?.toString() === variantId),
   );
 
   if (itemIndex === -1) {
@@ -222,7 +221,7 @@ export const updateQuantity = asyncHandelr(async (req, res, next) => {
         return next(
           new Error("Cannot increase quantity. Insufficient stock available.", {
             cause: 400,
-          })
+          }),
         );
       }
     } else {
@@ -232,7 +231,7 @@ export const updateQuantity = asyncHandelr(async (req, res, next) => {
         return next(
           new Error("Cannot increase quantity. Insufficient stock available.", {
             cause: 400,
-          })
+          }),
         );
       }
     }
@@ -247,7 +246,7 @@ export const updateQuantity = asyncHandelr(async (req, res, next) => {
       updatedCart = await convertCartToUserPreferences(
         updatedCart,
         req.user.currency,
-        req.user.lang
+        req.user.lang,
       );
       return res.status(200).json({
         success: true,
@@ -259,7 +258,7 @@ export const updateQuantity = asyncHandelr(async (req, res, next) => {
     return next(
       new Error("Invalid action. Must be 'increase' or 'decrease'", {
         cause: 400,
-      })
+      }),
     );
   }
 
@@ -270,7 +269,7 @@ export const updateQuantity = asyncHandelr(async (req, res, next) => {
   updatedCart = await convertCartToUserPreferences(
     updatedCart,
     req.user.currency,
-    req.user.lang
+    req.user.lang,
   );
   res.status(200).json({
     success: true,
@@ -285,91 +284,103 @@ export const updateQuantity = asyncHandelr(async (req, res, next) => {
 const convertCartToUserPreferences = async (cart, currency, lang) => {
   if (!cart || !cart.items || cart.items.length === 0) return cart;
 
-  const fromCurrency = "USD";
-  const targetCurrency = currency.toUpperCase();
-  const exchangeRate = await getExchangeRate(fromCurrency, targetCurrency);
+  const targetCurrency = (currency || "USD").trim().toUpperCase();
+
+  const rateCache = new Map();
+
+  const getRate = async (fromCurrency) => {
+    const from = (fromCurrency || "USD").trim().toUpperCase();
+    const cacheKey = `${from}_${targetCurrency}`;
+
+    if (rateCache.has(cacheKey)) {
+      return rateCache.get(cacheKey);
+    }
+
+    if (from === targetCurrency) {
+      rateCache.set(cacheKey, 1);
+      return 1;
+    }
+
+    const rate = await getExchangeRate(from, targetCurrency);
+
+    const finalRate = rate !== null && rate > 0 ? rate : 1;
+
+    rateCache.set(cacheKey, finalRate);
+    return finalRate;
+  };
 
   const cartObj = cart.toObject();
-
   let newSubTotal = 0;
 
-  cartObj.items.forEach((item) => {
-    if (
-      exchangeRate &&
-      item.productId &&
-      (!item.productId.currency || item.productId.currency !== targetCurrency)
-    ) {
-      if (item.productId.mainPrice) {
-        item.productId.mainPrice = (
-          parseFloat(item.productId.mainPrice) * exchangeRate
-        )
-          .toFixed(2)
-          .toString();
-      }
-      if (item.productId.disCountPrice) {
-        item.productId.disCountPrice = (
-          parseFloat(item.productId.disCountPrice) * exchangeRate
-        )
-          .toFixed(2)
-          .toString();
-      }
-      item.productId.currency = targetCurrency;
-    } else if (!exchangeRate && item.productId) {
-      item.productId.currency = "USD";
-    }
+  for (const item of cartObj.items) {
+    if (!item.productId) continue;
 
-    if (
-      exchangeRate &&
-      item.variantId &&
-      (!item.variantId.currency || item.variantId.currency !== targetCurrency)
-    ) {
-      if (item.variantId.price) {
-        item.variantId.price = (parseFloat(item.variantId.price) * exchangeRate)
-          .toFixed(2)
-          .toString();
-      }
-      if (item.variantId.disCountPrice) {
-        item.variantId.disCountPrice = (
-          parseFloat(item.variantId.disCountPrice) * exchangeRate
-        )
-          .toFixed(2)
-          .toString();
-      }
-      item.variantId.currency = targetCurrency;
-    } else if (!exchangeRate && item.variantId) {
-      item.variantId.currency = "USD";
-    }
+    const product = item.productId;
+    const productCurrency = (product.currency || "USD").trim().toUpperCase();
 
-    if (item.productId && item.productId.name) {
-      if (
-        typeof item.productId.name === "object" &&
-        item.productId.name !== null
-      ) {
-        if (lang && item.productId.name[lang]) {
-          item.productId.name = item.productId.name[lang];
-        } else {
-          item.productId.name = "Unnamed Product";
+    const exchangeRate = await getRate(productCurrency);
+
+    if (exchangeRate !== 1) {
+      console.log(
+        `Converting ${productCurrency} → ${targetCurrency} (rate: ${exchangeRate})`,
+      );
+
+      if (product.mainPrice) {
+        const val = parseFloat(product.mainPrice);
+        if (!isNaN(val)) {
+          product.mainPrice = (val * exchangeRate).toFixed(2).toString();
         }
       }
-    } else {
-      item.productId.name = "Unnamed Product";
+
+      if (product.disCountPrice) {
+        const val = parseFloat(product.disCountPrice);
+        if (!isNaN(val)) {
+          product.disCountPrice = (val * exchangeRate).toFixed(2).toString();
+        }
+      }
     }
 
-    // Calculate item price for subTotal
+    product.currency = targetCurrency;
+
+    if (item.variantId && exchangeRate !== 1) {
+      const variant = item.variantId;
+
+      if (variant.price) {
+        const val = parseFloat(variant.price);
+        if (!isNaN(val)) {
+          variant.price = (val * exchangeRate).toFixed(2).toString();
+        }
+      }
+
+      if (variant.disCountPrice) {
+        const val = parseFloat(variant.disCountPrice);
+        if (!isNaN(val)) {
+          variant.disCountPrice = (val * exchangeRate).toFixed(2).toString();
+        }
+      }
+    }
+
+    if (product.name) {
+      if (typeof product.name === "object" && product.name !== null) {
+        product.name =
+          product.name[lang] || product.name.en || "Unnamed Product";
+      }
+    }
+
     let itemPrice = 0;
     if (item.variantId) {
       itemPrice = parseFloat(
-        item.variantId.disCountPrice || item.variantId.price || 0
+        item.variantId.disCountPrice || item.variantId.price || 0,
       );
     } else {
-      itemPrice = parseFloat(
-        item.productId.disCountPrice || item.productId.mainPrice || 0
-      );
+      itemPrice = parseFloat(product.disCountPrice || product.mainPrice || 0);
     }
+
     newSubTotal += itemPrice * item.quantity;
-  });
+  }
 
   cartObj.subTotal = parseFloat(newSubTotal.toFixed(2));
+  cartObj.currency = targetCurrency;
 
   return cartObj;
 };
