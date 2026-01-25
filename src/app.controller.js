@@ -19,7 +19,9 @@ import productTypeRouter from './modules/preference/controllers/productType.cont
 import profilsRouter from './modules/profiles/profile.controller.js';
 import cartRouter from './modules/cart/cart.controller.js';
 import walletRouter from './modules/wallet/wallet.controller.js';
-
+/////
+import adminRoutes from "./modules/adminPanel/admin.routes.js";
+/////
 import cors from "cors";
 // import checkoutController from "./modules/payments/checkout.controller.js"
 
@@ -45,6 +47,9 @@ export const bootstap = (app, express) => {
   app.use("/profiles", profilsRouter);
   app.use("/cart", cartRouter);
   app.use("/wallet", walletRouter);
+  ////
+  app.use("/dashboard", adminRoutes);
+  /////
   app.use(globalerror);
 };
 
