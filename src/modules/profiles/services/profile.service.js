@@ -3,15 +3,20 @@ import UserModel from "../../../DB/models/User.model.js";
 import { PreferredFlavorModel } from "../../../DB/models/preferredFlavor.model.js";
 import { FavoritePopgroupModel } from "../../../DB/models/favoritePopgroup.model.js";
 import { PreferredProductTypeModel } from "../../../DB/models/preferredProductType.model.js";
-import {generatehash} from "../../../utlis/security/hash.security.js";
+import {
+  generatehash,
+  comparehash,
+} from "../../../utlis/security/hash.security.js";
 import cloudinary from "cloudinary";
+import { sendemail } from "../../../utlis/email/sendemail.js";
+import { emailTemplates } from "../helpers/emailTempates.js";
 
 export const getMyProfile = asyncHandelr(async (req, res, next) => {
   const userId = req.user._id;
 
   const user = await UserModel.findById(userId)
     .select(
-      "-password -emailOTP -forgetpasswordOTP -attemptCount -otpExpiresAt -blockUntil -categories -status"
+      "-password -emailOTP -forgetpasswordOTP -attemptCount -otpExpiresAt -blockUntil -categories -status",
     )
     .populate({
       path: "preferredFlavor",
@@ -88,15 +93,15 @@ export const updateMyProfile = asyncHandelr(async (req, res, next) => {
       if (currentUser.profiePicture && currentUser.profiePicture.public_id) {
         try {
           await cloudinary.uploader.destroy(
-            currentUser.profiePicture.public_id
+            currentUser.profiePicture.public_id,
           );
           console.log(
-            `Deleted old profile picture: ${currentUser.profiePicture.public_id}`
+            `Deleted old profile picture: ${currentUser.profiePicture.public_id}`,
           );
         } catch (deleteError) {
           console.error(
             "Failed to delete old image from Cloudinary:",
-            deleteError
+            deleteError,
           );
         }
       }
@@ -108,14 +113,14 @@ export const updateMyProfile = asyncHandelr(async (req, res, next) => {
     } catch (uploadError) {
       console.error("Error uploading profile picture:", uploadError);
       return next(
-        new Error("Failed to upload profile picture", { cause: 500 })
+        new Error("Failed to upload profile picture", { cause: 500 }),
       );
     }
   }
 
   if (Object.keys(filteredUpdate).length === 0) {
     return next(
-      new Error("No valid fields provided for update", { cause: 400 })
+      new Error("No valid fields provided for update", { cause: 400 }),
     );
   }
 
@@ -124,7 +129,7 @@ export const updateMyProfile = asyncHandelr(async (req, res, next) => {
       filteredUpdate.preferredFlavor = null;
     } else {
       const flavorExists = await PreferredFlavorModel.findById(
-        filteredUpdate.preferredFlavor
+        filteredUpdate.preferredFlavor,
       );
       if (!flavorExists) {
         return next(new Error("Preferred flavor not found", { cause: 404 }));
@@ -137,7 +142,7 @@ export const updateMyProfile = asyncHandelr(async (req, res, next) => {
       filteredUpdate.favoritePopgroup = null;
     } else {
       const popgroupExists = await FavoritePopgroupModel.findById(
-        filteredUpdate.favoritePopgroup
+        filteredUpdate.favoritePopgroup,
       );
       if (!popgroupExists) {
         return next(new Error("Favorite popgroup not found", { cause: 404 }));
@@ -150,19 +155,34 @@ export const updateMyProfile = asyncHandelr(async (req, res, next) => {
       filteredUpdate.productType = null;
     } else {
       const productTypeExists = await PreferredProductTypeModel.findById(
-        filteredUpdate.productType
+        filteredUpdate.productType,
       );
       if (!productTypeExists) {
         return next(new Error("Product type not found", { cause: 404 }));
       }
     }
   }
-  if (filteredUpdate.password) {
-    filteredUpdate.password = generatehash(filteredUpdate.password);
-  }
 
   if (filteredUpdate.email && currentUser.email !== filteredUpdate.email) {
+    const emailOTP = Math.floor(100000 + Math.random() * 900000).toString();
+    const otpExpiresAt = new Date(Date.now() + 10 * 60 * 1000);
+
+    filteredUpdate.emailOTP = emailOTP;
+    filteredUpdate.otpExpiresAt = otpExpiresAt;
     filteredUpdate.isConfirmed = false;
+
+    const template = emailTemplates.emailVerification(
+      emailOTP,
+      currentUser.lang,
+      currentUser.fullName,
+    );
+
+    await sendemail({
+      to: [filteredUpdate.email],
+      subject: template.subject,
+      text: template.text,
+      html: template.html,
+    });
   }
 
   const updatedUser = await UserModel.findByIdAndUpdate(
@@ -173,7 +193,7 @@ export const updateMyProfile = asyncHandelr(async (req, res, next) => {
       runValidators: true,
       select:
         "-password -emailOTP -forgetpasswordOTP -attemptCount -otpExpiresAt -blockUntil",
-    }
+    },
   )
     .populate({
       path: "preferredFlavor",
@@ -215,7 +235,7 @@ export const removeProfilePicture = asyncHandelr(async (req, res, next) => {
     try {
       await cloudinary.uploader.destroy(currentUser.profiePicture.public_id);
       console.log(
-        `Deleted profile picture: ${currentUser.profiePicture.public_id}`
+        `Deleted profile picture: ${currentUser.profiePicture.public_id}`,
       );
     } catch (error) {
       console.error("Failed to delete image from Cloudinary:", error);
@@ -231,7 +251,7 @@ export const removeProfilePicture = asyncHandelr(async (req, res, next) => {
       new: true,
       select:
         "-password -emailOTP -forgetpasswordOTP -attemptCount -otpExpiresAt -blockUntil",
-    }
+    },
   )
     .populate({
       path: "preferredFlavor",
@@ -250,5 +270,143 @@ export const removeProfilePicture = asyncHandelr(async (req, res, next) => {
     success: true,
     message: "Profile picture removed successfully",
     data: updatedUser,
+  });
+});
+
+export const changePassword = asyncHandelr(async (req, res, next) => {
+  const userId = req.user._id;
+  const { oldPassword, newPassword } = req.body;
+
+  const user = await UserModel.findById(userId);
+  if (!user) {
+    return next(new Error("User not found", { cause: 404 }));
+  }
+
+  const isMatch = comparehash({
+    planText: oldPassword,
+    valuehash: user.password,
+  });
+  if (!isMatch) {
+    return next(new Error("Old password is incorrect", { cause: 400 }));
+  }
+
+  const hashedPassword = generatehash({ planText: newPassword });
+
+  user.password = hashedPassword;
+  await user.save();
+
+  res.status(200).json({
+    success: true,
+    message: "Password changed successfully",
+  });
+});
+
+export const confirmEmail = asyncHandelr(async (req, res, next) => {
+  const userId = req.user._id;
+  const { emailOTP } = req.body;
+
+  const user = await UserModel.findById(userId);
+  if (!user) {
+    return next(new Error("User not found", { cause: 404 }));
+  }
+
+  if (!user.emailOTP) {
+    return next(new Error("No pending email verification", { cause: 400 }));
+  }
+
+  if (user.emailOTP !== emailOTP) {
+    user.attemptCount = (user.attemptCount || 0) + 1;
+
+    if (user.attemptCount >= 5) {
+      user.blockUntil = new Date(Date.now() + 30 * 60 * 1000);
+      await user.save();
+      return next(
+        new Error("Too many failed attempts. Try again in 30 minutes", {
+          cause: 429,
+        }),
+      );
+    }
+
+    await user.save();
+    return next(new Error("Invalid verification code", { cause: 400 }));
+  }
+
+  if (user.otpExpiresAt && new Date() > user.otpExpiresAt) {
+    return next(new Error("Verification code has expired", { cause: 400 }));
+  }
+
+  user.isConfirmed = true;
+  user.emailOTP = null;
+  user.otpExpiresAt = null;
+  user.attemptCount = 0;
+  user.blockUntil = null;
+
+  await user.save();
+
+  const updatedUser = await UserModel.findById(userId)
+    .select(
+      "-password -emailOTP -forgetpasswordOTP -attemptCount -otpExpiresAt -blockUntil",
+    )
+    .populate({
+      path: "preferredFlavor",
+      select: "name.ar name.en",
+    })
+    .populate({
+      path: "favoritePopgroup",
+      select: "name.ar name.en image",
+    })
+    .populate({
+      path: "productType",
+      select: "name.ar name.en",
+    });
+
+  res.status(200).json({
+    success: true,
+    message: "Email confirmed successfully",
+    data: updatedUser,
+  });
+});
+
+export const resendConfirmEmail = asyncHandelr(async (req, res, next) => {
+  const userId = req.user._id;
+
+  const user = await UserModel.findById(userId);
+  if (!user) {
+    return next(new Error("User not found", { cause: 404 }));
+  }
+
+  if (!user.email) {
+    return next(new Error("Email not found for this user", { cause: 400 }));
+  }
+
+  if (user.isConfirmed) {
+    return next(new Error("Email is already confirmed", { cause: 400 }));
+  }
+
+  const emailOTP = Math.floor(100000 + Math.random() * 900000).toString();
+  const otpExpiresAt = new Date(Date.now() + 10 * 60 * 1000);
+
+  user.emailOTP = emailOTP;
+  user.otpExpiresAt = otpExpiresAt;
+  user.attemptCount = 0;
+  user.blockUntil = null;
+  await user.save();
+
+  const template = emailTemplates.emailVerification(
+    emailOTP,
+    user.lang,
+    user.fullName,
+  );
+
+  await sendemail({
+    to: [user.email],
+    subject: template.subject,
+    text: template.text,
+    html: template.html,
+  });
+
+  res.status(200).json({
+    success: true,
+    message: "Verification code sent to your email",
   });
 });

@@ -5617,9 +5617,9 @@ export const deleteCoupon = asyncHandelr(async (req, res, next) => {
 
 export const createAdminCoupon = asyncHandelr(async (req, res, next) => {
   const {
-    code, // اختياري: لو مش بعته، هيتولد تلقائيًا
-    discountType, // "percentage" أو "fixed"
-    discountValue, // رقم (1-100 للنسبة، أي رقم للثابت)
+    code,
+    discountType, 
+    discountValue, 
     appliesTo, // "single_product" أو "category" أو "all_products"
     productId, // مطلوب لو appliesTo = single_product
     categoryId, // مطلوب لو appliesTo = category
@@ -5701,7 +5701,7 @@ export const createAdminCoupon = asyncHandelr(async (req, res, next) => {
 
     const category = await CategoryModel.findOne({
       _id: categoryId,
-      isActive: true, // افتراضيًا، لو عندك حقل isActive في الفئات
+      isActive: true,
     });
 
     if (!category) {
@@ -5709,23 +5709,19 @@ export const createAdminCoupon = asyncHandelr(async (req, res, next) => {
     }
   }
 
-  // ✅ توليد كود الكوبون (لو مش بعته)
   let couponCode = code?.trim().toUpperCase();
   if (!couponCode) {
-    // توليد كود عشوائي فريد: ADMIN-XXXXXX
     const randomPart = Math.random().toString(36).substring(2, 8).toUpperCase();
     couponCode = `ADMIN-${randomPart}`;
   }
 
-  // ✅ التحقق من عدم تكرار الكود
   const existingCoupon = await CouponModel.findOne({ code: couponCode });
   if (existingCoupon) {
     return next(
-      new Error("❌ كود الكوبون مستخدم بالفعل، جرب كود آخر", { cause: 409 }),
+      new Error(" كود الكوبون مستخدم بالفعل، جرب كود آخر", { cause: 409 }),
     );
   }
 
-  // ✅ تحويل expiryDate إلى Date لو موجود
   let parsedExpiryDate = null;
   if (expiryDate) {
     parsedExpiryDate = new Date(expiryDate);
@@ -5741,7 +5737,6 @@ export const createAdminCoupon = asyncHandelr(async (req, res, next) => {
     }
   }
 
-  // ✅ إنشاء الكوبون (بدون vendorId)
   const coupon = await CouponModel.create({
     code: couponCode,
     discountType,
@@ -5749,7 +5744,7 @@ export const createAdminCoupon = asyncHandelr(async (req, res, next) => {
     appliesTo,
     productId: appliesTo === "single_product" ? productId : null,
     categoryId: appliesTo === "category" ? categoryId : null,
-    vendorId: null, // للأدمن
+    vendorId: null,
     maxUses: Math.max(1, Number(maxUses)),
     usesCount: 0,
     expiryDate: parsedExpiryDate,

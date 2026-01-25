@@ -24,16 +24,24 @@ const getPayoneerConfig = () => {
     : PAYONEER_CONFIG.sandbox;
 };
 
+export const a7a = (req, res, next) => {
+  return res.status(201).json({
+    success: true,
+    message: "test a7a funciotn",
+    data: req.user,
+  });
+};
+
 export const checkout = asyncHandelr(async (req, res, next) => {
   try {
     const userId = req.user._id;
-    const { shippingAddressId , couponCode } = req.body;
+    const { shippingAddressId, couponCode } = req.body;
 
     const order = await createOrderforUser(
       userId,
       shippingAddressId,
       "cash_on_delivery",
-      couponCode
+      couponCode,
       // taxAmount, shippingAmount, etc. i will do them with aramex and coupon
     );
 
@@ -139,15 +147,15 @@ export const checkout = asyncHandelr(async (req, res, next) => {
   } catch (error) {
     console.error(
       "Checkout endpoint error:",
-      error.response?.data || error.message
+      error.response?.data || error.message,
     );
 
     if (error.response) {
       return next(
         new Error(
           `Payoneer API Error: ${JSON.stringify(error.response.data)}`,
-          { cause: error.response.status }
-        )
+          { cause: error.response.status },
+        ),
       );
     } else if (error.request) {
       return next(new Error("No response from Payoneer API", { cause: 502 }));

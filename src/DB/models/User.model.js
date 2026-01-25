@@ -71,6 +71,7 @@ const userSchema = new Schema(
     productType: { type: mongoose.Schema.Types.ObjectId },
 
     role: { type: String },
+    // const user = req.user 
     isConfirmed: { type: Boolean, default: false },
     carNumber: { type: Number, default: 0 },
     // isAgree: { type: Boolean, default: false },
