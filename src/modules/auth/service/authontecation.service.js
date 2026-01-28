@@ -5620,26 +5620,25 @@ export const createAdminCoupon = asyncHandelr(async (req, res, next) => {
     code,
     discountType, 
     discountValue, 
-    appliesTo, // "single_product" أو "category" أو "all_products"
-    productId, // مطلوب لو appliesTo = single_product
-    categoryId, // مطلوب لو appliesTo = category
-    maxUses = 1, // عدد الاستخدامات (default 1)
-    expiryDate, // تاريخ الانتهاء (ISO string)
-    isActive = true, // حالة التفعيل
+    appliesTo, 
+    productId, 
+    categoryId,
+    maxUses = 1,
+    expiryDate, 
+    isActive = true, 
   } = req.body;
 
-  // ✅ التحقق من وجود توكن وأدمن مسجل دخول
   if (!req.user) {
     return next(new Error("you have to login first", { cause: 401 }));
   }
 
   if (req.user.accountType !== "Admin") {
-    return next(new Error("you are not admin", { cause: 403 }));
+    return next(new Error("you dont have a privilege", { cause: 403 }));
   }
 
   if (!discountType || !["percentage", "fixed"].includes(discountType)) {
     return next(
-      new Error("❌ نوع الخصم مطلوب ويجب أن يكون percentage أو fixed", {
+      new Error("discount type is required and should be percentage or fixed", {
         cause: 400,
       }),
     );
@@ -5647,13 +5646,13 @@ export const createAdminCoupon = asyncHandelr(async (req, res, next) => {
 
   if (!discountValue || isNaN(discountValue) || Number(discountValue) <= 0) {
     return next(
-      new Error("❌ قيمة الخصم مطلوبة ويجب أن تكون رقم موجب", { cause: 400 }),
+      new Error("discount value is required and should be postive number", { cause: 400 }),
     );
   }
 
   if (discountType === "percentage" && Number(discountValue) > 100) {
     return next(
-      new Error("❌ النسبة المئوية لا يمكن أن تتجاوز 100%", { cause: 400 }),
+      new Error("discount value should be less than 100% because it's percentage", { cause: 400 }),
     );
   }
 
@@ -5663,49 +5662,47 @@ export const createAdminCoupon = asyncHandelr(async (req, res, next) => {
   ) {
     return next(
       new Error(
-        "❌ appliesTo مطلوب ويجب أن يكون single_product أو category أو all_products",
+        "appliesTo required and should be single_product or category or all_products",
         { cause: 400 },
       ),
     );
   }
 
-  // ✅ لو الكوبون على منتج واحد → تحقق من المنتج (بدون قيد البائع)
   if (appliesTo === "single_product") {
     if (!productId) {
       return next(
-        new Error("❌ productId مطلوب عند اختيار single_product", {
+        new Error("productId is required in case single_product", {
           cause: 400,
         }),
       );
     }
 
-    const product = await ProductModel.findOne({
+    const product = await ProductModellll.findOne({
       _id: productId,
       isActive: true,
     });
 
     if (!product) {
-      return next(new Error("❌ المنتج غير موجود", { cause: 404 }));
+      return next(new Error("product not found", { cause: 404 }));
     }
   }
 
-  // ✅ لو الكوبون على فئة → تحقق من الفئة
   if (appliesTo === "category") {
     if (!categoryId) {
       return next(
-        new Error("❌ categoryId مطلوب عند اختيار category", {
+        new Error("categoryId is required in case category", {
           cause: 400,
         }),
       );
     }
 
-    const category = await CategoryModel.findOne({
+    const category = await CategoryModellll.findOne({
       _id: categoryId,
       isActive: true,
     });
 
     if (!category) {
-      return next(new Error("❌ الفئة غير موجودة", { cause: 404 }));
+      return next(new Error("category not found", { cause: 404 }));
     }
   }
 
@@ -5718,7 +5715,7 @@ export const createAdminCoupon = asyncHandelr(async (req, res, next) => {
   const existingCoupon = await CouponModel.findOne({ code: couponCode });
   if (existingCoupon) {
     return next(
-      new Error(" كود الكوبون مستخدم بالفعل، جرب كود آخر", { cause: 409 }),
+      new Error("this code is already used", { cause: 409 }),
     );
   }
 
@@ -5726,11 +5723,11 @@ export const createAdminCoupon = asyncHandelr(async (req, res, next) => {
   if (expiryDate) {
     parsedExpiryDate = new Date(expiryDate);
     if (isNaN(parsedExpiryDate.getTime())) {
-      return next(new Error("❌ تاريخ الانتهاء غير صالح", { cause: 400 }));
+      return next(new Error("expiry date is not valid", { cause: 400 }));
     }
     if (parsedExpiryDate < new Date()) {
       return next(
-        new Error("❌ تاريخ الانتهاء لا يمكن أن يكون في الماضي", {
+        new Error("expiry date could not be in the past", {
           cause: 400,
         }),
       );
@@ -5753,29 +5750,28 @@ export const createAdminCoupon = asyncHandelr(async (req, res, next) => {
 
   res.status(201).json({
     success: true,
-    message: "تم إنشاء كوبون الخصم بنجاح ✅",
+    message: "the coupon code created successfully",
     data: coupon,
   });
 });
 
 export const getAdminCoupons = asyncHandelr(async (req, res, next) => {
-  // ✅ التحقق من توكن وأدمن
   if (!req.user || req.user.accountType !== "Admin") {
-    return next(new Error("❌ غير مصرح لك بعرض الكوبونات", { cause: 401 }));
+    return next(new Error("you have not privilage to see admin coupons", { cause: 401 }));
   }
 
   const {
     page = 1,
     limit = 10,
-    isActive, // true / false
-    expired, // true للمنتهية، false للغير منتهية
+    isActive, 
+    expired,
   } = req.query;
 
   const pageNum = Math.max(1, parseInt(page) || 1);
   const limitNum = Math.min(50, Math.max(1, parseInt(limit) || 10));
   const skip = (pageNum - 1) * limitNum;
 
-  let filter = { vendorId: null }; // كوبونات الأدمن فقط
+  let filter = { vendorId: null };
 
   if (isActive !== undefined) {
     filter.isActive = isActive === "true" || isActive === true;
@@ -5797,7 +5793,7 @@ export const getAdminCoupons = asyncHandelr(async (req, res, next) => {
     })
     .populate({
       path: "categoryId",
-      select: "name", // افتراضيًا، حسب حقول الفئة
+      select: "name",
     })
     .sort({ createdAt: -1 })
     .skip(skip)
@@ -5846,7 +5842,6 @@ export const getAdminCoupons = asyncHandelr(async (req, res, next) => {
     hasPrev: pageNum > 1,
   };
 
-  // ✅ حساب الإحصائيات العامة
   const stats = await CouponModel.aggregate([
     { $match: { vendorId: null } },
     {
@@ -5884,7 +5879,7 @@ export const getAdminCoupons = asyncHandelr(async (req, res, next) => {
 
   res.status(200).json({
     success: true,
-    message: "تم جلب كوبونات الأدمن بنجاح ",
+    message: "the coupons retrived successfully",
     summary: {
       totalCoupons: couponStats.totalCoupons,
       activeCoupons: couponStats.activeCoupons,
@@ -5900,14 +5895,12 @@ export const getAdminCoupons = asyncHandelr(async (req, res, next) => {
 export const getAdminCouponDetails = asyncHandelr(async (req, res, next) => {
   const { couponId } = req.params;
 
-  // ✅ التحقق من توكن وأدمن
   if (!req.user || req.user.accountType !== "Admin") {
     return next(
-      new Error("❌ غير مصرح لك بعرض تفاصيل الكوبون", { cause: 401 }),
+      new Error("you dont have a privilege", { cause: 401 }),
     );
   }
 
-  // جلب الكوبون مع التحقق من أنه للأدمن (vendorId: null)
   const coupon = await CouponModel.findOne({
     _id: couponId,
     vendorId: null,
@@ -5924,10 +5917,9 @@ export const getAdminCouponDetails = asyncHandelr(async (req, res, next) => {
     .lean();
 
   if (!coupon) {
-    return next(new Error("❌ الكوبون غير موجود", { cause: 404 }));
+    return next(new Error("coupon not found", { cause: 404 }));
   }
 
-  // تنسيق الكوبون
   const formattedCoupon = {
     _id: coupon._id,
     code: coupon.code,
@@ -5961,7 +5953,6 @@ export const getAdminCouponDetails = asyncHandelr(async (req, res, next) => {
     updatedAt: coupon.updatedAt,
   };
 
-  // ✅ حساب الإحصائيات العامة (للكوبون الواحد)
   const stats = await CouponModel.aggregate([
     { $match: { _id: coupon._id } },
     {
@@ -5999,7 +5990,7 @@ export const getAdminCouponDetails = asyncHandelr(async (req, res, next) => {
 
   res.status(200).json({
     success: true,
-    message: "تم جلب تفاصيل الكوبون بنجاح ",
+    message: "the coupon retrived successfully",
     summary: {
       totalCoupons: couponStats.totalCoupons,
       activeCoupons: couponStats.activeCoupons,
@@ -6016,7 +6007,7 @@ export const updateAdminCoupon = asyncHandelr(async (req, res, next) => {
     req.body;
 
   if (!req.user || req.user.accountType !== "Admin") {
-    return next(new Error("❌ غير مصرح لك بتعديل الكوبونات", { cause: 401 }));
+    return next(new Error("you dont have a privilege", { cause: 401 }));
   }
 
   const coupon = await CouponModel.findOne({
@@ -6025,10 +6016,9 @@ export const updateAdminCoupon = asyncHandelr(async (req, res, next) => {
   });
 
   if (!coupon) {
-    return next(new Error("❌ الكوبون غير موجود", { cause: 404 }));
+    return next(new Error("coupon not found", { cause: 404 }));
   }
 
-  // تحديث الكود (مع فحص التكرار)
   if (code) {
     const trimmedCode = code.trim().toUpperCase();
     const codeExists = await CouponModel.findOne({
@@ -6036,14 +6026,14 @@ export const updateAdminCoupon = asyncHandelr(async (req, res, next) => {
       _id: { $ne: couponId },
     });
     if (codeExists) {
-      return next(new Error("❌ كود الكوبون مستخدم بالفعل", { cause: 409 }));
+      return next(new Error("the coupon code is already used", { cause: 409 }));
     }
     coupon.code = trimmedCode;
   }
 
   if (discountType) {
     if (!["percentage", "fixed"].includes(discountType)) {
-      return next(new Error("❌ نوع الخصم غير صحيح", { cause: 400 }));
+      return next(new Error("discount type should be percentage or fixed", { cause: 400 }));
     }
     coupon.discountType = discountType;
   }
@@ -6052,12 +6042,12 @@ export const updateAdminCoupon = asyncHandelr(async (req, res, next) => {
     const value = Number(discountValue);
     if (isNaN(value) || value <= 0) {
       return next(
-        new Error("❌ قيمة الخصم يجب أن تكون رقم موجب", { cause: 400 }),
+        new Error("discount value should be positive number", { cause: 400 }),
       );
     }
     if (coupon.discountType === "percentage" && value > 100) {
       return next(
-        new Error("❌ النسبة لا يمكن أن تتجاوز 100%", { cause: 400 }),
+        new Error("discount value should be less than 100% because it's percentage", { cause: 400 }),
       );
     }
     coupon.discountValue = value;
@@ -6068,7 +6058,7 @@ export const updateAdminCoupon = asyncHandelr(async (req, res, next) => {
     if (isNaN(uses) || uses < coupon.usesCount) {
       return next(
         new Error(
-          `❌ عدد الاستخدامات لا يمكن أن يكون أقل من المستخدم بالفعل (${coupon.usesCount})`,
+          `The number of uses cannot be less than what is actually used(${coupon.usesCount})`,
           { cause: 400 },
         ),
       );
@@ -6082,7 +6072,7 @@ export const updateAdminCoupon = asyncHandelr(async (req, res, next) => {
     } else {
       const date = new Date(expiryDate);
       if (isNaN(date.getTime())) {
-        return next(new Error("❌ تاريخ الانتهاء غير صالح", { cause: 400 }));
+        return next(new Error("expiry date is not valid", { cause: 400 }));
       }
       coupon.expiryDate = date;
     }
@@ -6096,7 +6086,7 @@ export const updateAdminCoupon = asyncHandelr(async (req, res, next) => {
 
   res.status(200).json({
     success: true,
-    message: "تم تعديل الكوبون بنجاح ✅",
+    message: "the coupon was updated successfully",
     data: coupon,
   });
 });
@@ -6104,27 +6094,24 @@ export const updateAdminCoupon = asyncHandelr(async (req, res, next) => {
 export const deleteAdminCoupon = asyncHandelr(async (req, res, next) => {
   const { couponId } = req.params;
 
-  // ✅ التحقق من توكن وأدمن
   if (!req.user || req.user.accountType !== "Admin") {
-    return next(new Error("❌ غير مصرح لك بحذف الكوبونات", { cause: 401 }));
+    return next(new Error("you dont have a privilege", { cause: 401 }));
   }
 
-  // جلب الكوبون مع التحقق من أنه للأدمن
   const coupon = await CouponModel.findOne({
     _id: couponId,
     vendorId: null,
   });
 
   if (!coupon) {
-    return next(new Error("❌ الكوبون غير موجود", { cause: 404 }));
+    return next(new Error("coupon not found ", { cause: 404 }));
   }
 
-  // حذف نهائي من الداتابيز
   await CouponModel.findByIdAndDelete(couponId);
 
   res.status(200).json({
     success: true,
-    message: "تم حذف الكوبون نهائيًا بنجاح ✅",
+    message: "the coupon was deleted successfully",
     data: {
       _id: coupon._id,
       code: coupon.code,

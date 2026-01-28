@@ -33,7 +33,7 @@ const couponSchema = new mongoose.Schema({
     },
     categoryId: {
         type: mongoose.Schema.Types.ObjectId,
-        ref: "Category",
+        ref: "Categoryyyy",
         required: function () {
             return this.appliesTo === "category";
         }

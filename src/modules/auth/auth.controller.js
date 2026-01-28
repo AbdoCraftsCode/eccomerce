@@ -534,9 +534,9 @@ routr.get("/getCustomersWithOrders", authentication(), getCustomersWithOrders)
 
 routr.post("/createAdminCoupon", authentication(), createAdminCoupon)
 routr.get("/getAdminCoupons", authentication(), getAdminCoupons)
-routr.get("/getAdminCouponDetails", authentication(), getAdminCouponDetails)
-routr.put("/updateAdminCoupon", authentication(), updateAdminCoupon)
-routr.delete("/deleteAdminCoupon", authentication(), deleteAdminCoupon)
+routr.get("/getAdminCouponDetails/:couponId", authentication(), getAdminCouponDetails)
+routr.put("/updateAdminCoupon/:couponId", authentication(), updateAdminCoupon)
+routr.delete("/deleteAdminCoupon/:couponId", authentication(), deleteAdminCoupon)
 
 
 // this endpoint will ignored 
