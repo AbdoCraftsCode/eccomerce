@@ -1,7 +1,7 @@
 import express from "express";
 import { getDashboardStats } from "./admin.controller.js";
 import { getAllCustomers } from "./orders/orders.controller.js";
-import { getLatestOrders } from "./orders/orders.controller.js";
+import { getAllOrders } from "./orders/orders.controller.js";
 import { getSubOrdersByOrderId } from "./orders/orders.controller.js";
 import { getAllSubOrders } from "./orders/orders.controller.js";
 import { getPaymentStatusStats } from "./orders/orders.controller.js";
@@ -19,7 +19,7 @@ const router = express.Router();
 
 router.get("/homePage",authentication() , getDashboardStats);
 router.get("/customers", authentication() , getAllCustomers);
-router.get("/latestOrders",authentication() , getLatestOrders);
+router.get("/allOrders",authentication() , getAllOrders);
 router.get("/subOrdersById/:orderId",authentication(), getSubOrdersByOrderId);
 router.get("/subOrders", authentication() ,getAllSubOrders);
 router.get("/paymentStatus", authentication() , getPaymentStatusStats);

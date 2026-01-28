@@ -1,6 +1,6 @@
 import { asyncHandelr } from "../../../utlis/response/error.response.js";
 import { getAllCustomersService } from "./orders.service.js";
-import { getLatestOrdersService } from "./orders.service.js";
+import { getAllOrdersService  } from "./orders.service.js";
 import { getSubOrdersByOrderIdService } from "./orders.service.js";
 import { getAllSubOrdersService } from "./orders.service.js";
 import { getPaymentStatusStatsService } from "./orders.service.js";
@@ -17,17 +17,18 @@ export const getAllCustomers = asyncHandelr(async (req, res) => {
   });
 });
 //----------------------------------------------------------------------------
-export const getLatestOrders = asyncHandelr(async (req, res) => {
-    const { limit = 10 } = req.query;
-  
-    const orders = await getLatestOrdersService(limit);
-  
-    res.status(200).json({
-      success: true,
-      count: orders.length,
-      data: orders,
-    });
+export const getAllOrders = asyncHandelr(async (req, res) => {
+  if (req.user.accountType !== "Admin") {
+    throw new Error("Only admin");
+}
+  const result = await getAllOrdersService(req.query);
+
+  res.status(200).json({
+    success: true,
+    message: "Orders fetched successfully",
+    ...result,
   });
+});
 //-----------------------------------------------------------------------------------
 export const getSubOrdersByOrderId = asyncHandelr(async (req, res, next) => {
   if (req.user.accountType !== "Admin") {

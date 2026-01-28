@@ -67,58 +67,59 @@ export const getAllCustomersService = async () => {
       ]);
     };
     //---------------------------------------------------------------------------------------------
-    export const getLatestOrdersService = async (limit = 10) => {
-        return await OrderModelUser.aggregate([
-          // 1️⃣ Sort latest first
-          {
-            $sort: { createdAt: -1 },
-          },
-      
-          // 2️⃣ Limit results
-          {
-            $limit: Number(limit),
-          },
-      
-          // 3️⃣ Join customer data
-          {
-            $lookup: {
-              from: "users", // ⚠️ collection name
-              localField: "customerId",
-              foreignField: "_id",
-              as: "customer",
-            },
-          },
-      
-          // 4️⃣ Unwind customer
-          {
-            $unwind: "$customer",
-          },
-      
-          // 5️⃣ Add number of subOrders
-          {
-            $addFields: {
-              subOrdersCount: {
-                $size: { $ifNull: ["$items", []] },
-              },
-            },
-          },
-      
-          // 6️⃣ Select required fields only
-          {
-            $project: {
-              orderNumber: 1,
-              createdAt: 1,
-              totalAmount: 1,
-              paymentStatus: 1,
-              shippingStatus: 1,
-              subOrdersCount: 1,
-              "customer._id": 1,
-              "customer.name": 1,
-              "customer.email": 1,
-            },
-          },
-        ]);
+    export const getAllOrdersService = async (query) => {
+      const {
+        paymentStatus,
+        shippingStatus,
+        fromDate,
+        page = 1,
+        limit = 10,
+      } = query;
+    
+      const pageNum = Math.max(1, parseInt(page));
+      const limitNum = Math.min(100, Math.max(1, parseInt(limit)));
+      const skip = (pageNum - 1) * limitNum;
+    
+      // 🔹 Build dynamic filter
+      const filter = {};
+    
+      if (paymentStatus) {
+        filter.paymentStatus = paymentStatus;
+      }
+    
+      if (shippingStatus) {
+        filter.shippingStatus = shippingStatus;
+      }
+    
+      if (fromDate) {
+        filter.createdAt = {
+          $gte: new Date(fromDate),
+        };
+      }
+    
+      // 🔹 Fetch orders + count
+      const [orders, total] = await Promise.all([
+        OrderModelUser.find(filter)
+          .populate("customerId", "name email")
+          .sort({ createdAt: -1 })
+          .skip(skip)
+          .limit(limitNum)
+          .lean(),
+    
+        OrderModelUser.countDocuments(filter),
+      ]);
+    
+      return {
+        count: orders.length,
+        pagination: {
+          currentPage: pageNum,
+          totalPages: Math.ceil(total / limitNum),
+          totalItems: total,
+          itemsPerPage: limitNum,
+        },
+        data: orders,
       };
+    };
 //==============================================================================
 export const getSubOrdersByOrderIdService = async (orderId) => {
   return await SubOrderModel.find({ orderId })
@@ -245,25 +246,47 @@ export const getSubOrdersByVendorIdService = async (vendorId, query) => {
     throw new Error("Vendor ID is required");
   }
 
-  const page = Math.max(1, parseInt(query.page) || 1);
-  const limit = Math.min(100, Math.max(1, parseInt(query.limit) || 10));
-  const skip = (page - 1) * limit;
+  const {
+    paymentStatus,
+    shippingStatus,
+    fromDate,
+    page = 1,
+    limit = 10,
+  } = query;
 
-  const filter = {
-    vendorId,
-  };
+  const pageNum = Math.max(1, parseInt(page));
+  const limitNum = Math.min(100, Math.max(1, parseInt(limit)));
+  const skip = (pageNum - 1) * limitNum;
 
+  // 🔹 Build dynamic filter
+  const filter = { vendorId };
+
+  if (paymentStatus) {
+    filter.paymentStatus = paymentStatus;
+  }
+
+  if (shippingStatus) {
+    filter.shippingStatus = shippingStatus;
+  }
+
+  if (fromDate) {
+    filter.createdAt = {
+      $gte: new Date(fromDate),
+    };
+  }
+
+  // 🔹 Fetch suborders + count
   const [subOrders, total] = await Promise.all([
     SubOrderModel.find(filter)
-      .populate("orderId", "orderNumber createdAt paymentStatus")
+      .populate("orderId", "orderNumber createdAt paymentStatus shippingStatus")
       .populate({
-        path: "items.productId",  // ✅ nested populate
-        select: "name mainPrice", // choose the fields you want
+        path: "items.productId", // nested populate inside items array
+        select: "name mainPrice",
         model: "Producttttt",
       })
       .sort({ createdAt: -1 })
       .skip(skip)
-      .limit(limit)
+      .limit(limitNum)
       .lean(),
 
     SubOrderModel.countDocuments(filter),
@@ -272,11 +295,12 @@ export const getSubOrdersByVendorIdService = async (vendorId, query) => {
   return {
     count: subOrders.length,
     pagination: {
-      currentPage: page,
-      totalPages: Math.ceil(total / limit),
+      currentPage: pageNum,
+      totalPages: Math.ceil(total / limitNum),
       totalItems: total,
-      itemsPerPage: limit,
+      itemsPerPage: limitNum,
     },
     data: subOrders,
   };
 };
+//============================================
