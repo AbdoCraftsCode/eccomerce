@@ -5633,7 +5633,7 @@ export const createAdminCoupon = asyncHandelr(async (req, res, next) => {
     return next(new Error("you have to login first", { cause: 401 }));
   }
 
-  if (req.user.accountType !== "admin") {
+  if (req.user.accountType !== "Admin") {
     return next(new Error("you are not admin", { cause: 403 }));
   }
 
@@ -5760,7 +5760,7 @@ export const createAdminCoupon = asyncHandelr(async (req, res, next) => {
 
 export const getAdminCoupons = asyncHandelr(async (req, res, next) => {
   // ✅ التحقق من توكن وأدمن
-  if (!req.user || req.user.accountType !== "admin") {
+  if (!req.user || req.user.accountType !== "Admin") {
     return next(new Error("❌ غير مصرح لك بعرض الكوبونات", { cause: 401 }));
   }
 
@@ -5901,7 +5901,7 @@ export const getAdminCouponDetails = asyncHandelr(async (req, res, next) => {
   const { couponId } = req.params;
 
   // ✅ التحقق من توكن وأدمن
-  if (!req.user || req.user.accountType !== "admin") {
+  if (!req.user || req.user.accountType !== "Admin") {
     return next(
       new Error("❌ غير مصرح لك بعرض تفاصيل الكوبون", { cause: 401 }),
     );
@@ -6015,7 +6015,7 @@ export const updateAdminCoupon = asyncHandelr(async (req, res, next) => {
   const { code, discountType, discountValue, maxUses, expiryDate, isActive } =
     req.body;
 
-  if (!req.user || req.user.accountType !== "admin") {
+  if (!req.user || req.user.accountType !== "Admin") {
     return next(new Error("❌ غير مصرح لك بتعديل الكوبونات", { cause: 401 }));
   }
 
@@ -6105,7 +6105,7 @@ export const deleteAdminCoupon = asyncHandelr(async (req, res, next) => {
   const { couponId } = req.params;
 
   // ✅ التحقق من توكن وأدمن
-  if (!req.user || req.user.accountType !== "admin") {
+  if (!req.user || req.user.accountType !== "Admin") {
     return next(new Error("❌ غير مصرح لك بحذف الكوبونات", { cause: 401 }));
   }
 
