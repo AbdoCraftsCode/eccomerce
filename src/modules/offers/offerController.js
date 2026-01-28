@@ -27,7 +27,7 @@ router.get(
 );
 
 router.put(
-  "/:offerId",
+  "/update/:offerId",
   authentication(),
   offerUploadMiddleware,
   validation(offerValidators.updateOfferValidation),
