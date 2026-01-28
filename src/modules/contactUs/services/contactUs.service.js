@@ -117,7 +117,7 @@ export const getChatById = asyncHandelr(async (req, res, next) => {
 
   let chat;
 
-  if (req.user.accountType === "admin") {
+  if (req.user.accountType === "Admin") {
     chat = await ContactChatModel.findById(chatId)
       .populate({
         path: "user",

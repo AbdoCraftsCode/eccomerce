@@ -23,6 +23,7 @@ import walletRouter from './modules/wallet/wallet.controller.js';
 import adminRoutes from "./modules/adminPanel/admin.routes.js";
 import searchRoutes from "./modules/search/search.controller.js";
 import faqRoutes from "./modules/faq/faqController.js";
+import offersRoutes from "./modules/offers/offerController.js";
 /////
 import cors from "cors";
 // import checkoutController from "./modules/payments/checkout.controller.js"
@@ -53,6 +54,7 @@ export const bootstap = (app, express) => {
   app.use("/dashboard", adminRoutes);
   app.use("/search", searchRoutes);
   app.use("/faq", faqRoutes);
+  app.use("/offers", offersRoutes);
   /////
   app.use(globalerror);
 };
