@@ -10,9 +10,16 @@ import { getSellerAndProductStats } from "./sellsers/sellers.controller.js";
 import { getLastMonthSalesStats } from "./sellsers/sellers.controller.js";
 import { acceptedSellers } from "./sellsers/sellers.controller.js";
 import { getLatestSellers } from "./sellsers/sellers.controller.js";
+import { getSalesByCategoryAllVendors } from "./sellsers/sellers.controller.js";
 import { getAcceptedVendorById, getRefusedVendorById } from "./sellsers/sellers.controller.js";
-import { getSubOrdersByVendorId} from "./orders/orders.controller.js";
+import { getSubOrdersByVendorId} from "./vendors/vendors.controller.js";
+import { getLastMonthSalesAndOrders} from "./orders/orders.controller.js";
 import { authentication, authorization } from "../../middlewere/authontcation.middlewere.js";
+// VENDORS ROUTES
+import { getCustomersForVendor } from "./vendors/vendors.controller.js";
+import { getDailyVendorStats } from "./vendors/vendors.controller.js";
+import { getMonthlyVendorStats } from "./vendors/vendors.controller.js";
+import { getVendorOverallStats } from "./vendors/vendors.controller.js";
 
 
 const router = express.Router();
@@ -31,7 +38,15 @@ router.get("/sellersWithCategory", authentication() , acceptedSellers);
 router.get("/latestSellers", authentication() , getLatestSellers);
 router.get("/accepted/:vendorId", authentication(),getAcceptedVendorById);
 router.get("/refused/:vendorId", authentication(), getRefusedVendorById);
+router.get("/getstatByVendorId",authentication() ,getLastMonthSalesAndOrders );
+router.get("/salseOfCategory", getSalesByCategoryAllVendors);
+// VENDOR ROUTIES
+router.get("/getCustomersByVendor",authentication() ,getCustomersForVendor );
+router.get("/homeDailyStatsForVendor", authentication(), getDailyVendorStats);
+router.get("/homeMonthlyStatsForVendor", authentication(), getMonthlyVendorStats);
 router.get("/getSubOrdersByVendorId",authentication() ,getSubOrdersByVendorId );
+router.get("/vedorStatistics", authentication(), getVendorOverallStats);
+
 
 
 

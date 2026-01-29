@@ -4,7 +4,8 @@ import { getAllOrdersService  } from "./orders.service.js";
 import { getSubOrdersByOrderIdService } from "./orders.service.js";
 import { getAllSubOrdersService } from "./orders.service.js";
 import { getPaymentStatusStatsService } from "./orders.service.js";
-import { getSubOrdersByVendorIdService } from "./orders.service.js";
+import { getLastMonthSalesAndOrdersService  } from "./orders.service.js";
+import { getCustomersByVendorService  } from "./orders.service.js";
 import { getLastDayPaymentStatsService ,getLastMonthPaymentStatsService  } from "./orders.service.js";
 
 export const getAllCustomers = asyncHandelr(async (req, res) => {
@@ -108,16 +109,29 @@ export const getMonthlyPaymentStats = asyncHandelr(async (req, res) => {
 });
 
 //====================================
-export const getSubOrdersByVendorId = asyncHandelr(async (req, res) => {
-   const  vendorId  = req.user._id;
-   if (req.user.accountType !== "vendor") {
-    throw new Error("Only vendors");
-}
-  const result = await getSubOrdersByVendorIdService(vendorId, req.query);
+
+//=======================
+export const getLastMonthSalesAndOrders = asyncHandelr(async (req, res) => {
+  const vendorId = req.user._id; // current vendor
+
+  const stats = await getLastMonthSalesAndOrdersService(vendorId);
 
   res.status(200).json({
     success: true,
-    message: "Suborders fetched successfully",
-    ...result,
+    message: "Last month sales and orders fetched successfully",
+    data: stats,
+  });
+});
+//==========================
+export const getCustomersByVendor = asyncHandelr(async (req, res) => {
+  const vendorId = req.user._id.toString();
+
+  const data = await getCustomersByVendorService(vendorId);
+
+  res.status(200).json({
+    success: true,
+    message: "Customers fetched successfully",
+    count: data.length,
+    data,
   });
 });

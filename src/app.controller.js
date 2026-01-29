@@ -55,6 +55,7 @@ export const bootstap = (app, express) => {
   app.use("/search", searchRoutes);
   app.use("/faq", faqRoutes);
   app.use("/offers", offersRoutes);
+  // app.use("/", offersRoutes);
   /////
   app.use(globalerror);
 };

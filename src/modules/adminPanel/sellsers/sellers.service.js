@@ -1,6 +1,7 @@
 import UserModel from "../../../DB/models/User.model.js";
 import { ProductModellll } from "../../../DB/models/productSchemaaaa.js";
 import { OrderModelUser } from "../../../DB/models/orderSchemaUser.model.js";
+import { SubOrderModel } from "../../../DB/models/subOrdersSchema.model.js";
 
 export const getSellerAndProductStatsService = async () => {
   const startOfMonth = new Date();
@@ -220,4 +221,53 @@ export const getAcceptedVendorByIdService = async (vendorId) => {
       ).select("name email status");
     
       return vendor;
+    };
+    //======================
+    export const getSalesByCategoryAllVendorsService = async () => {
+      const result = await SubOrderModel.aggregate([
+        {
+          $match: {
+            paymentStatus: "paid", // only consider paid orders
+          },
+        },
+        { $unwind: "$items" }, // flatten the items array
+        {
+          $lookup: {
+            from: "producttttts", // Product collection name
+            localField: "items.productId",
+            foreignField: "_id",
+            as: "product",
+          },
+        },
+        { $unwind: "$product" }, // each item now has product info
+        { $unwind: "$product.categories" }, // each product may belong to multiple categories
+        {
+          $group: {
+            _id: "$product.categories", // group by category
+            totalRevenue: { $sum: "$items.totalPrice" }, // sum of all items in that category
+            totalQuantity: { $sum: "$items.quantity" }, // total quantity sold
+          },
+        },
+        {
+          $lookup: {
+            from: "categoryyyy", // category collection
+            localField: "_id",
+            foreignField: "_id",
+            as: "category",
+          },
+        },
+        { $unwind: "$category" },
+        {
+          $project: {
+            _id: 0,
+            categoryId: "$category._id",
+            categoryName: "$category.name.en", // can switch to "ar"
+            totalRevenue: 1,
+            totalQuantity: 1,
+          },
+        },
+        { $sort: { totalRevenue: -1 } }, // sort categories by revenue
+      ]);
+    
+      return result;
     };

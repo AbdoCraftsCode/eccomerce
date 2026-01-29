@@ -3,6 +3,7 @@ import { getSellerAndProductStatsService } from "./sellers.service.js";
 import { getLastMonthSalesStatsService  } from "./sellers.service.js";
 import { getAcceptedSellersWithCategories  } from "./sellers.service.js";
 import { getLatestSellersService   } from "./sellers.service.js";
+import { getSalesByCategoryAllVendorsService  } from "./sellers.service.js";
 import { getAcceptedVendorByIdService, getRefusedVendorByIdService } from "./sellers.service.js";
 
 export const getSellerAndProductStats = asyncHandelr(async (req, res) => {
@@ -97,5 +98,15 @@ export const getAcceptedVendorById = asyncHandelr(async (req, res, next) => {
     res.status(200).json({
       success: true,
       data: vendor,
+    });
+  });
+  //===========================
+  export const getSalesByCategoryAllVendors = asyncHandelr(async (req, res) => {
+    const data = await getSalesByCategoryAllVendorsService();
+  
+    res.status(200).json({
+      success: true,
+      message: "Sales distribution by category (all vendors) fetched successfully",
+      data,
     });
   });

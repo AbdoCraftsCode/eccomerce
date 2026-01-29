@@ -1,3 +1,5 @@
+import mongoose from "mongoose";
+import { ObjectId } from "mongodb";
 import User from "../../../DB/models/User.model.js";
 import { OrderModelUser } from "../../../DB/models/orderSchemaUser.model.js";
 import { SubOrderModel } from "../../../DB/models/subOrdersSchema.model.js";
@@ -241,66 +243,102 @@ export const getLastMonthPaymentStatsService = async () => {
   ]);
 };
 //========================================================
-export const getSubOrdersByVendorIdService = async (vendorId, query) => {
-  if (!vendorId) {
-    throw new Error("Vendor ID is required");
-  }
 
-  const {
-    paymentStatus,
-    shippingStatus,
-    fromDate,
-    page = 1,
-    limit = 10,
-  } = query;
+//============================================
+export const getLastMonthSalesAndOrdersService = async (vendorId) => {
+  if (!vendorId) throw new Error("Vendor ID is required");
 
-  const pageNum = Math.max(1, parseInt(page));
-  const limitNum = Math.min(100, Math.max(1, parseInt(limit)));
-  const skip = (pageNum - 1) * limitNum;
+  // Calculate first and last day of last month
+  const now = new Date();
+  const firstDayLastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+  const lastDayLastMonth = new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59);
 
-  // 🔹 Build dynamic filter
-  const filter = { vendorId };
-
-  if (paymentStatus) {
-    filter.paymentStatus = paymentStatus;
-  }
-
-  if (shippingStatus) {
-    filter.shippingStatus = shippingStatus;
-  }
-
-  if (fromDate) {
-    filter.createdAt = {
-      $gte: new Date(fromDate),
-    };
-  }
-
-  // 🔹 Fetch suborders + count
-  const [subOrders, total] = await Promise.all([
-    SubOrderModel.find(filter)
-      .populate("orderId", "orderNumber createdAt paymentStatus shippingStatus")
-      .populate({
-        path: "items.productId", // nested populate inside items array
-        select: "name mainPrice",
-        model: "Producttttt",
-      })
-      .sort({ createdAt: -1 })
-      .skip(skip)
-      .limit(limitNum)
-      .lean(),
-
-    SubOrderModel.countDocuments(filter),
+  const result = await SubOrderModel.aggregate([
+    {
+      $match: {
+        vendorId,
+        paymentStatus: "paid",  // only count paid suborders
+        createdAt: { $gte: firstDayLastMonth, $lte: lastDayLastMonth },
+      },
+    },
+    {
+      $group: {
+        _id: null,
+        totalSales: { $sum: "$totalAmount" }, // sum of all paid suborders
+        totalOrders: { $sum: 1 },             // number of suborders
+      },
+    },
   ]);
 
   return {
-    count: subOrders.length,
-    pagination: {
-      currentPage: pageNum,
-      totalPages: Math.ceil(total / limitNum),
-      totalItems: total,
-      itemsPerPage: limitNum,
-    },
-    data: subOrders,
+    totalSales: result[0]?.totalSales || 0,
+    totalOrders: result[0]?.totalOrders || 0,
   };
 };
-//============================================
+//=================
+export const getCustomersByVendorService = async (vendorId) => {
+  if (!vendorId) {
+    throw new Error("Vendor ID is required");
+  }
+  const vendorObjectId = ObjectId.createFromHexString(String(vendorId));
+  const customers = await SubOrderModel.aggregate([
+    // 1️⃣ Only this vendor + paid orders
+    {
+      $match: {
+        vendorObjectId,
+        paymentStatus: "paid",
+      },
+    },
+
+    // 2️⃣ Join Order to get customerId
+    {
+      $lookup: {
+        from: "orderusers", // ⚠️ collection name
+        localField: "orderId",
+        foreignField: "_id",
+        as: "order",
+      },
+    },
+    { $unwind: "$order" },
+
+    // 3️⃣ Group by customer
+    {
+      $group: {
+        _id: "$order.customerId",
+        numSubOrders: { $sum: 1 },
+        totalSpent: { $sum: "$totalAmount" },
+      },
+    },
+
+    // 4️⃣ Join customer data
+    {
+      $lookup: {
+        from: "users",
+        localField: "_id",
+        foreignField: "_id",
+        as: "customer",
+      },
+    },
+    { $unwind: "$customer" },
+
+    // 5️⃣ Final response shape
+    {
+      $project: {
+        _id: 0,
+        customerId: "$customer._id",
+        name: "$customer.name",
+        email: "$customer.email",
+        country: "$customer.country",
+        numSubOrders: 1,
+        totalSpent: 1,
+      },
+    },
+
+    // 6️⃣ Sort by highest spend
+    {
+      $sort: { totalSpent: -1 },
+    },
+  ]);
+
+  return customers;
+};
