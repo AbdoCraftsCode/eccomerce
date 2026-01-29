@@ -24,7 +24,7 @@ import { sendemail } from "../../../utlis/email/sendemail.js";
 import { RestaurantModel } from "../../../DB/models/RestaurantSchema.model.js";
 // import { sendOTP } from "./regestration.service.js";
 import AppSettingsSchema from "../../../DB/models/AppSettingsSchema.js";
-import { sendOTP } from "./regestration.service.js";
+import { sendOTP } from "../../../utlis/authentica/authenticaHelper.js"
 import { CategoryModellll } from "../../../DB/models/categorySchemaaa.js";
 const AUTHENTICA_OTP_URL = "https://api.authentica.sa/api/v1/send-otp";
 import { convertProductPrices } from "./changeCurrencyHelper.service.js";
