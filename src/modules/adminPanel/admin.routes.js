@@ -19,7 +19,7 @@ import { authentication, authorization } from "../../middlewere/authontcation.mi
 import { getCustomersForVendor } from "./vendors/vendors.controller.js";
 import { getDailyVendorStats } from "./vendors/vendors.controller.js";
 import { getMonthlyVendorStats } from "./vendors/vendors.controller.js";
-import { getVendorOverallStats } from "./vendors/vendors.controller.js";
+import { getVendorDashboardStats } from "./vendors/vendors.controller.js";
 
 
 const router = express.Router();
@@ -45,7 +45,8 @@ router.get("/getCustomersByVendor",authentication() ,getCustomersForVendor );
 router.get("/homeDailyStatsForVendor", authentication(), getDailyVendorStats);
 router.get("/homeMonthlyStatsForVendor", authentication(), getMonthlyVendorStats);
 router.get("/getSubOrdersByVendorId",authentication() ,getSubOrdersByVendorId );
-router.get("/vedorStatistics", authentication(), getVendorOverallStats);
+router.get("/vedorStatistics", authentication(), getVendorDashboardStats);
+
 
 
 

@@ -1,6 +1,7 @@
 import User from "../../../DB/models/User.model.js";
 import { OrderModelUser } from "../../../DB/models/orderSchemaUser.model.js";
 import { SubOrderModel } from "../../../DB/models/subOrdersSchema.model.js";
+import { ProductModellll } from "../../../DB/models/productSchemaaaa.js";
 export const getCustomersForVendorService = async (vendorId) => {
     if (!vendorId) {
       throw new Error("Vendor ID is required");
@@ -220,5 +221,146 @@ export const getVendorStatsByDateRangeService = async (
       numProducts: 0,
       totalSales: 0,
       totalRevenue: 0,
+    };
+  };
+  //==========================
+  export const getVendorDashboardStatsService = async (user) => {
+    if (!user || user.accountType !== "vendor") {
+      throw new Error("Only vendor can get dashboard stats");
+    }
+  
+    const vendorId = user._id;
+  
+    // ================= TOTAL COUNTS =================
+    const totalSubOrders = await SubOrderModel.countDocuments({ vendorId });
+  
+    const totalProducts = await ProductModellll.countDocuments({
+      createdBy: vendorId,
+    });
+  
+    // ================= TOTAL REVENUE =================
+    const revenueAgg = await SubOrderModel.aggregate([
+      {
+        $match: {
+          vendorId,
+          paymentStatus: "paid",
+        },
+      },
+      {
+        $group: {
+          _id: null,
+          totalRevenue: { $sum: "$totalAmount" },
+        },
+      },
+    ]);
+  
+    const totalRevenue = revenueAgg.length ? revenueAgg[0].totalRevenue : 0;
+  
+    // ================= POPULAR PRODUCTS (UNCHANGED) =================
+    const popularProducts = await OrderModelUser.aggregate([
+      {
+        $match: {
+          paymentStatus: "paid",
+        },
+      },
+      { $unwind: "$items" },
+      {
+        $group: {
+          _id: "$items.productId",
+          totalSold: { $sum: "$items.quantity" },
+          totalRevenue: { $sum: "$items.totalPrice" },
+          productName: { $first: "$items.productName" },
+        },
+      },
+      { $sort: { totalSold: -1 } },
+      { $limit: 5 },
+    ]);
+  
+    // ================= TODAY STATS =================
+    const startOfToday = new Date();
+    startOfToday.setHours(0, 0, 0, 0);
+  
+    const endOfToday = new Date();
+    endOfToday.setHours(23, 59, 59, 999);
+  
+    const todayOrders = await SubOrderModel.countDocuments({
+      vendorId,
+      createdAt: { $gte: startOfToday, $lte: endOfToday },
+    });
+  
+    const todaySalesAgg = await SubOrderModel.aggregate([
+      {
+        $match: {
+          vendorId,
+          paymentStatus: "paid",
+          createdAt: { $gte: startOfToday, $lte: endOfToday },
+        },
+      },
+      {
+        $group: {
+          _id: null,
+          totalSales: { $sum: "$totalAmount" },
+          ordersCount: { $sum: 1 },
+        },
+      },
+    ]);
+  
+    const latestDaySales = todaySalesAgg.length
+      ? todaySalesAgg[0]
+      : { totalSales: 0, ordersCount: 0 };
+  
+    // ================= MONTH STATS =================
+    const startOfMonth = new Date(
+      new Date().getFullYear(),
+      new Date().getMonth(),
+      1
+    );
+  
+    const endOfMonth = new Date(
+      new Date().getFullYear(),
+      new Date().getMonth() + 1,
+      0,
+      23,
+      59,
+      59,
+      999
+    );
+  
+    const monthOrders = await SubOrderModel.countDocuments({
+      vendorId,
+      createdAt: { $gte: startOfMonth, $lte: endOfMonth },
+    });
+  
+    const monthSalesAgg = await SubOrderModel.aggregate([
+      {
+        $match: {
+          vendorId,
+          paymentStatus: "paid",
+          createdAt: { $gte: startOfMonth, $lte: endOfMonth },
+        },
+      },
+      {
+        $group: {
+          _id: null,
+          totalSales: { $sum: "$totalAmount" },
+          ordersCount: { $sum: 1 },
+        },
+      },
+    ]);
+  
+    const latestMonthSales = monthSalesAgg.length
+      ? monthSalesAgg[0]
+      : { totalSales: 0, ordersCount: 0 };
+  
+    // ================= RETURN =================
+    return {
+      totalSubOrders,
+      totalProducts,
+      todayOrders,
+      monthOrders,
+      totalRevenue,
+      latestDaySales,
+      latestMonthSales,
+      popularProducts, // unchanged ✅
     };
   };
