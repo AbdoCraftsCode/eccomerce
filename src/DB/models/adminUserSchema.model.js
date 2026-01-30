@@ -1,6 +1,5 @@
-// models/AdminUser.model.js
 import mongoose from "mongoose";
-// import bcrypt from "bcryptjs";
+
 
 const adminUserSchema = new mongoose.Schema({
     name: {
@@ -61,7 +60,6 @@ const adminUserSchema = new mongoose.Schema({
 }, { timestamps: true });
 
 
-// تشفير كلمة المرور قبل الحفظ
 
 
 export const AdminUserModel = mongoose.model("AdminUser", adminUserSchema);

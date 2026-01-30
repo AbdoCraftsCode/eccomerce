@@ -41,7 +41,6 @@ const contactChatSchema = new mongoose.Schema(
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",
       required: true,
-      unique: true,
     },
     lastMessageSentAt: {
       type: Date,
@@ -54,7 +53,7 @@ const contactChatSchema = new mongoose.Schema(
   },
 );
 
-contactChatSchema.index({ user: 1 });
+contactChatSchema.index({ user: 1 }, { unique: true });
 contactChatSchema.index({ "messages.createdAt": -1 });
 contactChatSchema.index({ updatedAt: -1 });
 contactChatSchema.index({ lastMessageSentAt: -1 });

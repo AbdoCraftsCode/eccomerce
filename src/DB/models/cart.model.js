@@ -48,7 +48,6 @@ cartSchema.pre("save", async function (next) {
   next();
 });
 
-cartSchema.index({ userId: 1 });
 
 cartSchema.statics.getOrCreateCart = async function (userId) {
   let cart = await this.findOne({ userId })

@@ -7,16 +7,12 @@ import {
   addSection,
   confirmOTP,
   createAdminUser,
-  createPermissions,
   createProduct,
-  createPropertyBooking,
   createUserByOwner,
   deleteAdminUser,
   deleteAppSettings,
-  deletePermission,
   deleteProduct,
   deleteProducts,
-  deleteRentalProperty,
   deleteSection,
   deleteUserByAdmin,
   deleteUserByOwner,
@@ -24,13 +20,9 @@ import {
   getAllAdminUsers,
   getAllImages,
   getAllNormalUsers,
-  getAllPermissions,
-  getAllRentalProperties,
   getAllServiceProviders,
   getNotificationsByProperty,
   getNotificationsByUser,
-  getPropertyBookings,
-  getUserRentalProperties,
   getUsersByOwner,
   markAllNotificationsAsRead,
   markAllNotificationsAsReadProperty,
@@ -40,9 +32,7 @@ import {
   signupServiceProvider,
   signupwithGmail,
   updateAdminUser,
-  updatePermission,
   updateProduct,
-  updateRentalProperty,
   updateSection,
   updateUser,
   updateUserByOwner,
@@ -285,12 +275,6 @@ routr.put("/updateAttribute/:attributeId", updateAttribute);
 routr.post("/resetPassword", resetPassword);
 routr.post("/login", login);
 
-routr.get("/getAllRentalProperties", getAllRentalProperties);
-routr.delete(
-  "/deleteRentalProperty/:id",
-  authentication(),
-  deleteRentalProperty,
-);
 routr.post("/loginRestaurant", loginRestaurant);
 routr.post("/resendOTP", resendOTP);
 routr.patch("/resetPasswordphone", resetPasswordphone);
@@ -364,7 +348,6 @@ routr.post(
 routr.get("/getAllNormalUsers", getAllNormalUsers);
 routr.get("/getBrands", getBrands);
 
-routr.get("/getPropertyBookings/:propertyId", getPropertyBookings);
 routr.get(
   "/getNotificationsByProperty/:propertyId",
   getNotificationsByProperty,
@@ -439,8 +422,6 @@ routr.post(
   MarkAllNotificationsAsRead,
 );
 
-routr.post("/createPropertyBooking", authentication(), createPropertyBooking);
-
 routr.delete("/deleteBrand/:brandId", deleteBrand);
 
 routr.put(
@@ -459,11 +440,6 @@ routr.post("/forgetpasswordphone", forgetPasswordphone);
 routr.post("/forgetPasswordphoneadmin", forgetPasswordphoneadmin);
 routr.post("/loginwithGmail", loginwithGmail);
 routr.delete("/deleteMyAccount", authentication(), deleteMyAccount);
-routr.delete("/deletePermission/:id", authentication(), deletePermission);
-routr.patch("/updatePermission/:id", authentication(), updatePermission);
-routr.post("/createPermissions", createPermissions);
-
-routr.get("/getAllPermissions", getAllPermissions);
 routr.post(
   "/markAllNotificationsAsRead/:restaurantId",
   markAllNotificationsAsRead,
@@ -488,4 +464,6 @@ routr.patch(
 );
 
 routr.get("/getAllAdminUsers", authentication(), getAllAdminUsers);
+
+
 export default routr;

@@ -500,8 +500,6 @@ async function sendNotification(deviceToken, title, body) {
     }
 }
 
-// sendNotification('ftrRnnUPRfKrE41oSTUcz7:APA91bGDa5hYvCiGIM2yRlqIOcq5D_kYpDsueiPrFlJZ5vyHNT9hCKIG7sYVyEf2ZNZsfEHv9kREmzCYSfoeq82fyjl47orndHZFHfSpCLEH29obiHam1-k', 'عنوان الإشعار', 'نص الإشعار هنا');
-
 export const savetoken = asyncHandelr(async (req, res, next) => {
     const { userId, fcmToken } = req.body;
 
@@ -529,7 +527,7 @@ export const deleteFcmToken = asyncHandelr(async (req, res) => {
             return res.status(404).json({ message: "❌ المستخدم غير موجود!" });
         }
 
-        user.fcmToken = null; // 🧹 حذف التوكن
+        user.fcmToken = null; 
         await user.save();
 
         res.status(200).json({ message: "✅ تم حذف FCM Token بنجاح" });
@@ -538,18 +536,6 @@ export const deleteFcmToken = asyncHandelr(async (req, res) => {
         res.status(500).json({ message: "حدث خطأ أثناء حذف التوكن", error: error.message });
     }
 });
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 

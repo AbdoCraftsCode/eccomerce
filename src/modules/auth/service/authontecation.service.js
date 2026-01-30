@@ -828,14 +828,13 @@ import { OrderModelUser } from "../../../DB/models/orderSchemaUser.model.js";
 export const createCategory = asyncHandelr(async (req, res, next) => {
   const { name, parentCategory, description, status } = req.body;
 
-  // ✅ Validation
+
   if (!name?.ar || !name?.en) {
     return next(
       new Error("❌ اسم القسم مطلوب بالعربي والإنجليزي", { cause: 400 }),
     );
   }
 
-  // ✅ Generate slug
   const slug = slugify(name.en, {
     lower: true,
     strict: true,

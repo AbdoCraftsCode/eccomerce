@@ -31,6 +31,6 @@ process.on("uncaughtException", (error) => {
 });
 
 server.listen(port, () => {
-  console.log(`🚀 Server is running on port ${port} mr abdo welcome`);
+  console.log(`🚀 Server is running on port ${port}`);
   console.log(`📡 Socket.io server initialized`);
 });
