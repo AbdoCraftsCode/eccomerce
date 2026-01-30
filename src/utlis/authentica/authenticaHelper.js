@@ -8,9 +8,8 @@ export async function sendOTP(phone, method = "whatsapp") {
     const response = await axios.post(
       `${AUTHENTICA_BASE_URL}/send-otp`,
       {
-        method: method, 
+        method: method,
         phone: phone,
-
       },
       {
         headers: {
@@ -22,13 +21,10 @@ export async function sendOTP(phone, method = "whatsapp") {
       },
     );
 
-    console.log("✅ OTP Sent Successfully:", response.data);
+    console.log("OTP Sent Successfully:", response.data);
     return response.data;
   } catch (error) {
-    console.error(
-      "Failed to Send OTP:",
-      error.response?.data || error.message,
-    );
+    console.error("Failed to Send OTP:", error.response?.data || error.message);
     throw error;
   }
 }
@@ -51,7 +47,7 @@ export async function verifyAuthOTP(phone, otp) {
       },
     );
 
-    console.log("✅ OTP Verified:", response.data);
+    console.log("OTP Verified:", response.data);
     return response.data;
   } catch (error) {
     console.error(

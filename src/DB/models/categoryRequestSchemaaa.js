@@ -1,21 +1,20 @@
 import mongoose from "mongoose";
 
-// Schema لطلبات إضافة الأقسام (CategoryRequests)
 const categoryRequestSchema = new mongoose.Schema({
     userId: {
         type: mongoose.Schema.Types.ObjectId,
         ref: "User",
-        required: true // مين اللي طلب القسم (العميل)
+        required: true 
     },
     categoryType: {
         type: String,
-        enum: ["main", "sub"], // رئيسي أو فرعي
+        enum: ["main", "sub"], 
         required: true
     },
     parentCategoryId: {
         type: mongoose.Schema.Types.ObjectId,
         ref: "Categoryyyy",
-        required: function () { return this.categoryType === "sub"; } // مطلوب لو فرعي
+        required: function () { return this.categoryType === "sub"; } 
     },
     name: {
         ar: { type: String, required: true, trim: true },
@@ -30,11 +29,11 @@ const categoryRequestSchema = new mongoose.Schema({
         enum: ["pending", "approved", "rejected"],
         default: "pending"
     },
-    rejectionReason: { type: String }, // سبب الرفض لو رفض
+    rejectionReason: { type: String }, 
     createdCategoryId: {
         type: mongoose.Schema.Types.ObjectId,
         ref: "Categoryyyy",
-        default: null // ID القسم اللي تم إنشاؤه لو تمت الموافقة
+        default: null 
     }
 }, { timestamps: true });
 

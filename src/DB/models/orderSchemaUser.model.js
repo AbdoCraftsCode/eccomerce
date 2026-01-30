@@ -214,5 +214,3 @@ orderSchema.pre("validate", async function (next) {
 });
 
 export const OrderModelUser = mongoose.model("OrderUser", orderSchema);
-// const OrderModelUser = mongoose.model("OrderUser", orderSchema);
-// export default OrderModelUser;

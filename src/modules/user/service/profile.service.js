@@ -4,8 +4,6 @@ import Usermodel from "../../../DB/models/User.model.js";
 import { successresponse } from "../../../utlis/response/success.response.js";
 import { comparehash, decryptData, encryptData, generatehash } from "../../../utlis/security/hash.security.js";
 import cloud from "../../../utlis/multer/cloudinary.js";
-import { MessageModel } from "../../../DB/models/message.model.js";
-import { ProductModel } from "../../../DB/models/product.model.js";
 import { FavoriteModel } from "../../../DB/models/favourite.model.js";
 
 import dotenv from "dotenv";
@@ -104,51 +102,6 @@ export const Getloginuseraccount = asyncHandelr(async (req, res, next) => {
 });
 
 
-
-
-
-
-
-
-// export const getAllUsers = asyncHandelr(async (req, res, next) => {
-//     let { page, limit } = req.query;
-
-//     page = parseInt(page) || 1;
-//     limit = parseInt(limit) || 10;
-//     const skip = (page - 1) * limit;
-
-//     // ✅ جلب المستخدمين مع تصفية الـ role
-//     const users = await Usermodel.find({ role: "User" })
-//         .skip(skip)
-//         .limit(limit)
-//         .select("firstName lastName email mobileNumber city role notifications Points")
-//         .lean(); // إضافة lean() لتحويل النتيجة إلى كائن عادي
-
-  
-//     const totalUsers = await Usermodel.countDocuments({ role: "User" });
-
-    
-//     const formattedUsers = users.map(user => ({
-//         firstName: user.firstName,
-//         lastName: user.lastName,
-//         email: user.email,
-//         mobileNumber: user.mobileNumber,
-//         city: user.city,
-//         role: user.role,
-//         Points: user.Points,
-//         notifications: user.notifications,
-
-    
-//     }));
-
-//     return successresponse(res, {
-//         message: "Users retrieved successfully",
-//         totalUsers,
-//         currentPage: page,
-//         totalPages: Math.ceil(totalUsers / limit),
-//         users: formattedUsers
-//     });
-// });
 
 export const getAllUsers = asyncHandelr(async (req, res, next) => {
     // ✅ جلب المستخدمين مع تصفية الـ role
