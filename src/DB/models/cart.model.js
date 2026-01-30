@@ -26,7 +26,6 @@ const cartSchema = new mongoose.Schema(
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",
       required: true,
-      unique: true,
     },
 
     items: [cartItemSchema],
@@ -40,6 +39,9 @@ const cartSchema = new mongoose.Schema(
     timestamps: true,
   }
 );
+
+cartSchema.index({ userId: 1 }, { unique: true });
+
 
 cartSchema.pre("save", async function (next) {
   this.totalItems = this.items.reduce((sum, item) => sum + item.quantity, 0);

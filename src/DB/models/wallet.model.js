@@ -33,7 +33,6 @@ const walletSchema = new mongoose.Schema(
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",
       required: true,
-      unique: true,
     },
     balance: {
       type: Number,
@@ -54,7 +53,8 @@ const walletSchema = new mongoose.Schema(
   }
 );
 
-// Create or get wallet for user
+walletSchema.index({ userId: 1 }, { unique: true });
+
 walletSchema.statics.getOrCreateWallet = async function (userId) {
   try {
     let wallet = await this.findOne({ userId });
