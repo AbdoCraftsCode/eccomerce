@@ -59,7 +59,10 @@ const userSchema = new Schema(
       default: "PENDING",
     },
 
-    country: { type: String },
+    country: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Country",
+    },
     currency: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Currency",
@@ -67,7 +70,7 @@ const userSchema = new Schema(
     lang: { type: String },
     weight: { type: String },
     height: { type: String },
-    preferredFlavor: { type: mongoose.Schema.Types.ObjectId }, //
+    preferredFlavor: { type: mongoose.Schema.Types.ObjectId },
     favoritePopgroup: { type: mongoose.Schema.Types.ObjectId },
     productType: { type: mongoose.Schema.Types.ObjectId },
 

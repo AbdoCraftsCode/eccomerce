@@ -1,11 +1,11 @@
 import { asyncHandelr } from "../../utlis/response/error.response.js";
-import * as currencyService from "./services/currency.service.js";
+import * as countryService from "./services/country.service.js";
 import { getResponseMessage } from "./helpers/responseMessages.js";
 import { getUserLanguage } from "../../utlis/localization/langUserHelper.js";
 
-export const createCurrency = asyncHandelr(async (req, res) => {
+export const createCountry = asyncHandelr(async (req, res) => {
   const lang = getUserLanguage(req);
-  const currency = await currencyService.createCurrency(
+  const country = await countryService.createCountry(
     req.body,
     req.user._id,
     lang,
@@ -14,15 +14,15 @@ export const createCurrency = asyncHandelr(async (req, res) => {
   res.status(201).json({
     success: true,
     message: getResponseMessage("created", lang),
-    data: currency,
+    data: country,
   });
 });
 
-export const getAllCurrencies = asyncHandelr(async (req, res, next) => {
+export const getAllCountries = asyncHandelr(async (req, res, next) => {
   const lang = getUserLanguage(req);
   const { page, limit, sort, order, search, isActive } = req.query;
 
-  const result = await currencyService.getAllCurrencies(
+  const result = await countryService.getAllCountries(
     {},
     { page, limit, sort, order, search, isActive, lang },
   );
@@ -30,41 +30,26 @@ export const getAllCurrencies = asyncHandelr(async (req, res, next) => {
   res.status(200).json({
     success: true,
     message: getResponseMessage("fetched", lang),
-    data: result.currencies,
+    data: result.countries,
     pagination: result.pagination,
   });
 });
 
-export const getCurrencyById = asyncHandelr(async (req, res) => {
+export const getCountryById = asyncHandelr(async (req, res) => {
   const lang = getUserLanguage(req);
-  const currency = await currencyService.getCurrencyById(req.params.id, lang);
+  const country = await countryService.getCountryById(req.params.id, lang);
 
   res.status(200).json({
     success: true,
     message: getResponseMessage("fetched_single", lang),
-    data: currency,
+    data: country,
   });
 });
 
-export const updateCurrency = asyncHandelr(async (req, res) => {
-  const lang = getUserLanguage(req);
-  const currency = await currencyService.updateCurrency(
-    req.params.id,
-    req.body,
-    req.user._id,
-    lang,
-  );
 
-  res.status(200).json({
-    success: true,
-    message: getResponseMessage("updated", lang),
-    data: currency,
-  });
-});
-
-export const deleteCurrency = asyncHandelr(async (req, res) => {
+export const deleteCountry = asyncHandelr(async (req, res) => {
   const lang = getUserLanguage(req);
-  await currencyService.deleteCurrency(req.params.id, lang);
+  await countryService.deleteCountry(req.params.id, lang);
 
   res.status(200).json({
     success: true,
@@ -72,11 +57,11 @@ export const deleteCurrency = asyncHandelr(async (req, res) => {
   });
 });
 
-export const toggleCurrencyStatus = asyncHandelr(async (req, res) => {
+export const toggleCountryStatus = asyncHandelr(async (req, res) => {
   const lang = getUserLanguage(req);
   const { isActive } = req.body;
 
-  const currency = await currencyService.toggleCurrencyStatus(
+  const country = await countryService.toggleCountryStatus(
     req.params.id,
     isActive,
     req.user._id,
@@ -86,24 +71,24 @@ export const toggleCurrencyStatus = asyncHandelr(async (req, res) => {
   res.status(200).json({
     success: true,
     message: getResponseMessage(isActive ? "activated" : "deactivated", lang),
-    data: currency,
+    data: country,
   });
 });
 
-export const getDefaultCurrency = asyncHandelr(async (req, res) => {
+export const getDefaultCountry = asyncHandelr(async (req, res) => {
   const lang = getUserLanguage(req);
-  const currency = await currencyService.getDefaultCurrency(lang);
+  const country = await countryService.getDefaultCountry(lang);
 
   res.status(200).json({
     success: true,
     message: getResponseMessage("default_fetched", lang),
-    data: currency,
+    data: country,
   });
 });
 
-export const setDefaultCurrency = asyncHandelr(async (req, res) => {
+export const setDefaultCountry = asyncHandelr(async (req, res) => {
   const lang = getUserLanguage(req);
-  const currency = await currencyService.setDefaultCurrency(
+  const country = await countryService.setDefaultCountry(
     req.params.id,
     req.user._id,
     lang,
@@ -112,30 +97,30 @@ export const setDefaultCurrency = asyncHandelr(async (req, res) => {
   res.status(200).json({
     success: true,
     message: getResponseMessage("default_set", lang),
-    data: currency,
+    data: country,
   });
 });
 
-export const getActiveCurrencies = asyncHandelr(async (req, res) => {
+export const getActiveCountries = asyncHandelr(async (req, res) => {
   const lang = getUserLanguage(req);
-  const currencies = await currencyService.getActiveCurrencies(lang);
+  const countries = await countryService.getActiveCountries(lang);
 
   res.status(200).json({
     success: true,
     message: getResponseMessage("active_fetched", lang),
-    data: currencies,
+    data: countries,
   });
 });
 
-export const validateCurrency = asyncHandelr(async (req, res) => {
+export const validateCountry = asyncHandelr(async (req, res) => {
   const lang = getUserLanguage(req);
-  const { code } = req.query;
+  const { phoneCode } = req.query;
 
-  const currency = await currencyService.validateAndGetCurrency(code, lang);
+  const country = await countryService.validateAndGetCountry(phoneCode, lang);
 
   res.status(200).json({
     success: true,
     message: getResponseMessage("valid", lang),
-    data: currency,
+    data: country,
   });
 });

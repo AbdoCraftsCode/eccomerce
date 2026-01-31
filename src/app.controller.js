@@ -20,6 +20,7 @@ import searchRoutes from "./modules/search/search.controller.js";
 import faqRoutes from "./modules/faq/faqController.js";
 import offersRoutes from "./modules/offers/offerController.js";
 import currenciesRoutes from "./modules/currency/currency.routes.js";
+import countriesRoutes from "./modules/country/country.routes.js";
 
 import cors from "cors";
 
@@ -44,6 +45,7 @@ export const bootstap = (app, express) => {
   app.use("/faq", faqRoutes);
   app.use("/offers", offersRoutes);
   app.use("/currencies", currenciesRoutes);
+  app.use("/countries", countriesRoutes);
 
   app.use(globalerror);
 };

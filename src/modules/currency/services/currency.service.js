@@ -238,7 +238,6 @@ export const validateAndGetCurrency = async (code, lang) => {
   return formatCurrencyForLanguage(currency, lang);
 };
 
-// Additional functions you might need
 export const getDefaultCurrency = async (lang) => {
   const currency = await findOne({
     model: Currency,
@@ -252,13 +251,11 @@ export const getDefaultCurrency = async (lang) => {
 };
 
 export const setDefaultCurrency = async (id, userId, lang) => {
-  // First unset all other currencies as default
   await Currency.updateMany(
     { _id: { $ne: id } },
     { isDefault: false, updatedBy: userId },
   );
 
-  // Then set the selected currency as default
   const currency = await findByIdAndUpdate({
     model: Currency,
     id,
@@ -283,8 +280,4 @@ export const getActiveCurrencies = async (lang) => {
   return formatCurrenciesForLanguage(currencies, lang);
 };
 
-export const getUserLanguage = (req) => {
-  if (req.user?.lang === "ar") return "ar";
-  if (req.headers["accept-language"]?.includes("ar")) return "ar";
-  return "en";
-};
+
