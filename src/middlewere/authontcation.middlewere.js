@@ -14,7 +14,7 @@ export const authentication = () => {
 
 export const authorization = (roletypes) => {
   return asyncHandelr(async (req, res, next) => {
-    if (!roletypes.includes(req.user.role)) {
+    if (!roletypes.includes(req.user.accountType)) {
       return next(new Error("invalid authorization", { cause: 400 }));
     }
 

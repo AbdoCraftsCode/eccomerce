@@ -9,10 +9,9 @@ const AddressSchema = new mongoose.Schema(
 
     addressDetails: { type: String, required: true },
 
-
     isDefault: {
       type: Boolean,
-      default: false
+      default: false,
     },
 
     latitude: {
@@ -28,7 +27,7 @@ const AddressSchema = new mongoose.Schema(
       max: 180,
     },
   },
-  { _id: true }
+  { _id: true },
 );
 
 const userSchema = new Schema(
@@ -52,7 +51,6 @@ const userSchema = new Schema(
       default: [],
     },
 
-
     password: { type: String },
 
     status: {
@@ -62,23 +60,22 @@ const userSchema = new Schema(
     },
 
     country: { type: String },
-    currency: { type: String },
+    currency: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Currency",
+    },
     lang: { type: String },
     weight: { type: String },
     height: { type: String },
-    preferredFlavor: { type: mongoose.Schema.Types.ObjectId },//
+    preferredFlavor: { type: mongoose.Schema.Types.ObjectId }, //
     favoritePopgroup: { type: mongoose.Schema.Types.ObjectId },
     productType: { type: mongoose.Schema.Types.ObjectId },
 
     role: { type: String },
-    // const user = req.user 
+
     isConfirmed: { type: Boolean, default: false },
     carNumber: { type: Number, default: 0 },
-    // isAgree: { type: Boolean, default: false },
 
-    // kiloPrice: { type: Number, default: 0 },
-    // totalPoints: { type: Number, default: 0 },
-    // modelcar: { type: String, default: null },
     accountType: {
       type: String,
       enum: ["User", "ServiceProvider", "Owner", "manager", "vendor", "Admin"],
@@ -106,16 +103,13 @@ const userSchema = new Schema(
       ],
     },
     fcmToken: { type: String, default: null },
-    // isOnline: { type: Boolean , default: false },
+
     userId: String,
-    // OTPs
     emailOTP: String,
     forgetpasswordOTP: String,
     attemptCount: Number,
     otpExpiresAt: Date,
     blockUntil: { type: Date },
-
-    // 🎯 بيانات إضافية عامة لمقدمي الخدمة
 
     profiePicture: {
       secure_url: { type: String, default: null },
@@ -126,12 +120,12 @@ const userSchema = new Schema(
     timestamps: true,
     toJSON: { virtuals: true },
     toObject: { virtuals: true },
-  }
+  },
 );
 userSchema.virtual("subscriptionDaysLeft").get(function () {
   if (!this.subscription?.endDate) return null;
   const diff = Math.ceil(
-    (this.subscription.endDate - new Date()) / (1000 * 60 * 60 * 24)
+    (this.subscription.endDate - new Date()) / (1000 * 60 * 60 * 24),
   );
   return diff > 0 ? diff : 0;
 });
@@ -139,7 +133,7 @@ userSchema.virtual("subscriptionDaysLeft").get(function () {
 userSchema.virtual("subscriptionDaysUsed").get(function () {
   if (!this.subscription?.startDate) return null;
   const diff = Math.ceil(
-    (new Date() - this.subscription.startDate) / (1000 * 60 * 60 * 24)
+    (new Date() - this.subscription.startDate) / (1000 * 60 * 60 * 24),
   );
   return diff > 0 ? diff : 0;
 });
@@ -150,9 +144,3 @@ export default Usermodel;
 
 export const scketConnections = new Map();
 export const onlineUsers = new Map();
-
-// signup
-// confirEachOtp
-// login
-// forgetPassword
-// resetPassword

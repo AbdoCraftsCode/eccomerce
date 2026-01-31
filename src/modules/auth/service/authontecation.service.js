@@ -3864,7 +3864,7 @@ export const GetBrands = asyncHandelr(async (req, res, next) => {
 });
 
 export const becomeSeller = asyncHandelr(async (req, res, next) => {
-  const { fullName, email, phone, companyName, categories, password } =
+  const { fullName, email, phone, companyName, categories, password , currency = "USD"} =
     req.body;
 
   if (!fullName || !password) {

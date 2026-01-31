@@ -43,7 +43,7 @@ export const findOne = async ({
   return document;
 };
 
-// 3. Update
+
 export const findOneAndUpdate = async ({
   model,
   filter = {},
