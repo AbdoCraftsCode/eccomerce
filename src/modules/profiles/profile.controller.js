@@ -1,53 +1,100 @@
-import { Router } from "express";
-import { authentication } from "../../middlewere/authontcation.middlewere.js";
-import { validation } from "../../middlewere/validation.middlewere.js";
-import * as validations from "./profile.validation.js";
+import { asyncHandelr } from "../../utlis/response/error.response.js";
 import * as services from "./services/profile.service.js";
-import { uploadCloudFile } from "../../utlis/multer/cloud.multer.js";
-import { fileValidationTypes } from "../../utlis/multer/cloud.multer.js";
+import { getResponseMessage } from "./helpers/responseMessages.js"; 
+import { getUserLanguage } from "../../utlis/localization/langUserHelper.js";
 
-const router = Router();
+export const getMyProfile = asyncHandelr(async (req, res, next) => {
+  const userId = req.user._id;
+  const lang = getUserLanguage(req);
 
-const profileUploadMiddleware = uploadCloudFile([
-  ...fileValidationTypes.image,
-]).fields([{ name: "profilePicture", maxCount: 1 }]);
+  try {
+    const userWithVirtuals = await services.getMyProfile(userId, lang);
+    res.status(200).json({
+      success: true,
+      data: userWithVirtuals,
+    });
+  } catch (error) {
+    next(error);
+  }
+});
 
-router.get(
-  "/",
-  authentication(),
-  validation(validations.getProfileValidation),
-  services.getMyProfile,
-);
+export const updateMyProfile = asyncHandelr(async (req, res, next) => {
+  const userId = req.user._id;
+  const updateData = req.body;
+  const lang = getUserLanguage(req);
 
-router.put(
-  "/",
-  authentication(),
-  profileUploadMiddleware,
-  validation(validations.updateProfileValidation),
-  services.updateMyProfile,
-);
+  try {
+    const updatedUser = await services.updateMyProfile(userId, updateData, req.files, lang);
+    res.status(200).json({
+      success: true,
+      message: getResponseMessage("updated", lang),
+      data: updatedUser,
+    });
+  } catch (error) {
+    next(error);
+  }
+});
 
-router.patch("/", authentication(), services.removeProfilePicture);
+export const removeProfilePicture = asyncHandelr(async (req, res, next) => {
+  const userId = req.user._id;
+  const lang = getUserLanguage(req);
 
-router.post(
-  "/changePassword",
-  authentication(),
-  validation(validations.changePasswordValidation),
-  services.changePassword,
-);
+  try {
+    const updatedUser = await services.removeProfilePicture(userId, lang);
+    res.status(200).json({
+      success: true,
+      message: getResponseMessage("picture_removed", lang),
+      data: updatedUser,
+    });
+  } catch (error) {
+    next(error);
+  }
+});
 
-router.post(
-  "/confirm-email",
-  authentication(),
-  validation(validations.confirmEmailValidation),
-  services.confirmEmail
-);
+export const changePassword = asyncHandelr(async (req, res, next) => {
+  const userId = req.user._id;
+  const { oldPassword, newPassword } = req.body;
+  const lang = getUserLanguage(req);
 
-router.get(
-  "/resend-confirm-email",
-  authentication(),
-  validation(validations.resendConfirmEmailValidation),
-  services.resendConfirmEmail
-);
+  try {
+    await services.changePassword(userId, oldPassword, newPassword, lang);
+    res.status(200).json({
+      success: true,
+      message: getResponseMessage("password_changed", lang),
+    });
+  } catch (error) {
+    next(error);
+  }
+});
 
-export default router;
+export const confirmEmail = asyncHandelr(async (req, res, next) => {
+  const userId = req.user._id;
+  const { emailOTP } = req.body;
+  const lang = getUserLanguage(req);
+
+  try {
+    const updatedUser = await services.confirmEmail(userId, emailOTP, lang);
+    res.status(200).json({
+      success: true,
+      message: getResponseMessage("email_confirmed", lang),
+      data: updatedUser,
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+export const resendConfirmEmail = asyncHandelr(async (req, res, next) => {
+  const userId = req.user._id;
+  const lang = getUserLanguage(req);
+
+  try {
+    await services.resendConfirmEmail(userId, lang);
+    res.status(200).json({
+      success: true,
+      message: getResponseMessage("verification_sent", lang),
+    });
+  } catch (error) {
+    next(error);
+  }
+});

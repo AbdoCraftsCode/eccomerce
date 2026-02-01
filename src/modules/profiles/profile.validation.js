@@ -13,9 +13,9 @@ export const updateProfileValidation = Joi.object({
 
   password: Joi.string().min(6).optional(),
 
-  country: Joi.string().max(100).optional(),
-  currency: Joi.string().length(3).optional(),
-  lang: Joi.string().valid("ar", "en", "fr", "es", "de", "it").optional(),
+  country: generalfields._id.optional(),
+  currency: generalfields._id.optional(),
+  lang: Joi.string().valid("ar", "en").optional(),
 
   weight: Joi.string().max(10).optional().allow("", null),
   height: Joi.string().max(10).optional().allow("", null),

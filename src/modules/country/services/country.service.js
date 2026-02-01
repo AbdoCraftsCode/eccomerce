@@ -13,7 +13,7 @@ import { getCountryDataFromApi } from "../helpers/countryCode.js";
 import { throwError } from "../helpers/responseMessages.js";
 
 
-const formatCountryForLanguage = (country, lang) => {
+export const formatCountryForLanguage = (country, lang) => {
   if (!country) return null;
 
   const obj = country.toObject ? country.toObject() : { ...country };
@@ -233,4 +233,18 @@ export const getActiveCountries = async (lang) => {
   });
 
   return formatCountriesForLanguage(countries, lang);
+};
+
+
+export const validateCountryId = async (id, lang) => {
+  const country = await findOne({
+    model: Country,
+    filter: { _id: id, isActive: true },
+  });
+
+  if (!country) {
+    throwError("invalid_country", lang, {}, 404);
+  }
+
+  return country; 
 };

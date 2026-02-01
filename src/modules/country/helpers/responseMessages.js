@@ -52,6 +52,7 @@ export const getCountryErrorMessage = (key, lang = "en", params = {}) => {
         "Cannot deactivate default country. Set another as default first.",
       assigned_to_users:
         "Cannot delete country. It is currently assigned to users.",
+      invalid_country: "this country is not found or not active",
     },
     ar: {
       invalid_name: "اسم الدولة '{name}' غير صالح",
@@ -64,6 +65,7 @@ export const getCountryErrorMessage = (key, lang = "en", params = {}) => {
         "لا يمكن تعطيل الدولة الافتراضية. قم بتعيين دولة أخرى أولاً.",
       assigned_to_users:
         "لا يمكن حذف الدولة. هي مستخدمة حالياً من قبل المستخدمين.",
+      invalid_country: "هذه الدولة غير موجودة أو غير مفعلة",
     },
   };
 
@@ -75,8 +77,6 @@ export const getCountryErrorMessage = (key, lang = "en", params = {}) => {
 
   return message;
 };
-
-
 
 export const throwError = (key, lang, params = {}, status = 400) => {
   const error = new Error(getCountryErrorMessage(key, lang, params));

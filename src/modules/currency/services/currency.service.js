@@ -42,7 +42,7 @@ export const createCurrency = async (data, userId, lang) => {
   });
 };
 
-const formatCurrencyForLanguage = (currency, lang) => {
+export const formatCurrencyForLanguage = (currency, lang) => {
   if (!currency) return null;
 
   const obj = currency.toObject ? currency.toObject() : { ...currency };
@@ -278,6 +278,20 @@ export const getActiveCurrencies = async (lang) => {
   });
 
   return formatCurrenciesForLanguage(currencies, lang);
+};
+
+
+export const validateCurrencyId = async (id, lang) => {
+  const currency = await findOne({
+    model: Currency,
+    filter: { _id: id, isActive: true },
+  });
+
+  if (!currency) {
+    throwError("invalid", lang, {}, 404);
+  }
+
+  return currency;
 };
 
 

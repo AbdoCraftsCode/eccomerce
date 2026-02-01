@@ -1,57 +1,59 @@
-import { asyncHandelr } from "../../../utlis/response/error.response.js";
 import UserModel from "../../../DB/models/User.model.js";
 import { PreferredFlavorModel } from "../../../DB/models/preferredFlavor.model.js";
 import { FavoritePopgroupModel } from "../../../DB/models/favoritePopgroup.model.js";
 import { PreferredProductTypeModel } from "../../../DB/models/preferredProductType.model.js";
+import { validateCurrencyId } from "../../currency/services/currency.service.js";
+import { validateCountryId } from "../../country/services/country.service.js";
 import {
   generatehash,
   comparehash,
 } from "../../../utlis/security/hash.security.js";
 import cloudinary from "cloudinary";
+import { formatCurrencyForLanguage } from "../../currency/services/currency.service.js";
+import { formatCountryForLanguage } from "../../country/services/country.service.js";
 import { sendemail } from "../../../utlis/email/sendemail.js";
 import { emailTemplates } from "../helpers/emailTempates.js";
+import { findById, findByIdAndUpdate, findOne } from "../../../DB/dbservice.js";
+import { throwError } from "../helpers/responseMessages.js";
 
-export const getMyProfile = asyncHandelr(async (req, res, next) => {
-  const userId = req.user._id;
-
-  const user = await UserModel.findById(userId)
-    .select(
+export const getMyProfile = async (userId, lang) => {
+  const userDoc = await findById({
+    model: UserModel,
+    id: userId,
+    select:
       "-password -emailOTP -forgetpasswordOTP -attemptCount -otpExpiresAt -blockUntil -categories -status",
-    )
-    .populate({
-      path: "preferredFlavor",
-      select: "name.ar name.en",
-    })
-    .populate({
-      path: "favoritePopgroup",
-      select: "name.ar name.en image",
-    })
-    .populate({
-      path: "productType",
-      select: "name.ar name.en",
-    })
-    .lean();
+    populate: [
+      { path: "preferredFlavor", select: "name.ar name.en" },
+      { path: "favoritePopgroup", select: "name.ar name.en image" },
+      { path: "productType", select: "name.ar name.en" },
+      { path: "country", select: "name.ar name.en phoneCode flag _id" },
+      { path: "currency", select: "name.ar name.en code symbol" },
+    ],
+  });
 
-  if (!user) {
-    return next(new Error("User not found", { cause: 404 }));
+  if (!userDoc) {
+    throwError("user_not_found", lang, {}, 404);
+  }
+
+  const user = userDoc.toObject();
+
+  if (user.country) {
+    user.country = formatCountryForLanguage(user.country, lang);
+  }
+  if (user.currency) {
+    user.currency = formatCurrencyForLanguage(user.currency, lang);
   }
 
   const userWithVirtuals = {
     ...user,
-    subscriptionDaysLeft: user.subscriptionDaysLeft,
-    subscriptionDaysUsed: user.subscriptionDaysUsed,
+    subscriptionDaysLeft: userDoc.subscriptionDaysLeft,
+    subscriptionDaysUsed: userDoc.subscriptionDaysUsed,
   };
 
-  res.status(200).json({
-    success: true,
-    data: userWithVirtuals,
-  });
-});
+  return userWithVirtuals;
+};
 
-export const updateMyProfile = asyncHandelr(async (req, res, next) => {
-  const userId = req.user._id;
-  const updateData = req.body;
-
+export const updateMyProfile = async (userId, updateData, files, lang) => {
   const allowedFields = [
     "fullName",
     "email",
@@ -73,13 +75,19 @@ export const updateMyProfile = asyncHandelr(async (req, res, next) => {
     }
   }
 
-  const currentUser = await UserModel.findById(userId);
-  if (!currentUser) {
-    return next(new Error("User not found", { cause: 404 }));
+  // Get current user
+  const currentUserDoc = await findById({
+    model: UserModel,
+    id: userId,
+  });
+
+  if (!currentUserDoc) {
+    throwError("user_not_found", lang, {}, 404);
   }
 
-  if (req.files?.profilePicture && req.files.profilePicture[0]) {
-    const file = req.files.profilePicture[0];
+  // Handle profile picture upload
+  if (files?.profilePicture && files.profilePicture[0]) {
+    const file = files.profilePicture[0];
 
     try {
       const uploadResult = await cloudinary.uploader.upload(file.path, {
@@ -90,19 +98,17 @@ export const updateMyProfile = asyncHandelr(async (req, res, next) => {
           { quality: "auto" },
         ],
       });
-      if (currentUser.profiePicture && currentUser.profiePicture.public_id) {
+
+      if (
+        currentUserDoc.profiePicture &&
+        currentUserDoc.profiePicture.public_id
+      ) {
         try {
           await cloudinary.uploader.destroy(
-            currentUser.profiePicture.public_id,
-          );
-          console.log(
-            `Deleted old profile picture: ${currentUser.profiePicture.public_id}`,
+            currentUserDoc.profiePicture.public_id,
           );
         } catch (deleteError) {
-          console.error(
-            "Failed to delete old image from Cloudinary:",
-            deleteError,
-          );
+          console.error("Failed to delete old image:", deleteError);
         }
       }
 
@@ -112,27 +118,25 @@ export const updateMyProfile = asyncHandelr(async (req, res, next) => {
       };
     } catch (uploadError) {
       console.error("Error uploading profile picture:", uploadError);
-      return next(
-        new Error("Failed to upload profile picture", { cause: 500 }),
-      );
+      throwError("upload_failed", lang, {}, 500);
     }
   }
 
   if (Object.keys(filteredUpdate).length === 0) {
-    return next(
-      new Error("No valid fields provided for update", { cause: 400 }),
-    );
+    throwError("no_fields", lang, {}, 400);
   }
 
+  // Validate referenced documents
   if (filteredUpdate.preferredFlavor !== undefined) {
     if (filteredUpdate.preferredFlavor === null) {
       filteredUpdate.preferredFlavor = null;
     } else {
-      const flavorExists = await PreferredFlavorModel.findById(
-        filteredUpdate.preferredFlavor,
-      );
+      const flavorExists = await findById({
+        model: PreferredFlavorModel,
+        id: filteredUpdate.preferredFlavor,
+      });
       if (!flavorExists) {
-        return next(new Error("Preferred flavor not found", { cause: 404 }));
+        throwError("flavor_not_found", lang, {}, 404);
       }
     }
   }
@@ -141,11 +145,12 @@ export const updateMyProfile = asyncHandelr(async (req, res, next) => {
     if (filteredUpdate.favoritePopgroup === null) {
       filteredUpdate.favoritePopgroup = null;
     } else {
-      const popgroupExists = await FavoritePopgroupModel.findById(
-        filteredUpdate.favoritePopgroup,
-      );
+      const popgroupExists = await findById({
+        model: FavoritePopgroupModel,
+        id: filteredUpdate.favoritePopgroup,
+      });
       if (!popgroupExists) {
-        return next(new Error("Favorite popgroup not found", { cause: 404 }));
+        throwError("popgroup_not_found", lang, {}, 404);
       }
     }
   }
@@ -154,16 +159,34 @@ export const updateMyProfile = asyncHandelr(async (req, res, next) => {
     if (filteredUpdate.productType === null) {
       filteredUpdate.productType = null;
     } else {
-      const productTypeExists = await PreferredProductTypeModel.findById(
-        filteredUpdate.productType,
-      );
+      const productTypeExists = await findById({
+        model: PreferredProductTypeModel,
+        id: filteredUpdate.productType,
+      });
       if (!productTypeExists) {
-        return next(new Error("Product type not found", { cause: 404 }));
+        throwError("product_type_not_found", lang, {}, 404);
       }
     }
   }
 
-  if (filteredUpdate.email && currentUser.email !== filteredUpdate.email) {
+  if (filteredUpdate.country !== undefined) {
+    if (filteredUpdate.country === null) {
+      filteredUpdate.country = null;
+    } else {
+      await validateCountryId(filteredUpdate.country, lang);
+    }
+  }
+
+  if (filteredUpdate.currency !== undefined) {
+    if (filteredUpdate.currency === null) {
+      filteredUpdate.currency = null;
+    } else {
+      await validateCurrencyId(filteredUpdate.currency, lang);
+    }
+  }
+
+  // Handle email change
+  if (filteredUpdate.email && currentUserDoc.email !== filteredUpdate.email) {
     const emailOTP = Math.floor(100000 + Math.random() * 900000).toString();
     const otpExpiresAt = new Date(Date.now() + 10 * 60 * 1000);
 
@@ -173,8 +196,8 @@ export const updateMyProfile = asyncHandelr(async (req, res, next) => {
 
     const template = emailTemplates.emailVerification(
       emailOTP,
-      currentUser.lang,
-      currentUser.fullName,
+      currentUserDoc.lang,
+      currentUserDoc.fullName,
     );
 
     await sendemail({
@@ -185,101 +208,110 @@ export const updateMyProfile = asyncHandelr(async (req, res, next) => {
     });
   }
 
-  const updatedUser = await UserModel.findByIdAndUpdate(
-    userId,
-    filteredUpdate,
-    {
-      new: true,
-      runValidators: true,
-      select:
-        "-password -emailOTP -forgetpasswordOTP -attemptCount -otpExpiresAt -blockUntil",
-    },
-  )
-    .populate({
-      path: "preferredFlavor",
-      select: "name.ar name.en",
-    })
-    .populate({
-      path: "favoritePopgroup",
-      select: "name.ar name.en image",
-    })
-    .populate({
-      path: "productType",
-      select: "name.ar name.en",
-    })
-    .populate({
-      path: "categories",
-      select: "name slug",
-    });
-
-  if (!updatedUser) {
-    return next(new Error("User not found", { cause: 404 }));
-  }
-
-  res.status(200).json({
-    success: true,
-    message: "Profile updated successfully",
-    data: updatedUser,
+  // Perform the update
+  const updatedUserDoc = await findByIdAndUpdate({
+    model: UserModel,
+    id: userId,
+    data: filteredUpdate,
+    options: { new: true, runValidators: true },
+    select:
+      "-password -emailOTP -forgetpasswordOTP -attemptCount -otpExpiresAt -blockUntil",
+    populate: [
+      { path: "preferredFlavor", select: "name.ar name.en" },
+      { path: "favoritePopgroup", select: "name.ar name.en image" },
+      { path: "productType", select: "name.ar name.en" },
+      { path: "categories", select: "name slug" },
+      { path: "country", select: "name.ar name.en phoneCode flag _id" },
+      { path: "currency", select: "name.ar name.en code symbol" },
+    ],
   });
-});
 
-export const removeProfilePicture = asyncHandelr(async (req, res, next) => {
-  const userId = req.user._id;
-
-  const currentUser = await UserModel.findById(userId);
-  if (!currentUser) {
-    return next(new Error("User not found", { cause: 404 }));
+  if (!updatedUserDoc) {
+    throwError("user_not_found", lang, {}, 404);
   }
 
-  if (currentUser.profiePicture && currentUser.profiePicture.public_id) {
+  // Convert to plain object to remove Mongoose internals
+  const updatedUser = updatedUserDoc.toObject();
+
+  // Localize country and currency if they exist
+  if (updatedUser.country) {
+    updatedUser.country = formatCountryForLanguage(updatedUser.country, lang);
+  }
+  if (updatedUser.currency) {
+    updatedUser.currency = formatCurrencyForLanguage(
+      updatedUser.currency,
+      lang,
+    );
+  }
+
+  return updatedUser;
+};
+
+export const removeProfilePicture = async (userId, lang) => {
+  const currentUserDoc = await findById({
+    model: UserModel,
+    id: userId,
+  });
+
+  if (!currentUserDoc) {
+    throwError("user_not_found", lang, {}, 404);
+  }
+
+  if (currentUserDoc.profiePicture && currentUserDoc.profiePicture.public_id) {
     try {
-      await cloudinary.uploader.destroy(currentUser.profiePicture.public_id);
+      await cloudinary.uploader.destroy(currentUserDoc.profiePicture.public_id);
       console.log(
-        `Deleted profile picture: ${currentUser.profiePicture.public_id}`,
+        `Deleted profile picture: ${currentUserDoc.profiePicture.public_id}`,
       );
     } catch (error) {
       console.error("Failed to delete image from Cloudinary:", error);
     }
   }
 
-  const updatedUser = await UserModel.findByIdAndUpdate(
-    userId,
-    {
-      profiePicture: null,
-    },
-    {
-      new: true,
-      select:
-        "-password -emailOTP -forgetpasswordOTP -attemptCount -otpExpiresAt -blockUntil",
-    },
-  )
-    .populate({
-      path: "preferredFlavor",
-      select: "name.ar name.en",
-    })
-    .populate({
-      path: "favoritePopgroup",
-      select: "name.ar name.en image",
-    })
-    .populate({
-      path: "productType",
-      select: "name.ar name.en",
-    });
-
-  res.status(200).json({
-    success: true,
-    message: "Profile picture removed successfully",
-    data: updatedUser,
+  const updatedUserDoc = await findByIdAndUpdate({
+    model: UserModel,
+    id: userId,
+    data: { profiePicture: null },
+    options: { new: true },
+    select:
+      "-password -emailOTP -forgetpasswordOTP -attemptCount -otpExpiresAt -blockUntil",
+    populate: [
+      { path: "preferredFlavor", select: "name.ar name.en" },
+      { path: "favoritePopgroup", select: "name.ar name.en image" },
+      { path: "productType", select: "name.ar name.en" },
+      { path: "country", select: "name.ar name.en phoneCode flag _id" },
+      { path: "currency", select: "name.ar name.en code symbol" },
+    ],
   });
-});
 
-export const changePassword = asyncHandelr(async (req, res, next) => {
-  const userId = req.user._id;
-  const { oldPassword, newPassword } = req.body;
+  const updatedUser = updatedUserDoc.toObject();
 
-  const user = await UserModel.findById(userId);
+  if (updatedUser.country) {
+    updatedUser.country = formatCountryForLanguage(updatedUser.country, lang);
+  }
+  if (updatedUser.currency) {
+    updatedUser.currency = formatCurrencyForLanguage(
+      updatedUser.currency,
+      lang,
+    );
+  }
+
+  return updatedUser;
+};
+
+export const changePassword = async (
+  userId,
+  oldPassword,
+  newPassword,
+  lang,
+) => {
+  const user = await findById({
+    model: UserModel,
+    id: userId,
+  });
+
   if (!user) {
-    return next(new Error("User not found", { cause: 404 }));
+    throwError("user_not_found", lang, {}, 404);
   }
 
   const isMatch = comparehash({
@@ -287,31 +319,27 @@ export const changePassword = asyncHandelr(async (req, res, next) => {
     valuehash: user.password,
   });
   if (!isMatch) {
-    return next(new Error("Old password is incorrect", { cause: 400 }));
+    throwError("old_password_incorrect", lang, {}, 400);
   }
 
   const hashedPassword = generatehash({ planText: newPassword });
 
   user.password = hashedPassword;
   await user.save();
+};
 
-  res.status(200).json({
-    success: true,
-    message: "Password changed successfully",
+export const confirmEmail = async (userId, emailOTP, lang) => {
+  const user = await findById({
+    model: UserModel,
+    id: userId,
   });
-});
 
-export const confirmEmail = asyncHandelr(async (req, res, next) => {
-  const userId = req.user._id;
-  const { emailOTP } = req.body;
-
-  const user = await UserModel.findById(userId);
   if (!user) {
-    return next(new Error("User not found", { cause: 404 }));
+    throwError("user_not_found", lang, {}, 404);
   }
 
   if (!user.emailOTP) {
-    return next(new Error("No pending email verification", { cause: 400 }));
+    throwError("no_pending_verification", lang, {}, 400);
   }
 
   if (user.emailOTP !== emailOTP) {
@@ -320,19 +348,15 @@ export const confirmEmail = asyncHandelr(async (req, res, next) => {
     if (user.attemptCount >= 5) {
       user.blockUntil = new Date(Date.now() + 30 * 60 * 1000);
       await user.save();
-      return next(
-        new Error("Too many failed attempts. Try again in 30 minutes", {
-          cause: 429,
-        }),
-      );
+      throwError("too_many_attempts", lang, {}, 429);
     }
 
     await user.save();
-    return next(new Error("Invalid verification code", { cause: 400 }));
+    throwError("invalid_code", lang, {}, 400);
   }
 
   if (user.otpExpiresAt && new Date() > user.otpExpiresAt) {
-    return next(new Error("Verification code has expired", { cause: 400 }));
+    throwError("code_expired", lang, {}, 400);
   }
 
   user.isConfirmed = true;
@@ -343,44 +367,37 @@ export const confirmEmail = asyncHandelr(async (req, res, next) => {
 
   await user.save();
 
-  const updatedUser = await UserModel.findById(userId)
-    .select(
+  const updatedUser = await findById({
+    model: UserModel,
+    id: userId,
+    select:
       "-password -emailOTP -forgetpasswordOTP -attemptCount -otpExpiresAt -blockUntil",
-    )
-    .populate({
-      path: "preferredFlavor",
-      select: "name.ar name.en",
-    })
-    .populate({
-      path: "favoritePopgroup",
-      select: "name.ar name.en image",
-    })
-    .populate({
-      path: "productType",
-      select: "name.ar name.en",
-    });
-
-  res.status(200).json({
-    success: true,
-    message: "Email confirmed successfully",
-    data: updatedUser,
+    populate: [
+      { path: "preferredFlavor", select: "name.ar name.en" },
+      { path: "favoritePopgroup", select: "name.ar name.en image" },
+      { path: "productType", select: "name.ar name.en" },
+    ],
   });
-});
 
-export const resendConfirmEmail = asyncHandelr(async (req, res, next) => {
-  const userId = req.user._id;
+  return updatedUser;
+};
 
-  const user = await UserModel.findById(userId);
+export const resendConfirmEmail = async (userId, lang) => {
+  const user = await findById({
+    model: UserModel,
+    id: userId,
+  });
+
   if (!user) {
-    return next(new Error("User not found", { cause: 404 }));
+    throwError("user_not_found", lang, {}, 404);
   }
 
   if (!user.email) {
-    return next(new Error("Email not found for this user", { cause: 400 }));
+    throwError("email_not_found", lang, {}, 400);
   }
 
   if (user.isConfirmed) {
-    return next(new Error("Email is already confirmed", { cause: 400 }));
+    throwError("email_already_confirmed", lang, {}, 400);
   }
 
   const emailOTP = Math.floor(100000 + Math.random() * 900000).toString();
@@ -404,9 +421,4 @@ export const resendConfirmEmail = asyncHandelr(async (req, res, next) => {
     text: template.text,
     html: template.html,
   });
-
-  res.status(200).json({
-    success: true,
-    message: "Verification code sent to your email",
-  });
-});
+};
