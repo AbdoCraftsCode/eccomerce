@@ -17,7 +17,6 @@ export const createOfferValidation = Joi.object().keys({
     .min(1)
     .required(),
   offerPrice: Joi.number().min(0).required(),
-  currency: Joi.string().default("USD"),
   startDate: Joi.date().greater("now").required(),
   endDate: Joi.date().greater(Joi.ref("startDate")).required(),
 });
@@ -54,7 +53,6 @@ export const updateOfferValidation = Joi.object().keys({
     )
     .min(1),
   offerPrice: Joi.number().min(0),
-  currency: Joi.string(),
   startDate: Joi.date().greater("now"),
   endDate: Joi.date().greater(Joi.ref("startDate")),
 });
@@ -65,3 +63,9 @@ export const getVendorOffersValidation = Joi.object().keys({
   page: Joi.number().integer().min(1).default(1),
   limit: Joi.number().integer().min(1).max(100).default(10),
 });
+
+export const getOfferByIdValidation = Joi.object({
+  offerId: generalfields._id.required(),
+  page: Joi.number().integer().min(1).default(1),
+  limit: Joi.number().integer().min(1).max(100).default(10),
+}).unknown(false);

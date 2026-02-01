@@ -1,58 +1,83 @@
-import { Router } from "express";
-import { validation } from "../../middlewere/validation.middlewere.js";
-import * as offerValidators from "./offerValidation.js";
-import { authentication } from "../../middlewere/authontcation.middlewere.js";
-import * as offerServices from "./services/offerService.js";
-import { fileValidationTypes, uploadCloudFile } from "../../utlis/multer/cloud.multer.js";
+import { asyncHandelr } from "../../utlis/response/error.response.js";
+import * as offerService from "./services/offerService.js";
+import { getResponseMessage } from "./helpers/responseMessages.js";
+import { getUserLanguage } from "../../utlis/localization/langUserHelper.js";
 
-const router = Router();
+export const createOffer = asyncHandelr(async (req, res) => {
+  const lang = getUserLanguage(req);
+  const offer = await offerService.createOffer(req, lang);
 
-const offerUploadMiddleware = uploadCloudFile([
-  ...fileValidationTypes.image,
-]).fields([{ name: "images", maxCount: 10 }]);
+  res.status(201).json({
+    success: true,
+    message: getResponseMessage("created", lang),
+    data: offer,
+  });
+});
 
-router.post(
-  "/",
-  authentication(),
-  offerUploadMiddleware,
-  validation(offerValidators.createOfferValidation),
-  offerServices.createOffer
-);
+export const updateOffer = asyncHandelr(async (req, res) => {
+  const lang = getUserLanguage(req);
+  const updatedOffer = await offerService.updateOffer(req, lang);
 
-router.get(
-  "/my-offers",
-  authentication(),
-  validation(offerValidators.getVendorOffersValidation),
-  offerServices.getMyOffers
-);
+  res.status(200).json({
+    success: true,
+    message: getResponseMessage("updated", lang),
+    data: updatedOffer,
+  });
+});
 
-router.put(
-  "/update/:offerId",
-  authentication(),
-  offerUploadMiddleware,
-  validation(offerValidators.updateOfferValidation),
-  offerServices.updateOffer
-);
+export const approveOffer = asyncHandelr(async (req, res) => {
+  const lang = getUserLanguage(req);
+  const offer = await offerService.approveOffer(req, lang);
 
-router.put(
-  "/approve",
-  authentication(),
-  validation(offerValidators.approveOfferValidation),
-  offerServices.approveOffer
-);
+  res.status(200).json({
+    success: true,
+    message: getResponseMessage(
+      offer.status === "active" ? "approved" : "rejected",
+      lang,
+    ),
+    data: offer,
+  });
+});
 
-router.get(
-  "/",
-  authentication(),
-  validation(offerValidators.getOffersValidation),
-  offerServices.getOffers
-);
+export const getOffers = asyncHandelr(async (req, res) => {
+  const lang = getUserLanguage(req);
+  const result = await offerService.getOffers(req, lang);
 
-router.delete(
-  "/:offerId",
-  authentication(),
-  validation(offerValidators.deleteOfferValidation),
-  offerServices.deleteOffer
-);
+  res.status(200).json({
+    success: true,
+    message: getResponseMessage("fetched", lang),
+    data: result,
+  });
+});
 
-export default router;
+export const deleteOffer = asyncHandelr(async (req, res) => {
+  const lang = getUserLanguage(req);
+  await offerService.deleteOffer(req, lang);
+
+  res.status(200).json({
+    success: true,
+    message: getResponseMessage("deleted", lang),
+  });
+});
+
+export const getMyOffers = asyncHandelr(async (req, res) => {
+  const lang = getUserLanguage(req);
+  const result = await offerService.getMyOffers(req, lang);
+
+  res.status(200).json({
+    success: true,
+    message: getResponseMessage("fetched_my", lang),
+    data: result,
+  });
+});
+
+export const getOfferById = asyncHandelr(async (req, res, next) => {
+  const lang = getUserLanguage(req);
+  const offer = await offerService.getOfferById(req, lang);
+
+  res.status(200).json({
+    success: true,
+    message: getResponseMessage("fetched_single", lang),
+    data: offer,
+  });
+});

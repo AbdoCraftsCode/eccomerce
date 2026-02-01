@@ -1,11 +1,13 @@
-import { asyncHandelr } from "../../../utlis/response/error.response.js";
 import { OfferModel } from "../../../DB/models/offerModel.js";
 import { ProductModellll } from "../../../DB/models/productSchemaaaa.js";
 import { VariantModel } from "../../../DB/models/variantSchema.js";
 import { v2 as cloudinary } from "cloudinary";
+import { throwError } from "../helpers/responseMessages.js";
+import { formatCurrencyForLanguage } from "../../currency/services/currency.service.js"; // Import from currency service
+
 
 const uploadImagesToCloudinary = async (files) => {
-  if (!files?.images) return [];
+  if (!files?.images?.length) return [];
 
   const uploadPromises = files.images.map(async (file) => {
     const uploaded = await cloudinary.uploader.upload(file.path, {
@@ -27,7 +29,7 @@ const uploadImagesToCloudinary = async (files) => {
 };
 
 const deleteImagesFromCloudinary = async (images) => {
-  if (!images.length) return;
+  if (!images?.length) return;
 
   const deletePromises = images.map(async (image) => {
     if (image.public_id) {
@@ -40,11 +42,32 @@ const deleteImagesFromCloudinary = async (images) => {
   await Promise.all(deletePromises);
 };
 
-export const createOffer = asyncHandelr(async (req, res, next) => {
+export const formatOfferForLanguage = (offer, lang) => {
+  if (!offer) return null;
+
+  const obj = offer.toObject ? offer.toObject() : { ...offer };
+
+  obj.nameDisplay = offer.name?.[lang] || offer.name?.en || "Unnamed Offer";
+  obj.descriptionDisplay =
+    offer.description?.[lang] || offer.description?.en || "";
+
+  if (obj.currency) {
+    obj.currency = formatCurrencyForLanguage(obj.currency, lang);
+  }
+  return obj;
+};
+
+export const formatOffersForLanguage = (offers, lang) => {
+  return offers.map((offer) => formatOfferForLanguage(offer, lang));
+};
+
+export const createOffer = async (req, lang) => {
   const user = req.user;
 
-  if (user.accountType !== "vendor") {
-    return next(new Error("Only vendors can create offers", { cause: 403 }));
+  const currency = user.currency;
+
+  if (!currency) {
+    throwError("vendor_no_currency", lang, {}, 400);
   }
 
   const {
@@ -55,7 +78,6 @@ export const createOffer = asyncHandelr(async (req, res, next) => {
     products,
     originalPrice,
     offerPrice,
-    currency,
     startDate,
     endDate,
   } = req.body;
@@ -68,11 +90,7 @@ export const createOffer = asyncHandelr(async (req, res, next) => {
   });
 
   if (vendorProducts.length !== productIds.length) {
-    return next(
-      new Error("Some products do not belong to you or do not exist", {
-        cause: 403,
-      }),
-    );
+    throwError("products_not_owned", lang, {}, 403);
   }
 
   const variantIds = products
@@ -86,12 +104,7 @@ export const createOffer = asyncHandelr(async (req, res, next) => {
     });
 
     if (vendorVariants.length !== variantIds.length) {
-      return next(
-        new Error(
-          "Some variants do not belong to your products or do not exist",
-          { cause: 403 },
-        ),
-      );
+      throwError("variants_not_owned", lang, {}, 403);
     }
   }
 
@@ -110,40 +123,34 @@ export const createOffer = asyncHandelr(async (req, res, next) => {
     createdBy: user._id,
   });
 
-  res.status(201).json({
-    success: true,
-    message: "Offer created successfully",
-    data: offer,
+  const populatedOffer = await offer.populate({
+    path: "currency",
+    select: "name.ar name.en code symbol",
   });
-});
 
-export const updateOffer = asyncHandelr(async (req, res, next) => {
+  const formattedOffer = formatOfferForLanguage(populatedOffer, lang);
+  formattedOffer.products = undefined;
+
+  return formattedOffer;
+};
+
+export const updateOffer = async (req, lang) => {
   const user = req.user;
   const { offerId } = req.params;
   const updateData = req.body;
 
-  if (user.accountType !== "vendor") {
-    return next(new Error("Only vendors can update offers", { cause: 403 }));
-  }
-
   const offer = await OfferModel.findById(offerId);
 
   if (!offer) {
-    return next(new Error("Offer not found", { cause: 404 }));
+    throwError("offer_not_found", lang, {}, 404);
   }
 
   if (offer.createdBy.toString() !== user._id.toString()) {
-    return next(
-      new Error("You can only update your own offers", { cause: 403 }),
-    );
+    throwError("not_your_offer", lang, {}, 403);
   }
 
   if (offer.status === "active" || offer.status === "expired") {
-    return next(
-      new Error(`Cannot update offer with ${offer.status} status`, {
-        cause: 400,
-      }),
-    );
+    throwError("cannot_update_status", lang, { status: offer.status }, 400);
   }
 
   if (updateData.products) {
@@ -155,11 +162,7 @@ export const updateOffer = asyncHandelr(async (req, res, next) => {
     });
 
     if (vendorProducts.length !== productIds.length) {
-      return next(
-        new Error("Some products do not belong to you or do not exist", {
-          cause: 403,
-        }),
-      );
+      throwError("products_not_owned", lang, {}, 403);
     }
 
     const variantIds = updateData.products
@@ -173,23 +176,14 @@ export const updateOffer = asyncHandelr(async (req, res, next) => {
       });
 
       if (vendorVariants.length !== variantIds.length) {
-        return next(
-          new Error(
-            "Some variants do not belong to your products or do not exist",
-            { cause: 403 },
-          ),
-        );
+        throwError("variants_not_owned", lang, {}, 403);
       }
     }
   }
 
   if (updateData.nameAr || updateData.nameEn) {
     if (!updateData.nameAr || !updateData.nameEn) {
-      return next(
-        new Error("Both Arabic and English names must be provided", {
-          cause: 400,
-        }),
-      );
+      throwError("both_names_required", lang, {}, 400);
     }
   }
 
@@ -236,43 +230,108 @@ export const updateOffer = asyncHandelr(async (req, res, next) => {
     { new: true, runValidators: true },
   );
 
-  res.status(200).json({
-    success: true,
-    message: "Offer updated successfully",
-    data: updatedOffer,
+  const populatedOffer = await updatedOffer.populate({
+    path: "currency",
+    select: "name.ar name.en code symbol",
   });
-});
 
-export const approveOffer = asyncHandelr(async (req, res, next) => {
+  const formattedOffer = formatOfferForLanguage(populatedOffer, lang);
+  formattedOffer.products = undefined;
+
+  return formattedOffer;
+};
+
+export const getOfferById = async (req, lang) => {
+  const { offerId } = req.params;
+  const { page = 1, limit = 10 } = req.query;
+
+  const offer = await OfferModel.findById(offerId)
+    .populate("createdBy", "fullName email phone")
+    .populate({
+      path: "currency",
+      select: "name.ar name.en code symbol",
+    });
+
+  if (!offer) {
+    throwError("offer_not_found", lang, {}, 404);
+  }
+
+  const skip = (page - 1) * limit;
+  const paginatedProducts = offer.products.slice(skip, skip + parseInt(limit));
+
+  const populatedProducts = await Promise.all(
+    paginatedProducts.map(async (item) => {
+      const product = await ProductModellll.findById(item.productId).select(
+        "name description images",
+      );
+
+      let variant = null;
+      if (item.variantId) {
+        variant = await VariantModel.findById(item.variantId)
+          .select("images attributes")
+          .populate({
+            path: "attributes.attributeId",
+            model: "Attributee", // match your model name
+            select: "name.ar name.en type isActive",
+          })
+          .populate({
+            path: "attributes.valueId",
+            model: "AttributeValue", // match your model name
+            select: "value.ar value.en hexCode isActive",
+          });
+      }
+
+      return {
+        product: product,
+        variant: variant,
+      };
+    }),
+  );
+
+  const offerObj = formatOfferForLanguage(offer, lang);
+  offerObj.products = populatedProducts;
+  offerObj.pagination = {
+    page: parseInt(page),
+    limit: parseInt(limit),
+    totalProducts: offer.products.length,
+    totalPages: Math.ceil(offer.products.length / limit),
+  };
+
+  return offerObj;
+};
+
+export const approveOffer = async (req, lang) => {
   const user = req.user;
   const { offerId, status } = req.body;
-
-  if (user.accountType !== "Admin") {
-    return next(new Error("Only admin can approve offers", { cause: 403 }));
-  }
 
   const offer = await OfferModel.findById(offerId);
 
   if (!offer) {
-    return next(new Error("Offer not found", { cause: 404 }));
+    throwError("offer_not_found", lang, {}, 404);
   }
 
   if (offer.status !== "pending") {
-    return next(new Error(`Offer is already ${offer.status}`, { cause: 400 }));
+    throwError("offer_already_processed", lang, { status: offer.status }, 400);
   }
 
   offer.status = status;
   offer.approvedBy = user._id;
   await offer.save();
 
-  res.status(200).json({
-    success: true,
-    message: `Offer ${status} successfully`,
-    data: offer,
-  });
-});
 
-export const getOffers = asyncHandelr(async (req, res, next) => {
+  const populatedOffer = await offer.populate({
+    path: "currency",
+    select: "name.ar name.en code symbol",
+  });
+
+  const formattedOffer = formatOfferForLanguage(populatedOffer, lang);
+
+  formattedOffer.products = undefined;
+
+  return formattedOffer;
+};
+
+export const getOffers = async (req, lang) => {
   const { status, page = 1, limit = 10, vendorId } = req.query;
 
   const skip = (page - 1) * limit;
@@ -282,66 +341,62 @@ export const getOffers = asyncHandelr(async (req, res, next) => {
   if (vendorId) filter.createdBy = vendorId;
 
   const currentDate = new Date();
-  const offers = await OfferModel.find(filter)
+  let offers = await OfferModel.find(filter)
     .populate("createdBy", "fullName email phone")
     .populate({
-      path: "products.productId",
-      select: "name images mainPrice",
-    })
-    .populate({
-      path: "products.variantId",
-      select: "price sku images",
+      path: "currency",
+      select: "name.ar name.en code symbol",
     })
     .sort({ createdAt: -1 })
     .skip(skip)
     .limit(parseInt(limit));
 
-  const updatedOffers = offers.map((offer) => {
-    if (offer.status === "active" && offer.endDate < currentDate) {
-      offer.status = "expired";
-      offer.save();
-    }
-    return offer;
-  });
+  offers = await Promise.all(
+    offers.map(async (offer) => {
+      if (offer.status === "active" && offer.endDate < currentDate) {
+        offer.status = "expired";
+        await offer.save();
+      }
+      return offer;
+    }),
+  );
 
   const total = await OfferModel.countDocuments(filter);
 
-  res.status(200).json({
-    success: true,
-    data: {
-      offers: updatedOffers,
-      pagination: {
-        page: parseInt(page),
-        limit: parseInt(limit),
-        total,
-        pages: Math.ceil(total / limit),
-      },
-    },
-  });
-});
+  const formattedOffers = formatOffersForLanguage(offers, lang);
 
-export const deleteOffer = asyncHandelr(async (req, res, next) => {
+  // Remove products from each offer
+  formattedOffers.forEach((offer) => {
+    offer.products = undefined;
+  });
+
+  return {
+    offers: formattedOffers,
+    pagination: {
+      page: parseInt(page),
+      limit: parseInt(limit),
+      total,
+      pages: Math.ceil(total / limit),
+    },
+  };
+};
+
+export const deleteOffer = async (req, lang) => {
   const user = req.user;
   const { offerId } = req.params;
-
-  if (user.accountType !== "vendor") {
-    return next(new Error("Only vendors can delete offers", { cause: 403 }));
-  }
 
   const offer = await OfferModel.findById(offerId);
 
   if (!offer) {
-    return next(new Error("Offer not found", { cause: 404 }));
+    throwError("offer_not_found", lang, {}, 404);
   }
 
   if (offer.createdBy.toString() !== user._id.toString()) {
-    return next(
-      new Error("You can only delete your own offers", { cause: 403 }),
-    );
+    throwError("not_your_offer", lang, {}, 403);
   }
 
   if (offer.status === "active") {
-    return next(new Error("Cannot delete active offer", { cause: 400 }));
+    throwError("cannot_delete_active", lang, {}, 400);
   }
 
   if (offer.images && offer.images.length > 0) {
@@ -349,14 +404,9 @@ export const deleteOffer = asyncHandelr(async (req, res, next) => {
   }
 
   await OfferModel.findByIdAndDelete(offerId);
+};
 
-  res.status(200).json({
-    success: true,
-    message: "Offer deleted successfully",
-  });
-});
-
-export const getMyOffers = asyncHandelr(async (req, res, next) => {
+export const getMyOffers = async (req, lang) => {
   const user = req.user;
   const { status, page = 1, limit = 10 } = req.query;
 
@@ -366,39 +416,40 @@ export const getMyOffers = asyncHandelr(async (req, res, next) => {
   if (status) filter.status = status;
 
   const currentDate = new Date();
-  const offers = await OfferModel.find(filter)
+  let offers = await OfferModel.find(filter)
     .populate({
-      path: "products.productId",
-      select: "name images mainPrice",
-    })
-    .populate({
-      path: "products.variantId",
-      select: "price sku images",
+      path: "currency",
+      select: "name.ar name.en code symbol",
     })
     .sort({ createdAt: -1 })
     .skip(skip)
     .limit(parseInt(limit));
 
-  const updatedOffers = offers.map((offer) => {
-    if (offer.status === "active" && offer.endDate < currentDate) {
-      offer.status = "expired";
-      offer.save();
-    }
-    return offer;
-  });
+  offers = await Promise.all(
+    offers.map(async (offer) => {
+      if (offer.status === "active" && offer.endDate < currentDate) {
+        offer.status = "expired";
+        await offer.save();
+      }
+      return offer;
+    }),
+  );
 
   const total = await OfferModel.countDocuments(filter);
 
-  res.status(200).json({
-    success: true,
-    data: {
-      offers: updatedOffers,
-      pagination: {
-        page: parseInt(page),
-        limit: parseInt(limit),
-        total,
-        pages: Math.ceil(total / limit),
-      },
-    },
+  const formattedOffers = formatOffersForLanguage(offers, lang);
+
+  formattedOffers.forEach((offer) => {
+    offer.products = undefined;
   });
-});
+
+  return {
+    offers: formattedOffers,
+    pagination: {
+      page: parseInt(page),
+      limit: parseInt(limit),
+      total,
+      pages: Math.ceil(total / limit),
+    },
+  };
+};

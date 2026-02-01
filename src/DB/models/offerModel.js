@@ -39,8 +39,9 @@ const offerSchema = new mongoose.Schema(
       required: true,
     },
     currency: {
-      type: String,
-      default: "USD",
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Currency",
+      required: true,
     },
     status: {
       type: String,
@@ -65,7 +66,7 @@ const offerSchema = new mongoose.Schema(
       ref: "User",
     },
   },
-  { timestamps: true }
+  { timestamps: true },
 );
 
 offerSchema.index({ status: 1, endDate: 1 });
