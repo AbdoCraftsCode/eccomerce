@@ -3,8 +3,21 @@ import { ProductModellll } from "../../../DB/models/productSchemaaaa.js";
 import { VariantModel } from "../../../DB/models/variantSchema.js";
 import { v2 as cloudinary } from "cloudinary";
 import { throwError } from "../helpers/responseMessages.js";
-import { formatCurrencyForLanguage } from "../../currency/services/currency.service.js"; // Import from currency service
-
+import { formatCurrencyForLanguage } from "../../currency/services/currency.service.js";
+import {
+  create,
+  findAll,
+  findById,
+  findByIdAndUpdate,
+  deleteOne,
+  countDocuments,
+} from "../../../DB/dbservice.js";
+import {
+  validateVendorProducts,
+  validateVendorVariants,
+  setOfferOnProducts,
+  clearOfferFromProducts,
+} from "../../products/services/product.service.js";
 
 const uploadImagesToCloudinary = async (files) => {
   if (!files?.images?.length) return [];
@@ -42,13 +55,26 @@ const deleteImagesFromCloudinary = async (images) => {
   await Promise.all(deletePromises);
 };
 
+const updateExpiredOffers = async (offers) => {
+  const currentDate = new Date();
+  return Promise.all(
+    offers.map(async (offer) => {
+      if (offer.status === "active" && offer.endDate < currentDate) {
+        offer.status = "expired";
+        await offer.save();
+      }
+      return offer;
+    }),
+  );
+};
+
 export const formatOfferForLanguage = (offer, lang) => {
   if (!offer) return null;
 
   const obj = offer.toObject ? offer.toObject() : { ...offer };
 
-  obj.nameDisplay = offer.name?.[lang] || offer.name?.en || "Unnamed Offer";
-  obj.descriptionDisplay =
+  obj.name = offer.name?.[lang] || offer.name?.en || "Unnamed Offer";
+  obj.description =
     offer.description?.[lang] || offer.description?.en || "";
 
   if (obj.currency) {
@@ -84,48 +110,42 @@ export const createOffer = async (req, lang) => {
 
   const productIds = products.map((item) => item.productId);
 
-  const vendorProducts = await ProductModellll.find({
-    _id: { $in: productIds },
-    createdBy: user._id,
-  });
+  await validateVendorProducts(products, productIds, user._id, lang);
 
-  if (vendorProducts.length !== productIds.length) {
-    throwError("products_not_owned", lang, {}, 403);
-  }
-
-  const variantIds = products
-    .filter((item) => item.variantId)
-    .map((item) => item.variantId);
-
-  if (variantIds.length > 0) {
-    const vendorVariants = await VariantModel.find({
-      _id: { $in: variantIds },
-      productId: { $in: productIds },
-    });
-
-    if (vendorVariants.length !== variantIds.length) {
-      throwError("variants_not_owned", lang, {}, 403);
-    }
-  }
+  await validateVendorVariants(products, productIds, lang);
 
   const images = await uploadImagesToCloudinary(req.files);
 
-  const offer = await OfferModel.create({
-    name: { ar: nameAr, en: nameEn },
-    description: { ar: descriptionAr, en: descriptionEn },
-    images,
-    products,
-    originalPrice,
-    offerPrice,
-    currency,
-    startDate: new Date(startDate),
-    endDate: new Date(endDate),
-    createdBy: user._id,
+  console.log(`before createion and this }`);
+
+  const offer = await create({
+    model: OfferModel,
+    data: {
+      name: { ar: nameAr, en: nameEn },
+      description: { ar: descriptionAr, en: descriptionEn },
+      images,
+      products,
+      originalPrice,
+      offerPrice,
+      currency,
+      startDate: new Date(startDate),
+      endDate: new Date(endDate),
+      createdBy: user._id,
+    },
   });
 
-  const populatedOffer = await offer.populate({
-    path: "currency",
-    select: "name.ar name.en code symbol",
+  await setOfferOnProducts(
+    products,
+    offer._id,
+    new Date(startDate),
+    new Date(endDate),
+    lang,
+  );
+
+  const populatedOffer = await findById({
+    model: OfferModel,
+    id: offer._id,
+    populate: [{ path: "currency", select: "name.ar name.en code symbol" }],
   });
 
   const formattedOffer = formatOfferForLanguage(populatedOffer, lang);
@@ -139,7 +159,10 @@ export const updateOffer = async (req, lang) => {
   const { offerId } = req.params;
   const updateData = req.body;
 
-  const offer = await OfferModel.findById(offerId);
+  const offer = await findById({
+    model: OfferModel,
+    id: offerId,
+  });
 
   if (!offer) {
     throwError("offer_not_found", lang, {}, 404);
@@ -153,32 +176,24 @@ export const updateOffer = async (req, lang) => {
     throwError("cannot_update_status", lang, { status: offer.status }, 400);
   }
 
+  let productIds = offer.products.map((item) => item.productId);
+
+  let productsToValidate = offer.products;
+
   if (updateData.products) {
-    const productIds = updateData.products.map((item) => item.productId);
+    productsToValidate = updateData.products;
+    productIds = updateData.products.map((item) => item.productId);
 
-    const vendorProducts = await ProductModellll.find({
-      _id: { $in: productIds },
-      createdBy: user._id,
-    });
+    await clearOfferFromProducts(offer.products, lang);
 
-    if (vendorProducts.length !== productIds.length) {
-      throwError("products_not_owned", lang, {}, 403);
-    }
+    await validateVendorProducts(
+      updateData.products,
+      productIds,
+      user._id,
+      lang,
+    );
 
-    const variantIds = updateData.products
-      .filter((item) => item.variantId)
-      .map((item) => item.variantId);
-
-    if (variantIds.length > 0) {
-      const vendorVariants = await VariantModel.find({
-        _id: { $in: variantIds },
-        productId: { $in: productIds },
-      });
-
-      if (vendorVariants.length !== variantIds.length) {
-        throwError("variants_not_owned", lang, {}, 403);
-      }
-    }
+    await validateVendorVariants(updateData.products, productIds, lang);
   }
 
   if (updateData.nameAr || updateData.nameEn) {
@@ -224,15 +239,27 @@ export const updateOffer = async (req, lang) => {
 
   delete updateData.status;
 
-  const updatedOffer = await OfferModel.findByIdAndUpdate(
-    offerId,
-    { $set: updateData },
-    { new: true, runValidators: true },
-  );
+  const updatedOffer = await findByIdAndUpdate({
+    model: OfferModel,
+    id: offerId,
+    data: updateData,
+    options: { new: true, runValidators: true },
+  });
 
-  const populatedOffer = await updatedOffer.populate({
-    path: "currency",
-    select: "name.ar name.en code symbol",
+  if (updateData.products || updateData.startDate || updateData.endDate) {
+    await setOfferOnProducts(
+      productsToValidate,
+      updatedOffer._id,
+      updatedOffer.startDate,
+      updatedOffer.endDate,
+      lang,
+    );
+  }
+
+  const populatedOffer = await findById({
+    model: OfferModel,
+    id: updatedOffer._id,
+    populate: [{ path: "currency", select: "name.ar name.en code symbol" }],
   });
 
   const formattedOffer = formatOfferForLanguage(populatedOffer, lang);
@@ -245,12 +272,14 @@ export const getOfferById = async (req, lang) => {
   const { offerId } = req.params;
   const { page = 1, limit = 10 } = req.query;
 
-  const offer = await OfferModel.findById(offerId)
-    .populate("createdBy", "fullName email phone")
-    .populate({
-      path: "currency",
-      select: "name.ar name.en code symbol",
-    });
+  const offer = await findById({
+    model: OfferModel,
+    id: offerId,
+    populate: [
+      { path: "createdBy", select: "fullName email phone" },
+      { path: "currency", select: "name.ar name.en code symbol" },
+    ],
+  });
 
   if (!offer) {
     throwError("offer_not_found", lang, {}, 404);
@@ -261,24 +290,29 @@ export const getOfferById = async (req, lang) => {
 
   const populatedProducts = await Promise.all(
     paginatedProducts.map(async (item) => {
-      const product = await ProductModellll.findById(item.productId).select(
-        "name description images",
-      );
+      const product = await findById({
+        model: ProductModellll,
+        id: item.productId,
+        select: "name description images",
+      });
 
       let variant = null;
       if (item.variantId) {
-        variant = await VariantModel.findById(item.variantId)
-          .select("images attributes")
-          .populate({
-            path: "attributes.attributeId",
-            model: "Attributee", // match your model name
-            select: "name.ar name.en type isActive",
-          })
-          .populate({
-            path: "attributes.valueId",
-            model: "AttributeValue", // match your model name
-            select: "value.ar value.en hexCode isActive",
-          });
+        variant = await findById({
+          model: VariantModel,
+          id: item.variantId,
+          select: "images attributes",
+          populate: [
+            {
+              path: "attributes.attributeId",
+              select: "name.ar name.en type isActive",
+            },
+            {
+              path: "attributes.valueId",
+              select: "value.ar value.en hexCode isActive",
+            },
+          ],
+        });
       }
 
       return {
@@ -304,7 +338,10 @@ export const approveOffer = async (req, lang) => {
   const user = req.user;
   const { offerId, status } = req.body;
 
-  const offer = await OfferModel.findById(offerId);
+  const offer = await findById({
+    model: OfferModel,
+    id: offerId,
+  });
 
   if (!offer) {
     throwError("offer_not_found", lang, {}, 404);
@@ -318,14 +355,13 @@ export const approveOffer = async (req, lang) => {
   offer.approvedBy = user._id;
   await offer.save();
 
-
-  const populatedOffer = await offer.populate({
-    path: "currency",
-    select: "name.ar name.en code symbol",
+  const populatedOffer = await findById({
+    model: OfferModel,
+    id: offer._id,
+    populate: [{ path: "currency", select: "name.ar name.en code symbol" }],
   });
 
   const formattedOffer = formatOfferForLanguage(populatedOffer, lang);
-
   formattedOffer.products = undefined;
 
   return formattedOffer;
@@ -340,32 +376,27 @@ export const getOffers = async (req, lang) => {
   if (status) filter.status = status;
   if (vendorId) filter.createdBy = vendorId;
 
-  const currentDate = new Date();
-  let offers = await OfferModel.find(filter)
-    .populate("createdBy", "fullName email phone")
-    .populate({
-      path: "currency",
-      select: "name.ar name.en code symbol",
-    })
-    .sort({ createdAt: -1 })
-    .skip(skip)
-    .limit(parseInt(limit));
+  let offers = await findAll({
+    model: OfferModel,
+    filter,
+    populate: [
+      { path: "createdBy", select: "fullName email phone" },
+      { path: "currency", select: "name.ar name.en code symbol" },
+    ],
+    sort: { createdAt: -1 },
+    skip,
+    limit: parseInt(limit),
+  });
 
-  offers = await Promise.all(
-    offers.map(async (offer) => {
-      if (offer.status === "active" && offer.endDate < currentDate) {
-        offer.status = "expired";
-        await offer.save();
-      }
-      return offer;
-    }),
-  );
+  offers = await updateExpiredOffers(offers);
 
-  const total = await OfferModel.countDocuments(filter);
+  const total = await countDocuments({
+    model: OfferModel,
+    filter,
+  });
 
   const formattedOffers = formatOffersForLanguage(offers, lang);
 
-  // Remove products from each offer
   formattedOffers.forEach((offer) => {
     offer.products = undefined;
   });
@@ -385,7 +416,10 @@ export const deleteOffer = async (req, lang) => {
   const user = req.user;
   const { offerId } = req.params;
 
-  const offer = await OfferModel.findById(offerId);
+  const offer = await findById({
+    model: OfferModel,
+    id: offerId,
+  });
 
   if (!offer) {
     throwError("offer_not_found", lang, {}, 404);
@@ -403,7 +437,12 @@ export const deleteOffer = async (req, lang) => {
     await deleteImagesFromCloudinary(offer.images);
   }
 
-  await OfferModel.findByIdAndDelete(offerId);
+  await clearOfferFromProducts(offer.products, lang);
+
+  await deleteOne({
+    model: OfferModel,
+    filter: { _id: offerId },
+  });
 };
 
 export const getMyOffers = async (req, lang) => {
@@ -415,27 +454,21 @@ export const getMyOffers = async (req, lang) => {
 
   if (status) filter.status = status;
 
-  const currentDate = new Date();
-  let offers = await OfferModel.find(filter)
-    .populate({
-      path: "currency",
-      select: "name.ar name.en code symbol",
-    })
-    .sort({ createdAt: -1 })
-    .skip(skip)
-    .limit(parseInt(limit));
+  let offers = await findAll({
+    model: OfferModel,
+    filter,
+    populate: [{ path: "currency", select: "name.ar name.en code symbol" }],
+    sort: { createdAt: -1 },
+    skip,
+    limit: parseInt(limit),
+  });
 
-  offers = await Promise.all(
-    offers.map(async (offer) => {
-      if (offer.status === "active" && offer.endDate < currentDate) {
-        offer.status = "expired";
-        await offer.save();
-      }
-      return offer;
-    }),
-  );
+  offers = await updateExpiredOffers(offers);
 
-  const total = await OfferModel.countDocuments(filter);
+  const total = await countDocuments({
+    model: OfferModel,
+    filter,
+  });
 
   const formattedOffers = formatOffersForLanguage(offers, lang);
 

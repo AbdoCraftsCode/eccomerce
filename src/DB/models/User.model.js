@@ -58,7 +58,6 @@ const userSchema = new Schema(
       enum: ["PENDING", "REFUSED", "ACCEPTED"],
       default: "PENDING",
     },
-
     country: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Country",

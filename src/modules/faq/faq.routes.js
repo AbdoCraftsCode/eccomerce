@@ -1,30 +1,37 @@
 import { Router } from "express";
 import { validation } from "../../middlewere/validation.middlewere.js";
-import * as faqValidators from "./faqValidation.js";
-import { authentication } from "../../middlewere/authontcation.middlewere.js";
-import * as faqServices from "./services/faqService.js";
+import {
+  authentication,
+  authorization,
+} from "../../middlewere/authontcation.middlewere.js";
+import * as faqController from "./faq.controller.js";
+import * as faqValidators from "./faq.validation.js";
 
 const router = Router();
 
 router.post(
   "/",
   authentication(),
+  authorization(["Admin", "Owner"]),
   validation(faqValidators.createFaqValidation),
-  faqServices.createFaq,
+  faqController.createFaq,
 );
+
 
 router.delete(
   "/",
   authentication(),
+  authorization(["Admin", "Owner"]),
   validation(faqValidators.deleteFaqValidation),
-  faqServices.deleteFaq
+  faqController.deleteFaq,
 );
+
 
 router.get(
   "/",
-  authentication(),
+  authentication(), 
   validation(faqValidators.getFaqsValidation),
-  faqServices.getFaqsByCategory,
+  faqController.getFaqsByCategory,
 );
 
 export default router;

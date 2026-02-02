@@ -21,13 +21,12 @@ import { nanoid, customAlphabet } from "nanoid";
 import { vervicaionemailtemplet } from "../../../utlis/temblete/vervication.email.js";
 import { sendemail } from "../../../utlis/email/sendemail.js";
 import AppSettingsSchema from "../../../DB/models/AppSettingsSchema.js";
-import { sendOTP } from "../../../utlis/authentica/authenticaHelper.js"
+import { sendOTP } from "../../../utlis/authentica/authenticaHelper.js";
 import { CategoryModellll } from "../../../DB/models/categorySchemaaa.js";
 const AUTHENTICA_OTP_URL = "https://api.authentica.sa/api/v1/send-otp";
 import { convertProductPrices } from "./changeCurrencyHelper.service.js";
 import cloud from "../../../utlis/multer/cloudinary.js";
 import fs from "fs";
-
 
 export const login = asyncHandelr(async (req, res, next) => {
   const { phone, password } = req.body; // تسجيل الدخول فقط برقم الهاتف
@@ -166,7 +165,6 @@ export const loginAdmin = asyncHandelr(async (req, res, next) => {
   });
 });
 
-
 export const refreshToken = asyncHandelr(async (req, res, next) => {
   const user = await decodedToken({
     authorization: req.headers.authorization,
@@ -191,9 +189,6 @@ export const refreshToken = asyncHandelr(async (req, res, next) => {
     refreshToken: newRefreshToken,
   });
 });
-
-
-
 
 export const resendOTP = asyncHandelr(async (req, res, next) => {
   const { email } = req.body;
@@ -231,7 +226,6 @@ export const resendOTP = asyncHandelr(async (req, res, next) => {
   return successresponse(res, "A new OTP has been sent to your email.");
 });
 
-
 const AUTHENTICA_API_KEY = "ad5348edf3msh15d5daec987b64cp183e9fjsne1092498134c";
 const AUTHENTICA_BASE_URL = "https://authentica1.p.rapidapi.com/api/v2";
 export async function verifyOTP(phone, otp) {
@@ -262,8 +256,6 @@ export async function verifyOTP(phone, otp) {
     throw error;
   }
 }
-
-
 
 export const confirOtp = asyncHandelr(async (req, res, next) => {
   const { code, phone } = req.body;
@@ -828,7 +820,6 @@ import { OrderModelUser } from "../../../DB/models/orderSchemaUser.model.js";
 export const createCategory = asyncHandelr(async (req, res, next) => {
   const { name, parentCategory, description, status } = req.body;
 
-
   if (!name?.ar || !name?.en) {
     return next(
       new Error("❌ اسم القسم مطلوب بالعربي والإنجليزي", { cause: 400 }),
@@ -1255,18 +1246,17 @@ export const deleteCategory = asyncHandelr(async (req, res, next) => {
   });
 });
 
+import {getCurrencyById } from "../../currency/services/currency.service.js"
+
 export const CreateProdut = asyncHandelr(async (req, res, next) => {
-  // ✅ التحقق من وجود توكن ومستخدم مسجل دخول
   if (!req.user) {
     return next(new Error("❌ يجب تسجيل الدخول لإنشاء منتج", { cause: 401 }));
   }
 
-  // ✅ التحقق من أن المستخدم بائع (vendor)
   if (req.user.accountType !== "vendor") {
     return next(new Error("❌ غير مصرح لك بإنشاء منتجات", { cause: 403 }));
   }
 
-  // ✅ التأكد من أن البائع مقبول (اختياري للأمان الإضافي)
   if (req.user.status !== "ACCEPTED") {
     return next(
       new Error("❌ طلب الانضمام كبائع لم يُقبل بعد", { cause: 403 }),
@@ -1286,7 +1276,6 @@ export const CreateProdut = asyncHandelr(async (req, res, next) => {
     disCountPrice,
     tax,
     bulkDiscounts,
-    currency,
     hasVariants,
     inStock,
     unlimitedStock,
@@ -1294,7 +1283,11 @@ export const CreateProdut = asyncHandelr(async (req, res, next) => {
     status,
   } = req.body;
 
-  // Validations أساسية (نفس اللي عندك بدون تغيير)
+  const currency  =await getCurrencyById(req.user.currency||null , req.user.lang || "en");
+  if (currency.isActive !== true){
+    return next(new Error("your curreny is not active", { cause: 400 }));
+  }
+
   if (!name?.ar || !name?.en) {
     return next(
       new Error("❌ اسم المنتج مطلوب بالعربي والإنجليزي", { cause: 400 }),
@@ -1320,7 +1313,6 @@ export const CreateProdut = asyncHandelr(async (req, res, next) => {
     );
   }
 
-  // التحقق من SKU إذا كان موجود (unique)
   if (sku) {
     const existingSku = await ProductModellll.findOne({ sku });
     if (existingSku) {
@@ -1362,7 +1354,7 @@ export const CreateProdut = asyncHandelr(async (req, res, next) => {
       rate: tax?.rate || 0,
     },
     bulkDiscounts: bulkDiscounts || [],
-    currency,
+    currency : currency._id,
     weight,
     stock,
     hasVariants,
@@ -1380,18 +1372,23 @@ export const CreateProdut = asyncHandelr(async (req, res, next) => {
       count: 0,
     },
     isActive: true,
-    createdBy: req.user._id, // ← هنا التوكن بيشتغل (مين اللي أنشأ المنتج)
+    createdBy: req.user._id, 
   });
+
+  const populatedProduct = await ProductModellll.findById(product._id)
+    .populate({
+      path: "currency",
+      select: "code name symbol",
+    })
 
   res.status(201).json({
     success: true,
     message: "تم إنشاء المنتج بنجاح ✅",
-    data: product,
+    data: populatedProduct,
   });
 });
 
 export const getProducts = asyncHandelr(async (req, res, next) => {
-  // ✅ التحقق من وجود توكن
   if (!req.user) {
     return next(new Error("❌ يجب تسجيل الدخول لعرض المنتجات", { cause: 401 }));
   }
@@ -2654,12 +2651,10 @@ export const GetAllProducts = asyncHandelr(async (req, res, next) => {
 
   const userLanguage = req.user.lang;
 
-  // تحويل وتأمين القيم
   const pageNum = Math.max(1, parseInt(page) || 1);
   const limitNum = Math.min(50, Math.max(1, parseInt(limit) || 10)); // max 50 للأداء
   const skip = (pageNum - 1) * limitNum;
 
-  // جلب عدد المنتجات الكلي للـ pagination
   const totalProducts = await ProductModellll.countDocuments({
     isActive: true,
     status: "published",
@@ -2728,11 +2723,13 @@ export const GetAllProducts = asyncHandelr(async (req, res, next) => {
         stock: variant.stock,
         images: variant.images,
         attributes: formattedAttributes,
+        offerId: variant.offerId,
+        offerStart: variant.offerStart,
+        offerEnd: variant.offerEnd,
       });
     });
   }
 
-  // تنسيق المنتجات النهائي
   const formattedProducts = products.map((product) => {
     const baseProduct = {
       _id: product._id,
@@ -2763,6 +2760,9 @@ export const GetAllProducts = asyncHandelr(async (req, res, next) => {
       stock: product.stock || 0,
       tags: product.tags || [],
       bulkDiscounts: product.bulkDiscounts || [],
+      offerId: product.offerId,
+      offerStart: product.offerStart,
+      offerEnd: product.offerEnd,
     };
 
     if (product.hasVariants) {
@@ -3864,7 +3864,7 @@ export const GetBrands = asyncHandelr(async (req, res, next) => {
 });
 
 export const becomeSeller = asyncHandelr(async (req, res, next) => {
-  const { fullName, email, phone, companyName, categories, password  } =
+  const { fullName, email, phone, companyName, categories, password } =
     req.body;
 
   if (!fullName || !password) {
@@ -5119,14 +5119,14 @@ export const deleteCoupon = asyncHandelr(async (req, res, next) => {
 export const createAdminCoupon = asyncHandelr(async (req, res, next) => {
   const {
     code,
-    discountType, 
-    discountValue, 
-    appliesTo, 
-    productId, 
+    discountType,
+    discountValue,
+    appliesTo,
+    productId,
     categoryId,
     maxUses = 1,
-    expiryDate, 
-    isActive = true, 
+    expiryDate,
+    isActive = true,
   } = req.body;
 
   if (!req.user) {
@@ -5147,13 +5147,18 @@ export const createAdminCoupon = asyncHandelr(async (req, res, next) => {
 
   if (!discountValue || isNaN(discountValue) || Number(discountValue) <= 0) {
     return next(
-      new Error("discount value is required and should be postive number", { cause: 400 }),
+      new Error("discount value is required and should be postive number", {
+        cause: 400,
+      }),
     );
   }
 
   if (discountType === "percentage" && Number(discountValue) > 100) {
     return next(
-      new Error("discount value should be less than 100% because it's percentage", { cause: 400 }),
+      new Error(
+        "discount value should be less than 100% because it's percentage",
+        { cause: 400 },
+      ),
     );
   }
 
@@ -5215,9 +5220,7 @@ export const createAdminCoupon = asyncHandelr(async (req, res, next) => {
 
   const existingCoupon = await CouponModel.findOne({ code: couponCode });
   if (existingCoupon) {
-    return next(
-      new Error("this code is already used", { cause: 409 }),
-    );
+    return next(new Error("this code is already used", { cause: 409 }));
   }
 
   let parsedExpiryDate = null;
@@ -5258,15 +5261,12 @@ export const createAdminCoupon = asyncHandelr(async (req, res, next) => {
 
 export const getAdminCoupons = asyncHandelr(async (req, res, next) => {
   if (!req.user || req.user.accountType !== "Admin") {
-    return next(new Error("you have not privilage to see admin coupons", { cause: 401 }));
+    return next(
+      new Error("you have not privilage to see admin coupons", { cause: 401 }),
+    );
   }
 
-  const {
-    page = 1,
-    limit = 10,
-    isActive, 
-    expired,
-  } = req.query;
+  const { page = 1, limit = 10, isActive, expired } = req.query;
 
   const pageNum = Math.max(1, parseInt(page) || 1);
   const limitNum = Math.min(50, Math.max(1, parseInt(limit) || 10));
@@ -5397,9 +5397,7 @@ export const getAdminCouponDetails = asyncHandelr(async (req, res, next) => {
   const { couponId } = req.params;
 
   if (!req.user || req.user.accountType !== "Admin") {
-    return next(
-      new Error("you dont have a privilege", { cause: 401 }),
-    );
+    return next(new Error("you dont have a privilege", { cause: 401 }));
   }
 
   const coupon = await CouponModel.findOne({
@@ -5534,7 +5532,11 @@ export const updateAdminCoupon = asyncHandelr(async (req, res, next) => {
 
   if (discountType) {
     if (!["percentage", "fixed"].includes(discountType)) {
-      return next(new Error("discount type should be percentage or fixed", { cause: 400 }));
+      return next(
+        new Error("discount type should be percentage or fixed", {
+          cause: 400,
+        }),
+      );
     }
     coupon.discountType = discountType;
   }
@@ -5548,7 +5550,10 @@ export const updateAdminCoupon = asyncHandelr(async (req, res, next) => {
     }
     if (coupon.discountType === "percentage" && value > 100) {
       return next(
-        new Error("discount value should be less than 100% because it's percentage", { cause: 400 }),
+        new Error(
+          "discount value should be less than 100% because it's percentage",
+          { cause: 400 },
+        ),
       );
     }
     coupon.discountValue = value;

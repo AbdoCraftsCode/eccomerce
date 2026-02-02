@@ -17,7 +17,7 @@ import walletRouter from './modules/wallet/wallet.controller.js';
 
 import adminRoutes from "./modules/adminPanel/admin.routes.js";
 import searchRoutes from "./modules/search/search.controller.js";
-import faqRoutes from "./modules/faq/faqController.js";
+import faqRoutes from "./modules/faq/faq.routes.js";
 import offersRoutes from "./modules/offers/offers.routes.js";
 import currenciesRoutes from "./modules/currency/currency.routes.js";
 import countriesRoutes from "./modules/country/country.routes.js";

@@ -47,7 +47,7 @@ export const formatCurrencyForLanguage = (currency, lang) => {
 
   const obj = currency.toObject ? currency.toObject() : { ...currency };
 
-  obj.displayName =
+  obj.name =
     currency.name && currency.name[lang]
       ? currency.name[lang]
       : currency.name?.en || currency.code;

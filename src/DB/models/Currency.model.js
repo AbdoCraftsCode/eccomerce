@@ -57,14 +57,8 @@ const currencySchema = new Schema(
   },
   {
     timestamps: true,
-    toJSON: { virtuals: true },
-    toObject: { virtuals: true },
   },
 );
-
-currencySchema.virtual("displayName").get(function () {
-  return this.name.en;
-});
 
 currencySchema.pre("save", async function (next) {
   if (this.isDefault && this.isModified("isDefault")) {

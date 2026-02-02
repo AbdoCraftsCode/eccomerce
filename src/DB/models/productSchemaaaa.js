@@ -1,4 +1,3 @@
-// productSchemaaaa.js
 import mongoose from "mongoose";
 
 const productSchema = new mongoose.Schema(
@@ -81,8 +80,8 @@ const productSchema = new mongoose.Schema(
       },
     ],
     currency: {
-      type: String,
-      default: "USD",
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Currency",
     },
     hasVariants: {
       type: Boolean,
@@ -92,13 +91,19 @@ const productSchema = new mongoose.Schema(
       type: Number,
       default: 0,
       min: 0,
-      validate: { validator: Number.isInteger, message: 'Stock must be integer' }
+      validate: {
+        validator: Number.isInteger,
+        message: "Stock must be integer",
+      },
     },
     reservedStock: {
       type: Number,
       default: 0,
       min: 0,
-      validate: { validator: Number.isInteger, message: 'Reserved stock must be integer' }
+      validate: {
+        validator: Number.isInteger,
+        message: "Reserved stock must be integer",
+      },
     },
     seo: {
       title: String,
@@ -109,8 +114,18 @@ const productSchema = new mongoose.Schema(
       type: Boolean,
       default: true,
     },
+    offerId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Offer",
+    },
+    offerStart: {
+      type: Date,
+    },
+    offerEnd: {
+      type: Date,
+    },
   },
-  { timestamps: true }
+  { timestamps: true },
 );
 
 export const ProductModellll = mongoose.model("Producttttt", productSchema);

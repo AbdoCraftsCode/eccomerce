@@ -3,14 +3,12 @@ import mongoose, { Schema } from "mongoose";
 const faqSchema = new Schema(
   {
     question: {
-      type: String,
-      required: true,
-      trim: true,
+      ar: { type: String, required: true, trim: true },
+      en: { type: String, required: true, trim: true },
     },
     answer: {
-      type: String,
-      required: true,
-      trim: true,
+      ar: { type: String, required: true, trim: true },
+      en: { type: String, required: true, trim: true },
     },
     category: {
       type: String,

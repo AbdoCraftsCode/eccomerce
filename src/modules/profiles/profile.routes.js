@@ -1,4 +1,3 @@
-// profile.router.js
 import { Router } from "express";
 import { authentication } from "../../middlewere/authontcation.middlewere.js";
 import { validation } from "../../middlewere/validation.middlewere.js";

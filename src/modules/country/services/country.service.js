@@ -17,7 +17,7 @@ export const formatCountryForLanguage = (country, lang) => {
   if (!country) return null;
 
   const obj = country.toObject ? country.toObject() : { ...country };
-  obj.displayName =
+  obj.name =
     country.name && country.name[lang]
       ? country.name[lang]
       : country.name?.en;
@@ -37,7 +37,7 @@ export const createCountry = async (data, userId, lang) => {
     throwError("name_exists", lang, { name: data.name[lang]||"en" });
   }
 
-  const country = await create({
+  return create({
     model: Country,
     data: {
       name: data.name,
@@ -47,7 +47,7 @@ export const createCountry = async (data, userId, lang) => {
       createdBy: userId,
     },
   });
-  return formatCountryForLanguage(country, lang)
+  
 
 };
 

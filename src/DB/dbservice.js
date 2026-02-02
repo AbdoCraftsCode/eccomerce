@@ -84,7 +84,7 @@ export const updateOne = async ({
   return result;
 };
 
-// 4. Delete
+
 export const deleteOne = async ({ model, filter = {} } = {}) => {
   const result = await model.deleteOne(filter);
   return result;
@@ -95,7 +95,20 @@ export const deleteMany = async ({ model, filter = {} } = {}) => {
   return result;
 };
 
-// 5. Additional Operations
+export const findByIdAndDelete = async ({
+  model,
+  id = "",
+  options = {},
+  select = "",
+  populate = [],
+} = {}) => {
+  const document = await model
+    .findByIdAndDelete(id, options)
+    .select(select)
+    .populate(populate);
+  return document;
+};
+
 export const countDocuments = async ({ model, filter = {} } = {}) => {
   const count = await model.countDocuments(filter);
   return count;

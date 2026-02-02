@@ -32,14 +32,10 @@ const countrySchema = new Schema(
   },
   {
     timestamps: true,
-    toJSON: { virtuals: true },
-    toObject: { virtuals: true },
   }
 );
 
-countrySchema.virtual("displayName").get(function () {
-  return this.name.en;
-});
+
 
 countrySchema.pre("save", async function (next) {
   if (this.isDefault && this.isModified("isDefault")) {
