@@ -36,7 +36,7 @@ export const createFaq = async (req, lang) => {
     throwError("answer_required", lang, {}, 400);
   }
 
-  const faq = await create({
+  return create({
     model: FaqModel,
     data: {
       question,
@@ -46,7 +46,6 @@ export const createFaq = async (req, lang) => {
     },
   });
 
-  return formatFaqForLanguage(faq, lang);
 };
 
 export const deleteFaq = async (req, lang) => {

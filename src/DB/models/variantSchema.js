@@ -67,6 +67,10 @@ const variantSchema = new mongoose.Schema(
     offerEnd: {
       type: Date,
     },
+    offerStatus: {
+      type: String,
+      enum: ["pending", "approved"],
+    },
   },
   { timestamps: true },
 );

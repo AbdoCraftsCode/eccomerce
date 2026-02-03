@@ -5,21 +5,25 @@ import { throwError } from "../helpers/responseMessages.js";
 
 export const validateVendorProducts = async (
   products,
-  productIds,
+  productIds, 
   userId,
   lang,
 ) => {
+
+  const uniqueProductIds = [...new Set(productIds)];
+
   const vendorProducts = await findAll({
     model: ProductModellll,
     filter: {
-      _id: { $in: productIds },
+      _id: { $in: uniqueProductIds },
       createdBy: userId,
     },
   });
 
-  if (vendorProducts.length !== productIds.length) {
+  if (vendorProducts.length !== uniqueProductIds.length) {
     throwError("products_not_owned", lang, {}, 403);
   }
+
 
   const productsWithoutVariants = products.filter((item) => !item.variantId);
 
@@ -28,13 +32,15 @@ export const validateVendorProducts = async (
       (item) => item.productId,
     );
 
+    const uniqueProductIdsWithoutVariants = [...new Set(productIdsWithoutVariants)];
+
     const vendorProductsWithoutVariants = vendorProducts.filter((p) =>
-      productIdsWithoutVariants.includes(p._id),
+      uniqueProductIdsWithoutVariants.includes(p._id.toString())
     );
 
     const currentDate = new Date();
     const productsInActiveOffer = vendorProductsWithoutVariants.filter(
-      (product) => product.offerId && product.offerEnd > currentDate,
+      (product) => product.offerId && product.offerEnd > currentDate
     );
 
     if (productsInActiveOffer.length > 0) {
@@ -50,26 +56,28 @@ export const validateVendorVariants = async (products, productIds, lang) => {
     .filter((item) => item.variantId)
     .map((item) => item.variantId);
 
-  if (variantIds.length > 0) {
+  const uniqueVariantIds = [...new Set(variantIds)];
+
+  if (uniqueVariantIds.length > 0) {
     const vendorVariants = await findAll({
       model: VariantModel,
       filter: {
-        _id: { $in: variantIds },
+        _id: { $in: uniqueVariantIds },
         productId: { $in: productIds },
       },
     });
 
-    if (vendorVariants.length !== variantIds.length) {
+    if (vendorVariants.length !== uniqueVariantIds.length) {
       throwError("variants_not_owned", lang, {}, 403);
     }
 
     const currentDate = new Date();
     const variantsInActiveOffer = vendorVariants.filter(
-      (variant) => variant.offerId && variant.offerEnd > currentDate,
+      (variant) => variant.offerId && variant.offerEnd > currentDate
     );
 
     if (variantsInActiveOffer.length > 0) {
-      throwError("products_in_active_offer", lang, {}, 400);
+      throwError("variants_in_active_offer", lang, {}, 400);
     }
   }
 };
@@ -91,6 +99,7 @@ export const setOfferOnProducts = async (
             offerId,
             offerStart: startDate,
             offerEnd: endDate,
+            offerStatus:"pending"
           },
         });
       } else {
@@ -101,6 +110,7 @@ export const setOfferOnProducts = async (
             offerId,
             offerStart: startDate,
             offerEnd: endDate,
+            offerStatus:"pending"
           },
         });
       }
@@ -119,6 +129,7 @@ export const clearOfferFromProducts = async (products, lang) => {
             offerId: null,
             offerStart: null,
             offerEnd: null,
+            offerStatus:null
           },
         });
       } else {
@@ -129,6 +140,32 @@ export const clearOfferFromProducts = async (products, lang) => {
             offerId: null,
             offerStart: null,
             offerEnd: null,
+            offerStatus:null
+          },
+        });
+      }
+    }),
+  );
+};
+
+
+export const approveProductsInOffer = async (products, lang) => {
+  await Promise.all(
+    products.map(async (item) => {
+      if (item.variantId) {
+        await updateOne({
+          model: VariantModel,
+          filter: { _id: item.variantId },
+          data: {
+            offerStatus: "approved",
+          },
+        });
+      } else {
+        await updateOne({
+          model: ProductModellll,
+          filter: { _id: item.productId },
+          data: {
+            offerStatus: "approved",
           },
         });
       }

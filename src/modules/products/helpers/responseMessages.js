@@ -16,13 +16,13 @@ export const getResponseMessage = (key, lang = "en") => {
 export const getProductErrorMessage = (key, lang = "en", params = {}) => {
   const messages = {
     en: {
-      products_in_active_offer:"there is products in active offer",
+      products_in_active_offer:"there are products in offer",
       products_not_owned: "Some products do not belong to you or do not exist",
       variants_not_owned: "Some variants do not belong to your products or do not exist",
       not_found: "Product not found",
     },
     ar: {
-      products_in_active_offer:"يوجد منتجات في عرض نشط",
+      products_in_active_offer:"يوجد منتجات في عرض ",
       products_not_owned: "بعض المنتجات لا تخصك أو غير موجودة",
       variants_not_owned: "بعض المتغيرات لا تخص منتجاتك أو غير موجودة",
       not_found: "المنتج غير موجود",

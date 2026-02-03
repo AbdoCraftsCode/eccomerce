@@ -17,6 +17,7 @@ import {
   validateVendorVariants,
   setOfferOnProducts,
   clearOfferFromProducts,
+  approveProductsInOffer
 } from "../../products/services/product.service.js";
 
 const uploadImagesToCloudinary = async (files) => {
@@ -148,10 +149,9 @@ export const createOffer = async (req, lang) => {
     populate: [{ path: "currency", select: "name.ar name.en code symbol" }],
   });
 
-  const formattedOffer = formatOfferForLanguage(populatedOffer, lang);
-  formattedOffer.products = undefined;
+  populatedOffer.products = undefined;
 
-  return formattedOffer;
+  return populatedOffer;
 };
 
 export const updateOffer = async (req, lang) => {
@@ -172,7 +172,7 @@ export const updateOffer = async (req, lang) => {
     throwError("not_your_offer", lang, {}, 403);
   }
 
-  if (offer.status === "active" || offer.status === "expired") {
+  if (offer.status !== "pending" ) {
     throwError("cannot_update_status", lang, { status: offer.status }, 400);
   }
 
@@ -350,7 +350,9 @@ export const approveOffer = async (req, lang) => {
   if (offer.status !== "pending") {
     throwError("offer_already_processed", lang, { status: offer.status }, 400);
   }
-
+  
+  if(status === "rejected") await clearOfferFromProducts(offer.products, lang);
+  if(status === "active") await approveProductsInOffer(offer.products,lang)
   offer.status = status;
   offer.approvedBy = user._id;
   await offer.save();

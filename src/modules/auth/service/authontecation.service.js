@@ -1246,7 +1246,7 @@ export const deleteCategory = asyncHandelr(async (req, res, next) => {
   });
 });
 
-import {getCurrencyById } from "../../currency/services/currency.service.js"
+import { getCurrencyById } from "../../currency/services/currency.service.js";
 
 export const CreateProdut = asyncHandelr(async (req, res, next) => {
   if (!req.user) {
@@ -1283,8 +1283,11 @@ export const CreateProdut = asyncHandelr(async (req, res, next) => {
     status,
   } = req.body;
 
-  const currency  =await getCurrencyById(req.user.currency||null , req.user.lang || "en");
-  if (currency.isActive !== true){
+  const currency = await getCurrencyById(
+    req.user.currency || null,
+    req.user.lang || "en",
+  );
+  if (currency.isActive !== true) {
     return next(new Error("your curreny is not active", { cause: 400 }));
   }
 
@@ -1354,7 +1357,7 @@ export const CreateProdut = asyncHandelr(async (req, res, next) => {
       rate: tax?.rate || 0,
     },
     bulkDiscounts: bulkDiscounts || [],
-    currency : currency._id,
+    currency: currency._id,
     weight,
     stock,
     hasVariants,
@@ -1372,14 +1375,15 @@ export const CreateProdut = asyncHandelr(async (req, res, next) => {
       count: 0,
     },
     isActive: true,
-    createdBy: req.user._id, 
+    createdBy: req.user._id,
   });
 
-  const populatedProduct = await ProductModellll.findById(product._id)
-    .populate({
+  const populatedProduct = await ProductModellll.findById(product._id).populate(
+    {
       path: "currency",
       select: "code name symbol",
-    })
+    },
+  );
 
   res.status(201).json({
     success: true,
@@ -1413,10 +1417,8 @@ export const getProducts = asyncHandelr(async (req, res, next) => {
   const limitNum = Math.min(100, Math.max(1, parseInt(limit) || 10));
   const skip = (pageNum - 1) * limitNum;
 
-  // ✅ بناء الفلتر الأساسي
   let filter = {};
 
-  // إضافة فلتر createdBy لو بائع
   if (isVendor) {
     filter.createdBy = req.user._id;
   }
@@ -2440,7 +2442,6 @@ export const filterProducts = asyncHandelr(async (req, res, next) => {
     size, // مثال: "42" أو "M"
   } = req.query;
 
-  // تأمين الـ pagination
   const pageNum = Math.max(1, parseInt(page) || 1);
   const limitNum = Math.min(50, Math.max(1, parseInt(limit) || 10));
   const skip = (pageNum - 1) * limitNum;
@@ -2448,7 +2449,6 @@ export const filterProducts = asyncHandelr(async (req, res, next) => {
   let matchingValueIds = [];
 
   if (color || size) {
-    // جلب الـ AttributeValues المطابقة للـ color أو size
     let valueFilter = { isActive: true };
 
     if (color || size) {
@@ -2495,8 +2495,6 @@ export const filterProducts = asyncHandelr(async (req, res, next) => {
   if (matchingValueIds.length > 0) {
     variantFilter["attributes.valueId"] = { $in: matchingValueIds };
   }
-
-  // جلب الـ variants المطابقة
   const matchingVariants = await VariantModel.find(variantFilter)
     .select("productId")
     .lean();
@@ -2586,6 +2584,14 @@ export const filterProducts = asyncHandelr(async (req, res, next) => {
         stock: variant.stock,
         images: variant.images,
         attributes: formattedAttributes,
+        offer:
+          variant.offerId && variant.offerStatus === "approved"
+            ? {
+                offerId: variant.offerId,
+                offerStart: variant.offerStart,
+                offerEnd: variant.offerEnd,
+              }
+            : undefined,
       });
     });
   }
@@ -2620,6 +2626,14 @@ export const filterProducts = asyncHandelr(async (req, res, next) => {
       stock: product.stock || 0,
       tags: product.tags || [],
       bulkDiscounts: product.bulkDiscounts || [],
+      offer:
+        product.offerId && product.offerStatus === "approved"
+          ? {
+              offerId: product.offerId,
+              offerStart: product.offerStart,
+              offerEnd: product.offerEnd,
+            }
+          : undefined,
     };
 
     return {
@@ -2723,9 +2737,14 @@ export const GetAllProducts = asyncHandelr(async (req, res, next) => {
         stock: variant.stock,
         images: variant.images,
         attributes: formattedAttributes,
-        offerId: variant.offerId,
-        offerStart: variant.offerStart,
-        offerEnd: variant.offerEnd,
+        offer:
+          variant.offerId && variant.offerStatus === "approved"
+            ? {
+                offerId: variant.offerId,
+                offerStart: variant.offerStart,
+                offerEnd: variant.offerEnd,
+              }
+            : undefined,
       });
     });
   }
@@ -2760,9 +2779,14 @@ export const GetAllProducts = asyncHandelr(async (req, res, next) => {
       stock: product.stock || 0,
       tags: product.tags || [],
       bulkDiscounts: product.bulkDiscounts || [],
-      offerId: product.offerId,
-      offerStart: product.offerStart,
-      offerEnd: product.offerEnd,
+      offer:
+        product.offerId && product.offerStatus === "approved"
+          ? {
+              offerId: product.offerId,
+              offerStart: product.offerStart,
+              offerEnd: product.offerEnd,
+            }
+          : undefined,
     };
 
     if (product.hasVariants) {
@@ -2869,6 +2893,11 @@ export const getProductByIdForEndUser = asyncHandelr(async (req, res, next) => {
         attributes: formattedAttributes,
         weight: variant.weight || null,
         sku: variant.sku || null,
+        offer: variant.offerId && variant.offerStatus === "approved"?{
+          offerId:variant.offerId,
+          offerStart:variant.offerStart,
+          offerEnd:variant.offerEnd,
+        }:undefined
       };
     });
   }
@@ -2918,6 +2947,11 @@ export const getProductByIdForEndUser = asyncHandelr(async (req, res, next) => {
         product.inStock !== false &&
         (product.unlimitedStock || (product.stock || 0) > 0),
     }),
+    offer: product.offerId && product.offerStatus === "approved"?{
+          offerId:product.offerId,
+          offerStart:product.offerStart,
+          offerEnd:product.offerEnd,
+        }:undefined
   };
 
   let finalProduct = formattedProduct;
@@ -3116,6 +3150,11 @@ export const GetProductsByCategory = asyncHandelr(async (req, res, next) => {
         stock: variant.stock,
         images: variant.images,
         attributes: formattedAttributes,
+        offer: variant.offerId && variant.offerStatus === "approved"?{
+          offerId:variant.offerId,
+          offerStart:variant.offerStart,
+          offerEnd:variant.offerEnd,
+        }:undefined
       });
     });
   }
@@ -3150,6 +3189,11 @@ export const GetProductsByCategory = asyncHandelr(async (req, res, next) => {
       stock: product.stock || 0,
       tags: product.tags || [],
       bulkDiscounts: product.bulkDiscounts || [],
+      offer: product.offerId && product.offerStatus === "approved"?{
+          offerId:product.offerId,
+          offerStart:product.offerStart,
+          offerEnd:product.offerEnd,
+        }:undefined
     };
 
     if (product.hasVariants) {
