@@ -1,4 +1,3 @@
-// services/order.service.js - Updated to manually set subOrderNumber without hook
 import mongoose from "mongoose";
 import { CartModel } from "../../../DB/models/cart.model.js";
 import { OrderModelUser } from "../../../DB/models/orderSchemaUser.model.js";
@@ -38,7 +37,7 @@ export const createOrderforUser = async (
   couponCode = null
 ) => {
   let session;
-  let formattedItems = []; // to be used in catch block for release
+  let formattedItems = [];
 
   try {
     session = await mongoose.startSession();

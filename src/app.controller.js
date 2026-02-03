@@ -12,7 +12,7 @@ import flavorRouter from './modules/preference/controllers/flavor.controller.js'
 import popgroupRouter from './modules/preference/controllers/popgroup.controller.js';
 import productTypeRouter from './modules/preference/controllers/productType.controller.js';
 import profilsRouter from './modules/profiles/profile.routes.js';
-import cartRouter from './modules/cart/cart.controller.js';
+import cartRoutes from './modules/cart/cart.routes.js';
 import walletRouter from './modules/wallet/wallet.controller.js';
 
 import adminRoutes from "./modules/adminPanel/admin.routes.js";
@@ -39,7 +39,7 @@ export const bootstap = (app, express) => {
   app.use("/popgroups", popgroupRouter);
   app.use("/product-types", productTypeRouter);
   app.use("/profiles", profilsRouter);
-  app.use("/cart", cartRouter);
+  app.use("/cart", cartRoutes);
   app.use("/wallet", walletRouter);
   app.use("/dashboard", adminRoutes);
   app.use("/search", searchRoutes);

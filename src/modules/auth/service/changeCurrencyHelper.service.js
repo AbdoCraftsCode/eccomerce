@@ -9,10 +9,10 @@ export const convertProductPrices = async (products, countryCode) => {
     const isvalid = isValidCurrency(targetCurrency);
 
     if (!isvalid) {
-      return products;  // Skip if invalid, as per original behavior
+      return products; 
     }
 
-    const rateCache = {}; // Cache for exchange rates to avoid redundant API calls
+    const rateCache = {}; 
 
     return await Promise.all(
       products.map(async (product) => {
@@ -20,7 +20,7 @@ export const convertProductPrices = async (products, countryCode) => {
         const productCurrency = productCopy.currency?.toUpperCase() || "USD";
 
         if (productCurrency === targetCurrency) {
-          return productCopy; // No conversion needed if currencies match
+          return productCopy; 
         }
 
         const cacheKey = `${productCurrency}_${targetCurrency}`;
@@ -53,8 +53,7 @@ export const convertProductPrices = async (products, countryCode) => {
           }
         }
 
-        // Do not convert tax.rate as it's a percentage, not a monetary value
-        // Removed the tax rate conversion block
+        
 
         if (productCopy.hasVariants && productCopy.variants) {
           productCopy.variants = productCopy.variants.map((variant) => {
@@ -131,10 +130,4 @@ export const getExchangeRate = async (fromCurrency, toCurrency) => {
     "All exchange rate APIs failed. No conversion will be performed."
   );
   return null;
-};
-
-export const isValidCurrency = (currency) => {
-  if (!currency) return false;
-
-  return supportedCurrencies.has(currency.toUpperCase());
 };

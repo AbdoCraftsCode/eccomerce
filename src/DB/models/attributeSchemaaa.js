@@ -1,26 +1,29 @@
 import mongoose from "mongoose";
 
-const attributeSchema = new mongoose.Schema({
+const attributeSchema = new mongoose.Schema(
+  {
     name: {
-        ar: { type: String, required: true },
-        en: { type: String, required: true }
+      ar: { type: String, required: true },
+      en: { type: String, required: true },
     },
 
     type: {
-        type: String,
+      type: String,
 
-        required: true
+      required: true,
     },
-        createdBy: {
-            type: mongoose.Schema.Types.ObjectId,
-            ref: "User", 
-            required: true
-        },
+    createdBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      required: true,
+    },
 
     isActive: {
-        type: Boolean,
-        default: true
-    }
-}, { timestamps: true });
+      type: Boolean,
+      default: true,
+    },
+  },
+  { timestamps: true },
+);
 
 export const AttributeModell = mongoose.model("Attributee", attributeSchema);

@@ -1,43 +1,49 @@
-import { Router } from "express";
-import {
-  authentication,
-  authorization,
-} from "../../middlewere/authontcation.middlewere.js";
-import { validation } from "../../middlewere/validation.middlewere.js";
-import * as cartValidators from "./cart.validatoin.js";
-import * as cartServices from "./services/cart.service.js";
+// cart/cart.controller.js
+import { asyncHandelr } from "../../utlis/response/error.response.js";
+import * as cartService from "./services/cart.service.js";
+import { getResponseMessage } from "./helpers/responseMessages.js";
+import { getUserLanguage } from "../../utlis/localization/langUserHelper.js";
 
-const router = Router();
+export const getCart = asyncHandelr(async (req, res) => {
+  const lang = getUserLanguage(req);
+  const cart = await cartService.getCart(req, lang);
 
-router.get(
-  "/",
-  authentication(),
-  //   authorization(endpoint.get),
-  cartServices.getCart
-);
+  res.status(200).json({
+    success: true,
+    message: getResponseMessage("fetched", lang),
+    data: cart,
+  });
+});
 
-router.post(
-  "/add",
-  authentication(),
-  //   authorization(endpoint.add),
-  validation(cartValidators.addToCartValidation),
-  cartServices.addToCart
-);
+export const addToCart = asyncHandelr(async (req, res) => {
+  const lang = getUserLanguage(req);
+  const cart = await cartService.addToCart(req, lang);
 
-router.delete(
-  "/remove",
-  authentication(),
-  //   authorization(endpoint.remove),
-  validation(cartValidators.deleteItemFromCartValidation),
-  cartServices.deleteItemFromCart
-);
+  res.status(200).json({
+    success: true,
+    message: getResponseMessage("added", lang),
+    data: cart,
+  });
+});
 
-router.patch(
-  "/quantity",
-  authentication(),
-  //   authorization(endpoint.updateQuantity),
-  validation(cartValidators.updateQuantityValidation),
-  cartServices.updateQuantity
-);
+export const deleteItemFromCart = asyncHandelr(async (req, res) => {
+  const lang = getUserLanguage(req);
+  const { cart, messageKey } = await cartService.deleteItemFromCart(req, lang);
 
-export default router;
+  res.status(200).json({
+    success: true,
+    message: getResponseMessage(messageKey, lang),
+    data: cart,
+  });
+});
+
+export const updateQuantity = asyncHandelr(async (req, res) => {
+  const lang = getUserLanguage(req);
+  const { cart, messageKey } = await cartService.updateQuantity(req, lang);
+
+  res.status(200).json({
+    success: true,
+    message: getResponseMessage(messageKey, lang),
+    data: cart,
+  });
+});

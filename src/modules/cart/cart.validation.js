@@ -1,5 +1,5 @@
 import Joi from "joi";
-import { generalfields } from "../../../src/utlis/validation/generalfields.js";
+import { generalfields } from "../../utlis/validation/generalfields.js";
 
 export const addToCartValidation = Joi.object().keys({
   productId: generalfields._id.required(),

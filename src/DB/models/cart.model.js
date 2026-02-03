@@ -1,13 +1,13 @@
 import mongoose from "mongoose";
 
 const cartItemSchema = new mongoose.Schema({
-  productId: {
+  product: {
     type: mongoose.Schema.Types.ObjectId,
     ref: "Producttttt",
     required: true,
   },
 
-  variantId: {
+  variant: {
     type: mongoose.Schema.Types.ObjectId,
     ref: "Variant",
   },
@@ -22,7 +22,7 @@ const cartItemSchema = new mongoose.Schema({
 
 const cartSchema = new mongoose.Schema(
   {
-    userId: {
+    user: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",
       required: true,
@@ -40,31 +40,12 @@ const cartSchema = new mongoose.Schema(
   }
 );
 
-cartSchema.index({ userId: 1 }, { unique: true });
+cartSchema.index({ user: 1 }, { unique: true });
 
 
 cartSchema.pre("save", async function (next) {
   this.totalItems = this.items.reduce((sum, item) => sum + item.quantity, 0);
   next();
 });
-
-
-cartSchema.statics.getOrCreateCart = async function (userId) {
-  let cart = await this.findOne({ userId })
-    .populate({
-      path: "items.productId",
-      select: "name images mainPrice disCountPrice finalPrice stock",
-    })
-    .populate({
-      path: "items.variantId",
-      select: "price finalPrice disCountPrice stock images",
-    });
-
-  if (!cart) {
-    cart = await this.create({ userId, items: [] });
-  }
-
-  return cart;
-};
 
 export const CartModel = mongoose.model("Cart", cartSchema);
