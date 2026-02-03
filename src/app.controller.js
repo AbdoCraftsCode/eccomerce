@@ -21,6 +21,7 @@ import faqRoutes from "./modules/faq/faq.routes.js";
 import offersRoutes from "./modules/offers/offers.routes.js";
 import currenciesRoutes from "./modules/currency/currency.routes.js";
 import countriesRoutes from "./modules/country/country.routes.js";
+import slidersRoutes from "./modules/sliders/slider.routes.js";
 
 import cors from "cors";
 
@@ -46,6 +47,7 @@ export const bootstap = (app, express) => {
   app.use("/offers", offersRoutes);
   app.use("/currencies", currenciesRoutes);
   app.use("/countries", countriesRoutes);
+  app.use("/sliders", slidersRoutes);
 
   app.use(globalerror);
 };

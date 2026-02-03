@@ -2490,7 +2490,6 @@ export const filterProducts = asyncHandelr(async (req, res, next) => {
     matchingValueIds = matchingValues.map((v) => v._id);
   }
 
-  // فلتر الـ variants اللي فيها valueId مطابق
   let variantFilter = { isActive: true };
   if (matchingValueIds.length > 0) {
     variantFilter["attributes.valueId"] = { $in: matchingValueIds };
@@ -2516,17 +2515,14 @@ export const filterProducts = asyncHandelr(async (req, res, next) => {
     });
   }
 
-  // استخراج productIds الفريدة
   const productIds = [
     ...new Set(matchingVariants.map((v) => v.productId.toString())),
   ];
 
   const totalProducts = productIds.length;
 
-  // pagination على الـ productIds
   const paginatedProductIds = productIds.slice(skip, skip + limitNum);
 
-  // جلب المنتجات
   let products = await ProductModellll.find({
     _id: { $in: paginatedProductIds },
     isActive: true,
@@ -2545,7 +2541,6 @@ export const filterProducts = asyncHandelr(async (req, res, next) => {
     .select("-__v")
     .lean();
 
-  // جلب كل الـ variants للمنتجات في الصفحة (مش بس المفلترة)
   const productIdsInPage = products.map((p) => p._id);
   let variantsMap = {};
 
@@ -2596,7 +2591,6 @@ export const filterProducts = asyncHandelr(async (req, res, next) => {
     });
   }
 
-  // تنسيق المنتجات (نفس GetAllProducts)
   const formattedProducts = products.map((product) => {
     const baseProduct = {
       _id: product._id,
@@ -8174,7 +8168,6 @@ export const getMyNotifications = asyncHandelr(async (req, res, next) => {
 
 export const MarkAllNotificationsAsRead = asyncHandelr(
   async (req, res, next) => {
-    // ✅ التحقق من تسجيل الدخول
     if (!req.user) {
       return next(new Error("❌ يجب تسجيل الدخول", { cause: 401 }));
     }
