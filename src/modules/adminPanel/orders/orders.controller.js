@@ -7,10 +7,11 @@ import { getPaymentStatusStatsService } from "./orders.service.js";
 import { getLastMonthSalesAndOrdersService  } from "./orders.service.js";
 import { getCustomersByVendorService  } from "./orders.service.js";
 import { getLastDayPaymentStatsService ,getLastMonthPaymentStatsService  } from "./orders.service.js";
+import { getUserLanguage } from "../../../utlis/localization/langUserHelper.js";
 
 export const getAllCustomers = asyncHandelr(async (req, res) => {
+  const lang = getUserLanguage(req);
   const customers = await getAllCustomersService();
-
   res.status(200).json({
     success: true,
     count: customers.length,
@@ -19,22 +20,18 @@ export const getAllCustomers = asyncHandelr(async (req, res) => {
 });
 //----------------------------------------------------------------------------
 export const getAllOrders = asyncHandelr(async (req, res) => {
-  if (req.user.accountType !== "Admin") {
-    throw new Error("Only admin");
-}
+  const lang = getUserLanguage(req);
   const result = await getAllOrdersService(req.query);
 
   res.status(200).json({
     success: true,
-    message: "Orders fetched successfully",
+    message: (lang)?"Orders fetched successfully":"تم استلام الطلبات بنجاح",
     ...result,
   });
 });
 //-----------------------------------------------------------------------------------
 export const getSubOrdersByOrderId = asyncHandelr(async (req, res, next) => {
-  if (req.user.accountType !== "Admin") {
-    throw new Error("Only admin");
-}
+  const lang = getUserLanguage(req);
   const { orderId } = req.params;
   console.log(orderId);
   if (!orderId) {
@@ -55,9 +52,7 @@ export const getSubOrdersByOrderId = asyncHandelr(async (req, res, next) => {
 });
 //-----------------------------------------------------------------------------------------
 export const getAllSubOrders = asyncHandelr(async (req, res) => {
-  if (req.user.accountType !== "Admin") {
-    throw new Error("Only admin");
-}
+  const lang = getUserLanguage(req);
   const result = await getAllSubOrdersService(req.query);
 
   res.status(200).json({
@@ -68,42 +63,36 @@ export const getAllSubOrders = asyncHandelr(async (req, res) => {
 
 //=====================================================
 export const getPaymentStatusStats = asyncHandelr(async (req, res) => {
-  if (req.user.accountType !== "Admin") {
-    throw new Error("Only admin");
-}
+  const lang = getUserLanguage(req);
   const data = await getPaymentStatusStatsService();
 
   res.status(200).json({
     success: true,
-    message: "Payment status statistics fetched successfully",
+    message:(lang=='en') ?"Payment status statistics fetched successfully":"تم جلب إحصائيات حالة الدفع بنجاح",
     data,
   });
 });
 
 //====================================================================
 export const getDailyPaymentStats = asyncHandelr(async (req, res) => {
-  if (req.user.accountType !== "Admin") {
-    throw new Error("Only admin");
-}
+  const lang = getUserLanguage(req);
   const data = await getLastDayPaymentStatsService();
 
   res.status(200).json({
     success: true,
-    message: "Last daily payment statistics fetched successfully",
+    message:(lang=='en')? "Last daily payment statistics fetched successfully":"تم جلب إحصائيات الدفعات اليومية الأخيرة بنجاح",
     data,
   });
 });
 
 //=========================================================
 export const getMonthlyPaymentStats = asyncHandelr(async (req, res) => {
-  if (req.user.accountType !== "Admin") {
-    throw new Error("Only admin");
-}
+  const lang = getUserLanguage(req);
   const data = await getLastMonthPaymentStatsService();
 
   res.status(200).json({
     success: true,
-    message: "Last monthly payment statistics fetched successfully",
+    message: (lang=='en')?"Last monthly payment statistics fetched successfully":"تم جلب إحصائيات الدفعة الشهرية الأخيرة بنجاح",
     data,
   });
 });
@@ -113,24 +102,24 @@ export const getMonthlyPaymentStats = asyncHandelr(async (req, res) => {
 //=======================
 export const getLastMonthSalesAndOrders = asyncHandelr(async (req, res) => {
   const vendorId = req.user._id; // current vendor
-
+  const lang = getUserLanguage(req);
   const stats = await getLastMonthSalesAndOrdersService(vendorId);
 
   res.status(200).json({
     success: true,
-    message: "Last month sales and orders fetched successfully",
+    message: (lang=='en')?"Last month sales and orders fetched successfully":"تم تحقيق مبيعات وطلبات الشهر الماضي بنجاح",
     data: stats,
   });
 });
 //==========================
 export const getCustomersByVendor = asyncHandelr(async (req, res) => {
   const vendorId = req.user._id.toString();
-
+  const lang = getUserLanguage(req);
   const data = await getCustomersByVendorService(vendorId);
 
   res.status(200).json({
     success: true,
-    message: "Customers fetched successfully",
+    message: (lang=='en')?"Customers fetched successfully":"تم استلام العملاء بنجاح",
     count: data.length,
     data,
   });

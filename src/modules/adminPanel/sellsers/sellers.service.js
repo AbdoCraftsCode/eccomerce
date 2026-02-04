@@ -200,74 +200,96 @@ export const getLastMonthSalesStatsService = async () => {
     return sellers;
   };
   //======================================================
-  // ✅ Get ACCEPTED vendor by ID
-export const getAcceptedVendorByIdService = async (vendorId) => {
-    
-    const vendor = await UserModel.findOneAndUpdate(
-        { _id: vendorId, accountType: "vendor" },
-        { status: "ACCEPTED" },
-        { new: true }
-      ).select("name email status");
-    
-      return vendor;
-    };
-  
-  // ❌ Get REFUSED vendor by ID
-  export const getRefusedVendorByIdService = async (vendorId) => {
-    const vendor = await UserModel.findOneAndUpdate(
-        { _id: vendorId, accountType: "vendor" },
-        { status: "REFUSED" },
-        { new: true }
-      ).select("name email status");
-    
-      return vendor;
-    };
-    //======================
-    export const getSalesByCategoryAllVendorsService = async () => {
-      const result = await SubOrderModel.aggregate([
+    export const getCategorySalesService = async (lang = "en") => {
+      return await SubOrderModel.aggregate([
         {
           $match: {
-            paymentStatus: "paid", // only consider paid orders
+            paymentStatus: "paid",
           },
         },
-        { $unwind: "$items" }, // flatten the items array
+    
+        // 1️⃣ explode items
+        { $unwind: "$items" },
+    
+        // 2️⃣ get product
         {
           $lookup: {
-            from: "producttttts", // Product collection name
+            from: "producttttts",
             localField: "items.productId",
             foreignField: "_id",
             as: "product",
           },
         },
-        { $unwind: "$product" }, // each item now has product info
-        { $unwind: "$product.categories" }, // each product may belong to multiple categories
-        {
-          $group: {
-            _id: "$product.categories", // group by category
-            totalRevenue: { $sum: "$items.totalPrice" }, // sum of all items in that category
-            totalQuantity: { $sum: "$items.quantity" }, // total quantity sold
-          },
-        },
+        { $unwind: "$product" },
+    
+        // 3️⃣ explode product categories
+        { $unwind: "$product.categories" },
+    
+        // 4️⃣ get category
         {
           $lookup: {
-            from: "categoryyyy", // category collection
-            localField: "_id",
+            from: "categoryyyys",
+            localField: "product.categories",
             foreignField: "_id",
             as: "category",
           },
         },
         { $unwind: "$category" },
+    
+        // 5️⃣ group per category
         {
-          $project: {
-            _id: 0,
-            categoryId: "$category._id",
-            categoryName: "$category.name.en", // can switch to "ar"
-            totalRevenue: 1,
-            totalQuantity: 1,
+          $group: {
+            _id: "$category._id",
+            categoryNameAr: { $first: "$category.name.ar" },
+            categoryNameEn: { $first: "$category.name.en" },
+            totalQuantity: { $sum: "$items.quantity" },
           },
         },
-        { $sort: { totalRevenue: -1 } }, // sort categories by revenue
-      ]);
     
-      return result;
+        // 6️⃣ get grand total quantity
+        {
+          $group: {
+            _id: null,
+            categories: { $push: "$$ROOT" },
+            grandTotalQuantity: { $sum: "$totalQuantity" },
+          },
+        },
+    
+        // 7️⃣ calculate percentage
+        { $unwind: "$categories" },
+    
+        {
+          $project: {
+            categoryName: {
+              $cond: [
+                { $eq: [lang, "ar"] },
+                "$categories.categoryNameAr",
+                "$categories.categoryNameEn",
+              ],
+            },
+            totalQuantity: "$categories.totalQuantity",
+            percentage: {
+              $round: [
+                {
+                  $multiply: [
+                    {
+                      $divide: [
+                        "$categories.totalQuantity",
+                        "$grandTotalQuantity",
+                      ],
+                    },
+                    100,
+                  ],
+                },
+                2,
+              ],
+            },
+            _id: 0,
+          },
+        },
+    
+        { $sort: { percentage: -1 } },
+      ]);
     };
+    
+    

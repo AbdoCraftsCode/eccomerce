@@ -2,13 +2,16 @@ import { getDashboardStatsService } from "./admin.service.js";
 import { asyncHandelr } from "../../utlis/response/error.response.js";
 import { SubOrderModel } from "../../DB/models/subOrdersSchema.model.js"; // Adjust path
 import mongoose from 'mongoose';
+import { getUserLanguage } from "../../utlis/localization/langUserHelper.js";
+
 
 
 export const getDashboardStats = asyncHandelr(async (req, res, next) => {
+  const lang = getUserLanguage(req);
   const data = await getDashboardStatsService(req.user);
   res.status(200).json({
     "status":"success",
-    "message":"states retrieved successfully",
+    "message":(lang=='en')?"states retrieved successfully":"تم استرجاع الحالات بنجاح",
     "data":data
   });
 });
