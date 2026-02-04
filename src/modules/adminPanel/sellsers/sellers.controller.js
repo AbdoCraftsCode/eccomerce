@@ -3,44 +3,38 @@ import { getSellerAndProductStatsService } from "./sellers.service.js";
 import { getLastMonthSalesStatsService  } from "./sellers.service.js";
 import { getAcceptedSellersWithCategories  } from "./sellers.service.js";
 import { getLatestSellersService   } from "./sellers.service.js";
-import { getSalesByCategoryAllVendorsService  } from "./sellers.service.js";
-import { getAcceptedVendorByIdService, getRefusedVendorByIdService } from "./sellers.service.js";
+import { getCategorySalesService  } from "./sellers.service.js";
+import { getUserLanguage } from "../../../utlis/localization/langUserHelper.js";
 
 export const getSellerAndProductStats = asyncHandelr(async (req, res) => {
-    if (req.user.accountType !== "Admin") {
-        throw new Error("Only admin");
-    }
+  const lang = getUserLanguage(req);
     const stats = await getSellerAndProductStatsService();
   
     res.status(200).json({
       success: true,
-      message: "Seller and product statistics",
+      message:(lang=='en')? "Seller and product statistics":"إحصائيات البائع والمنتج",
       data: stats,
     });
   });
 //===================================================================
 export const getLastMonthSalesStats = asyncHandelr(async (req, res) => {
-    if (req.user.accountType !== "Admin") {
-        throw new Error("Only admin");
-    }
+    const lang = getUserLanguage(req);
     const stats = await getLastMonthSalesStatsService();
   
     res.status(200).json({
       success: true,
-      message: "Last month sales and seller stats",
+      message: (lang=='en')?"Last month sales and seller stats":"إحصائيات المبيعات والبائعين للشهر الماضي",
       data: stats,
     });
   });
   //=============================
   export const acceptedSellers = asyncHandelr(async (req, res, next) => {
-    if (req.user.accountType !== "Admin") {
-        throw new Error("Only admin");
-    }
+    const lang = getUserLanguage(req);
     const vendors = await getAcceptedSellersWithCategories();
   
     res.status(200).json({
       success: true,
-      message: "Accepted sellers with their categories fetched ✅",
+      message: (lang=='en')?"Accepted sellers with their categories fetched ✅":"تم جلب بيانات البائعين المقبولين مع فئاتهم.",
       count: vendors.length,
       data: vendors,
     });
@@ -48,65 +42,24 @@ export const getLastMonthSalesStats = asyncHandelr(async (req, res) => {
   //=========================================
   export const getLatestSellers = asyncHandelr(async (req, res, next) => {
     const { limit = 5 } = req.query;
-    if (req.user.accountType !== "Admin") {
-        throw new Error("Only admin");
-    }
+    const lang = getUserLanguage(req);
     const sellers = await getLatestSellersService(Number(limit), true);
   
     res.status(200).json({
       success: true,
-      message: "Latest sellers fetched successfully",
+      message: (lang=='en')?"Latest sellers fetched successfully":"تم جلب أحدث البائعين بنجاح",
       count: sellers.length,
       data: sellers,
     });
   });
   //===========================================
-  // ✅ ACCEPTED vendor
-export const getAcceptedVendorById = asyncHandelr(async (req, res, next) => {
-    const { vendorId } = req.params;
-    if (req.user.accountType !== "Admin") {
-        throw new Error("Only admin");
-    }
-    const vendor = await getAcceptedVendorByIdService(vendorId);
-  
-    if (!vendor) {
-      return next(
-        new Error("Vendor not found or not ACCEPTED", { cause: 404 })
-      );
-    }
+  export const getCategorySales = asyncHandelr(async (req, res) => {
+    const lang = getUserLanguage(req);
+    const data = await getCategorySalesService(lang);
   
     res.status(200).json({
       success: true,
-      data: vendor,
-    });
-  });
-  
-  // ❌ REFUSED vendor==================================================================
-  export const getRefusedVendorById = asyncHandelr(async (req, res, next) => {
-    const { vendorId } = req.params;
-    if (req.user.accountType !== "Admin") {
-        throw new Error("Only admin");
-    }
-    const vendor = await getRefusedVendorByIdService(vendorId);
-  
-    if (!vendor) {
-      return next(
-        new Error("Vendor not found or not REFUSED", { cause: 404 })
-      );
-    }
-  
-    res.status(200).json({
-      success: true,
-      data: vendor,
-    });
-  });
-  //===========================
-  export const getSalesByCategoryAllVendors = asyncHandelr(async (req, res) => {
-    const data = await getSalesByCategoryAllVendorsService();
-  
-    res.status(200).json({
-      success: true,
-      message: "Sales distribution by category (all vendors) fetched successfully",
+      message: (lang=='en')?"Sales per category":"المبيعات حسب الفئة",
       data,
     });
   });
