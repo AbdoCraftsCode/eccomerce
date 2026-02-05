@@ -22,6 +22,7 @@ import offersRoutes from "./modules/offers/offers.routes.js";
 import currenciesRoutes from "./modules/currency/currency.routes.js";
 import countriesRoutes from "./modules/country/country.routes.js";
 import slidersRoutes from "./modules/sliders/slider.routes.js";
+import puahNotificationsRoutes from "./modules/pushNotificationsAdmin/notification.routes.js";
 import invoicesRoutes from "./modules/invoice/invoice.routes.js";
 
 
@@ -50,6 +51,7 @@ export const bootstap = (app, express) => {
   app.use("/currencies", currenciesRoutes);
   app.use("/countries", countriesRoutes);
   app.use("/sliders", slidersRoutes);
+  app.use("/pushNotifications", puahNotificationsRoutes);
 
   app.use("/invoice", invoicesRoutes);
 
