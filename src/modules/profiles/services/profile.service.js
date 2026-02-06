@@ -60,6 +60,7 @@ export const updateMyProfile = async (userId, updateData, files, lang) => {
     "phone",
     "country",
     "currency",
+    "companyName",
     "lang",
     "weight",
     "height",
@@ -75,7 +76,6 @@ export const updateMyProfile = async (userId, updateData, files, lang) => {
     }
   }
 
-  // Get current user
   const currentUserDoc = await findById({
     model: UserModel,
     id: userId,
@@ -85,7 +85,6 @@ export const updateMyProfile = async (userId, updateData, files, lang) => {
     throwError("user_not_found", lang, {}, 404);
   }
 
-  // Handle profile picture upload
   if (files?.profilePicture && files.profilePicture[0]) {
     const file = files.profilePicture[0];
 
@@ -126,7 +125,6 @@ export const updateMyProfile = async (userId, updateData, files, lang) => {
     throwError("no_fields", lang, {}, 400);
   }
 
-  // Validate referenced documents
   if (filteredUpdate.preferredFlavor !== undefined) {
     if (filteredUpdate.preferredFlavor === null) {
       filteredUpdate.preferredFlavor = null;
@@ -185,7 +183,6 @@ export const updateMyProfile = async (userId, updateData, files, lang) => {
     }
   }
 
-  // Handle email change
   if (filteredUpdate.email && currentUserDoc.email !== filteredUpdate.email) {
     const emailOTP = Math.floor(100000 + Math.random() * 900000).toString();
     const otpExpiresAt = new Date(Date.now() + 10 * 60 * 1000);
@@ -208,7 +205,6 @@ export const updateMyProfile = async (userId, updateData, files, lang) => {
     });
   }
 
-  // Perform the update
   const updatedUserDoc = await findByIdAndUpdate({
     model: UserModel,
     id: userId,
@@ -230,10 +226,8 @@ export const updateMyProfile = async (userId, updateData, files, lang) => {
     throwError("user_not_found", lang, {}, 404);
   }
 
-  // Convert to plain object to remove Mongoose internals
   const updatedUser = updatedUserDoc.toObject();
 
-  // Localize country and currency if they exist
   if (updatedUser.country) {
     updatedUser.country = formatCountryForLanguage(updatedUser.country, lang);
   }

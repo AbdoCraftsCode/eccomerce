@@ -5,6 +5,7 @@ export const getProfileValidation = Joi.object({});
 
 export const updateProfileValidation = Joi.object({
   fullName: Joi.string().min(2).max(100).optional(),
+  companyName: Joi.string().min(5).max(100).optional(),
 
   email: Joi.string().email().optional(),
   phone: Joi.string()
