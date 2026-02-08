@@ -19,29 +19,27 @@ export const createCurrency = asyncHandelr(async (req, res) => {
 });
 
 export const getAllCurrencies = asyncHandelr(async (req, res, next) => {
-  const lang = getUserLanguage(req);
   const { page, limit, sort, order, search, isActive } = req.query;
 
   const result = await currencyService.getAllCurrencies(
     {},
-    { page, limit, sort, order, search, isActive, lang },
+    { page, limit, sort, order, search, isActive , lang:"en" },
   );
 
   res.status(200).json({
     success: true,
-    message: getResponseMessage("fetched", lang),
+    message: getResponseMessage("fetched", "en"),
     data: result.currencies,
     pagination: result.pagination,
   });
 });
 
 export const getCurrencyById = asyncHandelr(async (req, res) => {
-  const lang = getUserLanguage(req);
-  const currency = await currencyService.getCurrencyById(req.params.id, lang);
+  const currency = await currencyService.getCurrencyById(req.params.id, "en");
 
   res.status(200).json({
     success: true,
-    message: getResponseMessage("fetched_single", lang),
+    message: getResponseMessage("fetched_single", "en"),
     data: currency,
   });
 });
@@ -91,12 +89,11 @@ export const toggleCurrencyStatus = asyncHandelr(async (req, res) => {
 });
 
 export const getDefaultCurrency = asyncHandelr(async (req, res) => {
-  const lang = getUserLanguage(req);
-  const currency = await currencyService.getDefaultCurrency(lang);
+  const currency = await currencyService.getDefaultCurrency("en");
 
   res.status(200).json({
     success: true,
-    message: getResponseMessage("default_fetched", lang),
+    message: getResponseMessage("default_fetched", "en"),
     data: currency,
   });
 });
@@ -118,24 +115,23 @@ export const setDefaultCurrency = asyncHandelr(async (req, res) => {
 
 export const getActiveCurrencies = asyncHandelr(async (req, res) => {
   const lang = getUserLanguage(req);
-  const currencies = await currencyService.getActiveCurrencies(lang);
+  const currencies = await currencyService.getActiveCurrencies("en");
 
   res.status(200).json({
     success: true,
-    message: getResponseMessage("active_fetched", lang),
+    message: getResponseMessage("active_fetched", "en"),
     data: currencies,
   });
 });
 
 export const validateCurrency = asyncHandelr(async (req, res) => {
-  const lang = getUserLanguage(req);
   const { code } = req.query;
 
-  const currency = await currencyService.validateAndGetCurrency(code, lang);
+  const currency = await currencyService.validateAndGetCurrency(code, "en");
 
   res.status(200).json({
     success: true,
-    message: getResponseMessage("valid", lang),
+    message: getResponseMessage("valid", "en"),
     data: currency,
   });
 });

@@ -19,29 +19,27 @@ export const createCountry = asyncHandelr(async (req, res) => {
 });
 
 export const getAllCountries = asyncHandelr(async (req, res, next) => {
-  const lang = getUserLanguage(req);
   const { page, limit, sort, order, search, isActive } = req.query;
 
   const result = await countryService.getAllCountries(
     {},
-    { page, limit, sort, order, search, isActive, lang },
+    { page, limit, sort, order, search, isActive , lang:"en"},
   );
 
   res.status(200).json({
     success: true,
-    message: getResponseMessage("fetched", lang),
+    message: getResponseMessage("fetched", "en"),
     data: result.countries,
     pagination: result.pagination,
   });
 });
 
 export const getCountryById = asyncHandelr(async (req, res) => {
-  const lang = getUserLanguage(req);
-  const country = await countryService.getCountryById(req.params.id, lang);
+  const country = await countryService.getCountryById(req.params.id , "en");
 
   res.status(200).json({
     success: true,
-    message: getResponseMessage("fetched_single", lang),
+    message: getResponseMessage("fetched_single", "en"),
     data: country,
   });
 });
@@ -76,12 +74,11 @@ export const toggleCountryStatus = asyncHandelr(async (req, res) => {
 });
 
 export const getDefaultCountry = asyncHandelr(async (req, res) => {
-  const lang = getUserLanguage(req);
-  const country = await countryService.getDefaultCountry(lang);
+  const country = await countryService.getDefaultCountry("en");
 
   res.status(200).json({
     success: true,
-    message: getResponseMessage("default_fetched", lang),
+    message: getResponseMessage("default_fetched", "en"),
     data: country,
   });
 });
@@ -102,25 +99,23 @@ export const setDefaultCountry = asyncHandelr(async (req, res) => {
 });
 
 export const getActiveCountries = asyncHandelr(async (req, res) => {
-  const lang = getUserLanguage(req);
-  const countries = await countryService.getActiveCountries(lang);
+  const countries = await countryService.getActiveCountries("en");
 
   res.status(200).json({
     success: true,
-    message: getResponseMessage("active_fetched", lang),
+    message: getResponseMessage("active_fetched", "en"),
     data: countries,
   });
 });
 
 export const validateCountry = asyncHandelr(async (req, res) => {
-  const lang = getUserLanguage(req);
   const { phoneCode } = req.query;
 
-  const country = await countryService.validateAndGetCountry(phoneCode, lang);
+  const country = await countryService.validateAndGetCountry(phoneCode);
 
   res.status(200).json({
     success: true,
-    message: getResponseMessage("valid", lang),
+    message: getResponseMessage("valid", "en"),
     data: country,
   });
 });

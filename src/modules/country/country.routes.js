@@ -45,13 +45,12 @@ router.patch(
   countryController.setDefaultCountry,
 );
 
-router.get("/", authentication(), countryController.getAllCountries);
-router.get("/default", authentication(), countryController.getDefaultCountry);
-router.get("/active", authentication(), countryController.getActiveCountries);
-router.get("/validate", authentication(), countryController.validateCountry);
+router.get("/", countryController.getAllCountries);
+router.get("/default", countryController.getDefaultCountry);
+router.get("/active", countryController.getActiveCountries);
+router.get("/validate", countryController.validateCountry);
 router.get(
   "/:id",
-  authentication(),
   validation(countryIdSchema),
   countryController.getCountryById,
 );

@@ -54,13 +54,12 @@ router.patch(
   currencyController.setDefaultCurrency,
 );
 
-router.get("/", authentication(), currencyController.getAllCurrencies);
-router.get("/default", authentication(), currencyController.getDefaultCurrency);
-router.get("/active", authentication(), currencyController.getActiveCurrencies);
-router.get("/validate", authentication(), currencyController.validateCurrency);
+router.get("/", currencyController.getAllCurrencies);
+router.get("/default", currencyController.getDefaultCurrency);
+router.get("/active", currencyController.getActiveCurrencies);
+router.get("/validate", currencyController.validateCurrency);
 router.get(
   "/:id",
-  authentication(),
   validation(currencyIdSchema),
   currencyController.getCurrencyById,
 );
