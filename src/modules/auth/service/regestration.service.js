@@ -41,7 +41,6 @@ export const signup = asyncHandelr(async (req, res, next) => {
     password,
     email,
     phone,
-
     country,
     currency,
     lang,
@@ -52,14 +51,12 @@ export const signup = asyncHandelr(async (req, res, next) => {
     productType,
   } = req.body;
 
-  // ✅ لازم فون أو إيميل واحد على الأقل
   if (!email && !phone) {
     return next(
       new Error("يجب إدخال البريد الإلكتروني أو رقم الهاتف", { cause: 400 }),
     );
   }
 
-  // ✅ التأكد إن الإيميل أو الفون مش مستخدمين قبل كده
   const checkuser = await dbservice.findOne({
     model: Usermodel,
     filter: {
@@ -86,10 +83,8 @@ export const signup = asyncHandelr(async (req, res, next) => {
     }
   }
 
-  // ✅ تشفير الباسورد
   const hashpassword = await generatehash({ planText: password });
 
-  // ✅ إنشاء المستخدم (مُفعل مباشرة)
   const user = await dbservice.create({
     model: Usermodel,
     data: {
@@ -108,11 +103,10 @@ export const signup = asyncHandelr(async (req, res, next) => {
       productType,
 
       accountType: "User",
-      isConfirmed: true, // ✅ بدون OTP
+      isConfirmed: true, 
     },
   });
 
-  // ✅ نفس التوكنات بتاعة confirOtp
   const access_Token = generatetoken({ payload: { id: user._id } });
   const refreshToken = generatetoken({
     payload: { id: user._id },

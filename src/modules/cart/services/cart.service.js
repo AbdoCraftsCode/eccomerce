@@ -62,7 +62,6 @@ export const convertCartToUserPreferences = async (
 ) => {
   if (!cart || !cart.items || cart.items.length === 0) return cart;
   const defaultCurrency = await getDefaultCurrency("en");
-  console.log(defaultCurrency)
 
   const targetCurrencyCode = userCurrencyCode || defaultCurrency.code;
 
@@ -400,7 +399,7 @@ export const updateQuantity = async (req, lang) => {
 };
 
 export const getCartWithDetails = async (customerId) => {
-  return await CartModel.findOne({ userId: customerId })
+  return await CartModel.findOne({ user: customerId })
     .populate({
       path: "items.product",
       select:

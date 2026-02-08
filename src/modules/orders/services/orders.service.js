@@ -45,6 +45,7 @@ export const createOrderforUser = async (
 
     const user = await validateUser(customerId);
     const cart = await getCartWithDetails(customerId);
+    console.log(cart)
     validateCart(cart);
 
     const shippingAddress = validateShippingAddress(user, shippingAddressId);
