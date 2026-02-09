@@ -294,4 +294,33 @@ export const validateCurrencyId = async (id, lang) => {
   return currency;
 };
 
+import { getExchangeRate } from "../../auth/service/changeCurrencyHelper.service.js";
+
+export const getCurrencyCode = async (currencyId) => {
+  const currency = await Currency.findById(currencyId).select("code").lean();
+  return currency?.code ;
+};
+
+export const convertToUSD = async (amount, fromCurrencyId) => {
+  if (!amount || isNaN(parseFloat(amount))) return 0;
+
+  const fromCurrency = await getCurrencyCode(fromCurrencyId);
+  
+  if (fromCurrency === "USD") {
+    return Number(parseFloat(amount).toFixed(6));
+  }
+
+  const rate = await getExchangeRate(fromCurrency, "USD");
+
+  if (rate === null || rate <= 0) {
+    throw new Error(
+      `Failed to get exchange rate from ${fromCurrency} to USD. Cannot process order at this time.`,
+      { cause: 503 }
+    );
+  }
+
+  const usdValue = parseFloat(amount) * rate;
+  return Number(usdValue.toFixed(6));
+};
+
 

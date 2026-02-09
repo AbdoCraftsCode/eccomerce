@@ -19,7 +19,7 @@ bootstap(app, express);
 
 const io = initializeSocket(server);
 
-startOrderCleanupJob();
+//startOrderCleanupJob();
 
 process.on("unhandledRejection", (reason, promise) => {
   console.error("Unhandled Rejection at:", promise, "reason:", reason);

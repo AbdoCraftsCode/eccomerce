@@ -12,13 +12,16 @@ export const validateShippingAddress = (user, shippingAddressId) => {
   if (!shippingAddressId) {
     throw new Error("Shipping address required", { cause: 400 });
   }
+
   const shippingAddress = user.Addresses.id(shippingAddressId);
   if (!shippingAddress) {
     throw new Error("Shipping address not found", { cause: 400 });
   }
+
   if (!shippingAddress.latitude || !shippingAddress.longitude) {
     throw new Error("Shipping address missing coordinates", { cause: 400 });
   }
+
   return shippingAddress;
 };
 

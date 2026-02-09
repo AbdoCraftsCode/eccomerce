@@ -1,34 +1,40 @@
 import mongoose from "mongoose";
 import { CartModel } from "../../../DB/models/cart.model.js";
 import { OrderModelUser } from "../../../DB/models/orderSchemaUser.model.js";
-import { SubOrderModel } from "../../../DB/models/subOrdersSchema.model.js"; // Assuming path
-import {
-  getCartWithDetails,
-  validateCart,
-} from "../../cart/services/cart.service.js";
+import { SubOrderModel } from "../../../DB/models/subOrdersSchema.model.js";
+import { getCartWithDetails , validateCart} from "../../cart/services/cart.service.js";
 import {
   validateUser,
   validateShippingAddress,
   validatePaymentMethod,
 } from "../helpers/user.helpers.js";
 import {
-  validateProductsAvailability,
+  validateAndFetchProducts,
   createProductsMap,
-  fetchVariantsForCart,
+  fetchAndValidateVariants,
 } from "../helpers/product.helpers.js";
-import { processCartItems } from "../helpers/order-items.helpers.js";
-import { validateAndApplyCoupon } from "../helpers/coupon.helpers.js";
+import { processCartItemsWithUSD } from "../helpers/order-items.helpers.js";
+import {
+  validateAndApplyCoupon,
+  incrementCouponUsage,
+  decrementCouponUsage,
+} from "../helpers/coupon.helpers.js";
 import {
   calculateOrderTotals,
   createOrderItems,
   createOrder,
+  buildCouponUsedObject,
 } from "../helpers/order.helpers.js";
 import {
   reserveAllItemsStock,
   confirmStockReservation,
-  releaseReservedStock,
+  releaseMultipleStocks,
 } from "../helpers/stock.helpers.js";
-import { convertToUSD } from "../helpers/productCurrency.helper.js";
+import {
+  registerActiveSession,
+  unregisterActiveSession,
+} from "./cleanup.service.js";
+
 
 export const createOrderforUser = async (
   customerId,
@@ -37,121 +43,66 @@ export const createOrderforUser = async (
   couponCode = null
 ) => {
   let session;
-  let formattedItems = [];
+  let reservedItems = [];
 
   try {
     session = await mongoose.startSession();
     session.startTransaction();
 
     const user = await validateUser(customerId);
-    const cart = await getCartWithDetails(customerId);
-    console.log(cart)
-    validateCart(cart);
-
     const shippingAddress = validateShippingAddress(user, shippingAddressId);
     validatePaymentMethod(paymentMethod);
 
-    const { products, productIds } = await validateProductsAvailability(
-      cart.items,
-      session
-    );
+    const cart = await getCartWithDetails(customerId);
+    validateCart(cart);
 
+    // Step 3: Fetch and validate products with session (transactional read)
+    const products = await validateAndFetchProducts(cart.items, session);
     const productsMap = createProductsMap(products);
-    const variantsMap = await fetchVariantsForCart(cart.items, session);
 
+    // Step 4: Fetch and validate variants with session
+    const variantsMap = await fetchAndValidateVariants(cart.items, session);
+
+    // Attach variants to cart items
     cart.items = cart.items.map((item) => ({
       ...item,
-      variantId: item.variantId
-        ? variantsMap[item.variantId._id?.toString() || item.variantId.toString()]
+      variant: item.variant
+        ? variantsMap[item.variant._id?.toString() || item.variant.toString()]
         : null,
     }));
 
-    const processedItems = processCartItems(cart, productsMap);
-    formattedItems = processedItems.formattedItems; // save for release in catch
-    const subtotal = processedItems.subtotal;
-
-    // Step 1: Reserve stock first
-    await reserveAllItemsStock(formattedItems, session);
-
-    // Step 2: Convert ALL prices to USD — fail fast if any conversion fails
-    const usdFormattedItems = await Promise.all(
-      formattedItems.map(async (item) => {
-        const product = productsMap[item.productId.toString()];
-        const fromCurrency = product?.currency?.toUpperCase() || "USD";
-
-        const unitPriceUSD = await convertToUSD(item.unitPrice, fromCurrency);
-        const totalPriceUSD = await convertToUSD(item.totalPrice, fromCurrency);
-
-        return {
-          ...item,
-          unitPrice: unitPriceUSD,
-          totalPrice: totalPriceUSD,
-        };
-      })
+    const { formattedItems, subtotal } = await processCartItemsWithUSD(
+      cart,
+      productsMap
     );
 
-    // If we reached here → all conversions succeeded
-    const subtotalUSD = usdFormattedItems.reduce((sum, i) => sum + i.totalPrice, 0);
+    await reserveAllItemsStock(formattedItems, session);
+    reservedItems = formattedItems;
 
-    // Step 3: Apply coupon (now on USD values)
-    let discountAmount = 0;
-    let coupon = null;
-    let couponAppliedItems = [];
-    let couponUsed = null;
-
-    if (couponCode) {
-      const applyResult = await validateAndApplyCoupon(
+    const { coupon, discountAmount, couponAppliedItems, applicableSubtotal } =
+      await validateAndApplyCoupon(
         couponCode,
-        usdFormattedItems,
+        formattedItems,
         productsMap,
-        subtotalUSD,
+        subtotal,
         session
       );
-      coupon = applyResult.coupon;
-      discountAmount = applyResult.discountAmount;
-      couponAppliedItems = applyResult.couponAppliedItems;
-
-      if (coupon) {
-        couponUsed = {
-          couponId: coupon._id,
-          code: coupon.code,
-          discountType: coupon.discountType,
-          discountValue: coupon.discountValue,
-          appliesTo: coupon.appliesTo,
-          productId: coupon.productId?._id || null,
-          categoryId: coupon.categoryId?._id || null,
-          vendorId: coupon.vendorId || null,
-          applicableSubtotal: applyResult.applicableSubtotal || 0,
-          appliedItems: [],
-        };
-      }
-    }
 
     const orderItems = createOrderItems(
-      usdFormattedItems,
+      formattedItems,
       coupon,
       couponAppliedItems,
-      subtotalUSD,
+      subtotal,
       discountAmount
     );
 
-    if (couponUsed) {
-      couponUsed.appliedItems = orderItems
-        .filter((item) => item.discountApplied > 0)
-        .map((item) => ({
-          productId: item.productId,
-          variantId: item.variantId,
-          quantity: item.quantity,
-          unitPrice: item.unitPrice,
-          itemTotal: item.totalPrice,
-        }));
+    const couponUsed = buildCouponUsedObject(
+      coupon,
+      applicableSubtotal,
+      orderItems
+    );
 
-      couponUsed.applicableSubtotal = orderItems
-        .filter((item) => item.discountApplied > 0)
-        .reduce((sum, item) => sum + item.unitPrice * item.quantity, 0);
-    }
-
-    const totals = calculateOrderTotals(subtotalUSD, discountAmount, 0);
+    const totals = calculateOrderTotals(subtotal, discountAmount, 0);
 
     const orderData = {
       customerId,
@@ -176,6 +127,8 @@ export const createOrderforUser = async (
 
     const order = await createOrder(orderData, session);
 
+    registerActiveSession(order._id, session.id);
+
     const itemsByVendor = {};
     orderItems.forEach((item) => {
       const vid = item.vendorId.toString();
@@ -184,20 +137,31 @@ export const createOrderforUser = async (
     });
 
     const subOrders = [];
-    let subCount = 1;
 
     for (const [vendorId, vendorItems] of Object.entries(itemsByVendor)) {
-      const vendorSubtotal = vendorItems.reduce((sum, i) => sum + i.unitPrice * i.quantity, 0);
-      const vendorDiscount = vendorItems.reduce((sum, i) => sum + (i.discountApplied || 0), 0);
+      const vendorSubtotal = vendorItems.reduce(
+        (sum, i) => sum + i.unitPrice * i.quantity,
+        0
+      );
+      const vendorDiscount = vendorItems.reduce(
+        (sum, i) => sum + (i.discountApplied || 0),
+        0
+      );
       const vendorTotal = vendorSubtotal - vendorDiscount;
 
+      // Build vendor-specific coupon data if applicable
       let subCouponUsed = null;
       if (coupon) {
-        const vendorAppliedItems = vendorItems.filter((i) => (i.discountApplied || 0) > 0);
+        const vendorAppliedItems = vendorItems.filter(
+          (i) => (i.discountApplied || 0) > 0
+        );
         if (vendorAppliedItems.length > 0) {
           subCouponUsed = {
             ...couponUsed,
-            applicableSubtotal: vendorAppliedItems.reduce((sum, i) => sum + i.unitPrice * i.quantity, 0),
+            applicableSubtotal: vendorAppliedItems.reduce(
+              (sum, i) => sum + i.unitPrice * i.quantity,
+              0
+            ),
             appliedItems: vendorAppliedItems.map((i) => ({
               productId: i.productId,
               variantId: i.variantId,
@@ -237,15 +201,29 @@ export const createOrderforUser = async (
       subOrders.push(sub[0]);
     }
 
+    // Update main order with sub-order references
     order.subOrders = subOrders.map((s) => s._id);
     await order.save({ session });
 
-    // Clear cart
-    await CartModel.findByIdAndUpdate(cart._id, { items: [] }, { session });
+    // Step 13: Increment coupon usage ONLY after order is successfully created
+    if (coupon) {
+      await incrementCouponUsage(coupon._id, session);
+    }
 
+    // Step 14: Clear cart
+    await CartModel.findByIdAndUpdate(
+      cart._id,
+      { items: [] },
+      { session }
+    );
+
+    // Step 15: Commit transaction - all or nothing
     await session.commitTransaction();
 
-    // Populate before returning (as in your previous version)
+    // Unregister session
+    unregisterActiveSession(order._id);
+
+    // Step 16: Populate and return order
     const populatedOrder = await OrderModelUser.findById(order._id)
       .populate({
         path: "items.productId",
@@ -259,7 +237,8 @@ export const createOrderforUser = async (
 
     let statusMessage = "Your order has been created and is awaiting payment.";
     if (paymentMethod === "cash_on_delivery") {
-      statusMessage = "Your order is confirmed — payment will be collected on delivery.";
+      statusMessage =
+        "Your order is confirmed — payment will be collected on delivery.";
     }
 
     return {
@@ -267,32 +246,50 @@ export const createOrderforUser = async (
       statusDescription: statusMessage,
     };
   } catch (error) {
+    // Abort transaction - automatic rollback of all database changes
     if (session) {
       await session.abortTransaction();
     }
 
-    // Release reserved stock if we reached that point
-    if (formattedItems && formattedItems.length > 0) {
+
+    if (reservedItems && reservedItems.length > 0) {
       try {
-        for (const item of formattedItems) {
-          await releaseReservedStock(
-            item.productId,
-            item.variantId,
-            item.quantity
-          );
-        }
-        console.log("[ORDER] Stock released due to failure");
+        console.log("[ORDER] Manual stock release due to error");
+        await releaseMultipleStocks(reservedItems);
       } catch (releaseErr) {
-        console.error("[ORDER] Failed to release stock after error:", releaseErr);
+        console.error(
+          "[ORDER] Failed to release stock after error:",
+          releaseErr
+        );
       }
     }
 
-    // Throw specific message for currency failure
-    if (error.message.includes("exchange rate") || error.message.includes("currency")) {
+    // Unregister session if registered
+    if (session) {
+      try {
+        const tempOrder = await OrderModelUser.findOne({ customerId }).sort({ createdAt: -1 });
+        if (tempOrder) {
+          unregisterActiveSession(tempOrder._id);
+        }
+      } catch (e) {
+        // Ignore
+      }
+    }
+
+    // Enhance error messages for better user experience
+    if (
+      error.message.includes("exchange rate") ||
+      error.message.includes("currency conversion") ||
+      error.message.includes("Currency conversion failed")
+    ) {
       throw new Error(
         "Unable to create order: currency conversion to USD failed. Please try again later.",
         { cause: 503 }
       );
+    }
+
+    if (error.message.includes("Insufficient")) {
+      throw new Error(error.message, { cause: 400 });
     }
 
     throw error;
@@ -303,57 +300,83 @@ export const createOrderforUser = async (
   }
 };
 
+/**
+ * Confirm order payment and convert reserved stock to actual sale
+ */
 export const confirmOrderPayment = async (orderId, session = null) => {
   try {
     const order = await OrderModelUser.findById(orderId);
     if (!order) throw new Error("Order not found", { cause: 404 });
-    if (order.paymentStatus !== "pending")
-      throw new Error(`Status already ${order.paymentStatus}`, { cause: 400 });
+
+    if (order.paymentStatus !== "pending") {
+      throw new Error(
+        `Payment status is already ${order.paymentStatus}`,
+        { cause: 400 }
+      );
+    }
+
+    // Confirm stock reservation (convert reserved to sold)
     for (const item of order.items) {
       await confirmStockReservation(
         item.productId,
         item.variantId,
         item.quantity,
-        session,
+        session
       );
     }
+
+    // Update order status
     order.paymentStatus = "paid";
     order.status = "confirmed";
-    order.expireAt = undefined;
+    order.expireAt = undefined; // Remove expiration
     await order.save({ session });
+
+    // Update sub-orders
     await SubOrderModel.updateMany(
       { orderId: order._id },
       { paymentStatus: "paid", status: "confirmed" },
-      { session },
+      { session }
     );
+
     return order;
   } catch (error) {
     throw error;
   }
 };
 
+/**
+ * Cancel pending order and release reserved stock
+ */
 export const cancelPendingOrder = async (orderId) => {
   try {
     const order = await OrderModelUser.findById(orderId);
     if (!order) throw new Error("Order not found", { cause: 404 });
-    if (order.paymentStatus !== "pending")
-      throw new Error("Cannot cancel non-pending", { cause: 400 });
-    for (const item of order.items) {
-      await releaseReservedStock(item.productId, item.variantId, item.quantity);
+
+    if (order.paymentStatus !== "pending") {
+      throw new Error(
+        "Cannot cancel order with non-pending payment status",
+        { cause: 400 }
+      );
     }
+
+    // Release reserved stock
+    await releaseMultipleStocks(order.items);
+
+    // Decrement coupon usage
     if (order.couponUsed?.couponId) {
-      const coupon = await CouponModel.findById(order.couponUsed.couponId);
-      if (coupon) {
-        coupon.usesCount = Math.max(0, coupon.usesCount - 1);
-        await coupon.save();
-      }
+      await decrementCouponUsage(order.couponUsed.couponId);
     }
+
+    // Update order status
     order.status = "cancelled";
     await order.save();
+
+    // Update sub-orders
     await SubOrderModel.updateMany(
       { orderId: order._id },
-      { status: "cancelled" },
+      { status: "cancelled" }
     );
+
     return order;
   } catch (error) {
     throw error;

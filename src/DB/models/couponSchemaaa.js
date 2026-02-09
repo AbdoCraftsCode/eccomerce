@@ -1,70 +1,82 @@
-// Updated Coupon Schema - Added "category" to enum
 import mongoose from "mongoose";
 
-const couponSchema = new mongoose.Schema({
+const couponSchema = new mongoose.Schema(
+  {
     code: {
-        type: String,
-        required: true,
-        unique: true,
-        trim: true,
-        uppercase: true
+      type: String,
+      required: true,
+      unique: true,
+      trim: true,
+      uppercase: true,
     },
     discountType: {
-        type: String,
-        enum: ["percentage", "fixed"],
-        required: true
+      type: String,
+      enum: ["percentage", "fixed"],
+      required: true,
     },
     discountValue: {
-        type: Number,
-        required: true,
-        min: 0
+      type: Number,
+      required: true,
+      min: 0,
+    },
+    currency: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Currency",
+      required: function () {
+        return this.discountType === "fixed";
+      },
     },
     appliesTo: {
-        type: String,
-        enum: ["single_product", "category", "all_products"],
-        required: true
+      type: String,
+      enum: ["single_product", "category", "all_products"],
+      required: true,
     },
     productId: {
-        type: mongoose.Schema.Types.ObjectId,
-        ref: "Producttttt",
-        required: function () {
-            return this.appliesTo === "single_product";
-        }
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Producttttt",
+      required: function () {
+        return this.appliesTo === "single_product";
+      },
     },
     categoryId: {
-        type: mongoose.Schema.Types.ObjectId,
-        ref: "Categoryyyy",
-        required: function () {
-            return this.appliesTo === "category";
-        }
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Categoryyyy",
+      required: function () {
+        return this.appliesTo === "category";
+      },
     },
     vendorId: {
-        type: mongoose.Schema.Types.ObjectId,
-        ref: "User",
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
     },
     maxUses: {
-        type: Number,
-        default: 1,
-        min: 1
+      type: Number,
+      default: 1,
+      min: 1,
     },
     usesCount: {
-        type: Number,
-        default: 0
+      type: Number,
+      default: 0,
     },
     expiryDate: {
-        type: Date
+      type: Date,
     },
     isActive: {
-        type: Boolean,
-        default: true
-    }
-}, { timestamps: true });
+      type: Boolean,
+      default: true,
+    },
+  },
+  { timestamps: true },
+);
 
 couponSchema.pre("save", function (next) {
-    if (this.discountType === "percentage" && (this.discountValue < 0 || this.discountValue > 100)) {
-        return next(new Error("قيمة الخصم النسبي يجب أن تكون بين 0 و 100"));
-    }
-    next();
+  if (
+    this.discountType === "percentage" &&
+    (this.discountValue < 0 || this.discountValue > 100)
+  ) {
+    return next(new Error("قيمة الخصم النسبي يجب أن تكون بين 0 و 100"));
+  }
+  next();
 });
 
 export const CouponModel = mongoose.model("Coupon", couponSchema);

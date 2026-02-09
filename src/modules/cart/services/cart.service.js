@@ -99,13 +99,67 @@ export const convertCartToUserPreferences = async (
   const cartObj = cart.toObject();
   let newSubTotal = 0;
 
+  // Track processed products to handle same product appearing multiple times
+  // (e.g., product-only and product+variant from same product)
+  const processedProducts = new Map(); // productId -> exchangeRate
+
   for (const item of cartObj.items) {
-    //if (!item.product) continue;
+    // Skip items without product (product may have been deleted)
+    if (!item.product) continue;
 
     const product = item.product;
-    const exchangeRate = await getRate(product.currency);
+    const productId = product._id.toString();
 
-    if (exchangeRate !== 1) {
+    let exchangeRate;
+    let productAlreadyProcessed = processedProducts.has(productId);
+
+    if (productAlreadyProcessed) {
+      // Product was already processed in a previous item - product.currency is already a string
+      // Use the cached exchange rate
+      exchangeRate = processedProducts.get(productId);
+    } else {
+      // First time processing this product - product.currency is still an object
+      // Handle case where product has no currency set
+      if (!product.currency || (typeof product.currency === 'object' && !product.currency._id)) {
+        throwError("product_without_currency", lang, {}, 400);
+      }
+
+      exchangeRate = await getRate(product.currency._id.toString());
+      processedProducts.set(productId, exchangeRate);
+    }
+
+    // Calculate item price for subtotal
+    // If variant exists, use variant price; otherwise use product price
+    let itemPrice = 0;
+    if (item.variant) {
+      // User pays variant price when variant is specified
+      // Check if variant prices are already converted (string with decimals) or original
+      const variantPrice = parseFloat(item.variant.disCountPrice || item.variant.price || 0);
+      itemPrice = variantPrice;
+    } else {
+      // User pays product price when only product is specified (no variant)
+      const productPrice = parseFloat(product.disCountPrice || product.mainPrice || 0);
+      itemPrice = productPrice;
+    }
+
+    // Add to subtotal
+    // If product was already processed, prices are already converted
+    // Otherwise, we need to apply exchange rate
+    if (productAlreadyProcessed) {
+      // Prices already converted - for variant items after product was processed
+      // Variant prices still need conversion if this is the first time seeing this variant
+      if (item.variant && !item.variant._processed) {
+        newSubTotal += (itemPrice * exchangeRate) * item.quantity;
+      } else {
+        newSubTotal += itemPrice * item.quantity;
+      }
+    } else {
+      // First time - apply exchange rate
+      newSubTotal += (itemPrice * exchangeRate) * item.quantity;
+    }
+
+    // Convert product prices for display (only if not already processed)
+    if (!productAlreadyProcessed && exchangeRate !== 1) {
       if (product.mainPrice) {
         const val = parseFloat(product.mainPrice);
         if (!isNaN(val)) {
@@ -119,12 +173,14 @@ export const convertCartToUserPreferences = async (
           product.disCountPrice = (val * exchangeRate).toFixed(2).toString();
         }
       }
+
+      product.currency = targetCurrencyCode;
     }
 
-    product.currency = targetCurrencyCode;
-
-    if (item.variant && exchangeRate !== 1) {
+    // Convert variant prices for display (each variant is unique, always convert)
+    if (item.variant && exchangeRate !== 1 && !item.variant._processed) {
       const variant = item.variant;
+      item.variant._processed = true; // Mark as processed
 
       if (variant.price) {
         const val = parseFloat(variant.price);
@@ -141,28 +197,20 @@ export const convertCartToUserPreferences = async (
       }
     }
 
+    // Localize product name
     if (product.name) {
       product.name =
         product.name?.[lang] || product.name?.en || "Unnamed Product";
     }
 
+    // Localize product description
     if (product.description) {
       product.description =
         product.description?.[lang] || product.description?.en || "Unnamed Product";
     }
-
-    let itemPrice = 0;
-    if (item.variant) {
-      itemPrice = parseFloat(
-        item.variant.disCountPrice || item.variant.price || 0,
-      );
-    } else {
-      itemPrice = parseFloat(product.disCountPrice || product.mainPrice || 0);
-    }
-
-    newSubTotal += itemPrice * item.quantity;
   }
 
+  // Round subtotal to 2 decimal places for consistency
   cartObj.subTotal = parseFloat(newSubTotal.toFixed(2));
   cartObj.currency = targetCurrencyCode;
 
@@ -210,15 +258,27 @@ export const addToCart = async (req, lang) => {
 
   let cart = await getOrCreateCart(userId);
 
+  // Check if exact same item already exists in cart
+  // User CAN have both product-only AND product+variant from same product
+  // Only throw error if trying to add the EXACT same combination
   const existingItem = cart.items.find((item) => {
     const isSameProduct = item.product.toString() === productId;
+    if (!isSameProduct) return false;
 
-    if (variantId) {
-      const isSameVariant = item.variant?.toString() === variantId;
-      return isSameProduct && isSameVariant;
-    } else {
-      return isSameProduct && !item.variantId;
+    // Check if variant status matches
+    const itemHasVariant = item.variant !== null && item.variant !== undefined;
+    const requestHasVariant = variantId !== null && variantId !== undefined;
+
+    if (requestHasVariant && itemHasVariant) {
+      // Both have variants - check if it's the SAME variant
+      return item.variant.toString() === variantId;
+    } else if (!requestHasVariant && !itemHasVariant) {
+      // Both are product-only (no variant) - this is a duplicate
+      return true;
     }
+
+    // One has variant, one doesn't - these are different items, allow both
+    return false;
   });
 
   if (existingItem) {
@@ -283,7 +343,7 @@ export const deleteItemFromCart = async (req, lang) => {
     if (variantId) {
       return sameProduct && item.variant?.toString() === variantId;
     }
-    return sameProduct && !item.variantId;
+    return sameProduct && !item.variant;
   });
 
   if (itemIndex === -1) {
@@ -297,7 +357,7 @@ export const deleteItemFromCart = async (req, lang) => {
     let emptyCart = await getDetailedCart(cart._id);
     emptyCart = await convertCartToUserPreferences(
       emptyCart,
-      req.user.currency,
+      req.user.currency?.code,
       lang,
     );
     return { cart: emptyCart, messageKey: "cart_emptied" };
@@ -331,7 +391,8 @@ export const updateQuantity = async (req, lang) => {
     if (variantId) {
       return sameProduct && item.variant?.toString() === variantId;
     }
-    return sameProduct && !item.variantId;
+    // Product only (no variant) - check that item also has no variant
+    return sameProduct && !item.variant;
   });
 
   if (itemIndex === -1) {
@@ -377,7 +438,7 @@ export const updateQuantity = async (req, lang) => {
       let updatedCart = await getDetailedCart(cart._id);
       updatedCart = await convertCartToUserPreferences(
         updatedCart,
-        req.user.currency,
+        req.user.currency?.code,
         lang,
       );
       return { cart: updatedCart, messageKey: "removed" };
