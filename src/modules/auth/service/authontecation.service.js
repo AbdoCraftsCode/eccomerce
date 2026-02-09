@@ -5680,16 +5680,15 @@ export const applyCoupon = asyncHandelr(async (req, res, next) => {
     return next(new Error("❌ كود الكوبون مطلوب", { cause: 400 }));
   }
 
-  // جلب السلة من الداتابيز
-  const cart = await CartModel.findOne({ userId: customerId })
+  const cart = await CartModel.findOne({ user: customerId })
     .populate({
-      path: "items.productId",
+      path: "items.product",
       select:
         "name mainPrice disCountPrice createdBy categories hasVariants stock isActive status",
       match: { isActive: true, status: "published" },
     })
     .populate({
-      path: "items.variantId",
+      path: "items.variant",
       select: "price disCountPrice attributes stock isActive",
       match: { isActive: true },
     });
@@ -5700,7 +5699,7 @@ export const applyCoupon = asyncHandelr(async (req, res, next) => {
 
   // فلترة العناصر الصالحة فقط (لو الـ populate match عمل شغله)
   const validItems = cart.items.filter(
-    (item) => item.productId && (!item.variantId || item.variantId),
+    (item) => item.product && (!item.variant || item.variant),
   );
 
   if (validItems.length === 0) {
@@ -5736,8 +5735,8 @@ export const applyCoupon = asyncHandelr(async (req, res, next) => {
   let appliedItems = [];
 
   for (const item of validItems) {
-    const product = item.productId;
-    const variant = item.variantId;
+    const product = item.product;
+    const variant = item.variant;
 
     let itemPrice = 0;
     let usedDiscountPrice = false;
@@ -5760,10 +5759,8 @@ export const applyCoupon = asyncHandelr(async (req, res, next) => {
     const itemTotal = itemPrice * item.quantity;
     subtotal += itemTotal;
 
-    // تحديد إذا كان الكوبون ينطبق على هذا العنصر
     let isApplicable = false;
 
-    // التحقق الأساسي بناءً على appliesTo
     if (coupon.appliesTo === "all_products") {
       isApplicable = true;
     } else if (coupon.appliesTo === "single_product") {
@@ -5784,7 +5781,6 @@ export const applyCoupon = asyncHandelr(async (req, res, next) => {
       }
     }
 
-    // التحقق الإضافي للـ vendorId (لو الكوبون للبائع، يجب أن يكون المنتج له)
     if (isApplicable && coupon.vendorId) {
       if (
         !product.createdBy ||

@@ -258,9 +258,6 @@ export const addToCart = async (req, lang) => {
 
   let cart = await getOrCreateCart(userId);
 
-  // Check if exact same item already exists in cart
-  // User CAN have both product-only AND product+variant from same product
-  // Only throw error if trying to add the EXACT same combination
   const existingItem = cart.items.find((item) => {
     const isSameProduct = item.product.toString() === productId;
     if (!isSameProduct) return false;
