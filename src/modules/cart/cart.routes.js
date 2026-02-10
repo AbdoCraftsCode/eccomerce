@@ -1,4 +1,3 @@
-// cart/cart.router.js
 import { Router } from "express";
 import { authentication, authorization } from "../../middlewere/authontcation.middlewere.js";
 import { validation } from "../../middlewere/validation.middlewere.js";
@@ -32,6 +31,13 @@ router.patch(
   authentication(),
   validation(cartValidators.updateQuantityValidation),
   cartController.updateQuantity
+);
+
+router.post(
+  "/applyCoupon",
+  authentication(),
+  validation(cartValidators.applyCouponValidation),
+  cartController.applyCoupon
 );
 
 export default router;

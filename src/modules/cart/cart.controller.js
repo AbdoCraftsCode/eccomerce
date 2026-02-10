@@ -47,3 +47,22 @@ export const updateQuantity = asyncHandelr(async (req, res) => {
     data: cart,
   });
 });
+
+export const applyCoupon = asyncHandelr(async (req, res) => {
+  const lang = getUserLanguage(req);
+  const userId = req.user._id;
+  const { couponCode } = req.body;
+  const userCurrencyCode = req.user.currency?.code;
+  const cart = await cartService.applyCouponToCart(
+    userId,
+    couponCode,
+    userCurrencyCode,
+    lang,
+  );
+
+  res.status(200).json({
+    success: true,
+    message: getResponseMessage("coupon_applied", lang),
+    data: cart,
+  });
+});

@@ -28,3 +28,17 @@ export const deleteItemFromCartValidation = Joi.object().keys({
   productId: generalfields._id.required(),
   variantId: generalfields._id.optional(),
 });
+
+export const applyCouponValidation = Joi.object({
+  couponCode: Joi.string()
+    .trim()
+    .min(3)
+    .max(50)
+    .required()
+    .messages({
+      "string.empty": "coupon_code_required",
+      "string.min": "coupon_code_too_short",
+      "string.max": "coupon_code_too_long",
+      "any.required": "coupon_code_required",
+    }),
+});

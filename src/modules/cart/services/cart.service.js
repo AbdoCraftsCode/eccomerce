@@ -1,6 +1,7 @@
 import { CartModel } from "../../../DB/models/cart.model.js";
 import { ProductModellll } from "../../../DB/models/productSchemaaaa.js";
 import { VariantModel } from "../../../DB/models/variantSchema.js";
+import { CouponModel } from "../../../DB/models/couponSchemaaa.js";
 import { getExchangeRate } from "../../auth/service/changeCurrencyHelper.service.js";
 import {
   findOne,
@@ -9,9 +10,9 @@ import {
   create,
   updateOne,
 } from "../../../DB/dbservice.js";
-import { throwError } from "../helpers/responseMessages.js";
+import { throwError, getResponseMessage } from "../helpers/responseMessages.js";
 import { getDefaultCurrency } from "../../currency/services/currency.service.js";
-import  Currency from "../../../DB/models/Currency.model.js";
+import Currency from "../../../DB/models/Currency.model.js";
 
 export const getOrCreateCart = async (user) => {
   let cart = await findOne({
@@ -70,7 +71,7 @@ export const convertCartToUserPreferences = async (
   const getRate = async (fromCurrencyId) => {
     if (!fromCurrencyId) {
       throwError("product_without_currency", lang, {}, 400);
-    }; 
+    }
 
     const fromCurrencyDoc = await findById({
       model: Currency,
@@ -120,7 +121,10 @@ export const convertCartToUserPreferences = async (
     } else {
       // First time processing this product - product.currency is still an object
       // Handle case where product has no currency set
-      if (!product.currency || (typeof product.currency === 'object' && !product.currency._id)) {
+      if (
+        !product.currency ||
+        (typeof product.currency === "object" && !product.currency._id)
+      ) {
         throwError("product_without_currency", lang, {}, 400);
       }
 
@@ -134,11 +138,15 @@ export const convertCartToUserPreferences = async (
     if (item.variant) {
       // User pays variant price when variant is specified
       // Check if variant prices are already converted (string with decimals) or original
-      const variantPrice = parseFloat(item.variant.disCountPrice || item.variant.price || 0);
+      const variantPrice = parseFloat(
+        item.variant.disCountPrice || item.variant.price || 0,
+      );
       itemPrice = variantPrice;
     } else {
       // User pays product price when only product is specified (no variant)
-      const productPrice = parseFloat(product.disCountPrice || product.mainPrice || 0);
+      const productPrice = parseFloat(
+        product.disCountPrice || product.mainPrice || 0,
+      );
       itemPrice = productPrice;
     }
 
@@ -149,13 +157,13 @@ export const convertCartToUserPreferences = async (
       // Prices already converted - for variant items after product was processed
       // Variant prices still need conversion if this is the first time seeing this variant
       if (item.variant && !item.variant._processed) {
-        newSubTotal += (itemPrice * exchangeRate) * item.quantity;
+        newSubTotal += itemPrice * exchangeRate * item.quantity;
       } else {
         newSubTotal += itemPrice * item.quantity;
       }
     } else {
       // First time - apply exchange rate
-      newSubTotal += (itemPrice * exchangeRate) * item.quantity;
+      newSubTotal += itemPrice * exchangeRate * item.quantity;
     }
 
     // Convert product prices for display (only if not already processed)
@@ -206,7 +214,9 @@ export const convertCartToUserPreferences = async (
     // Localize product description
     if (product.description) {
       product.description =
-        product.description?.[lang] || product.description?.en || "Unnamed Product";
+        product.description?.[lang] ||
+        product.description?.en ||
+        "Unnamed Product";
     }
   }
 
@@ -221,7 +231,11 @@ export const getCart = async (req, lang) => {
   const user = req.user._id;
   let cart = await getOrCreateCart(user);
   cart = await getDetailedCart(cart._id);
-  cart = await convertCartToUserPreferences(cart, req.user.currency?.code , lang);
+  cart = await convertCartToUserPreferences(
+    cart,
+    req.user.currency?.code,
+    lang,
+  );
   return cart;
 };
 
@@ -327,7 +341,7 @@ export const deleteItemFromCart = async (req, lang) => {
 
   const cart = await findOne({
     model: CartModel,
-    filter: { user:userId },
+    filter: { user: userId },
   });
 
   if (!cart) {
@@ -375,7 +389,7 @@ export const updateQuantity = async (req, lang) => {
 
   const cart = await findOne({
     model: CartModel,
-    filter: { user:userId },
+    filter: { user: userId },
   });
 
   if (!cart) {
@@ -473,4 +487,177 @@ export const validateCart = (cart) => {
   if (!cart || cart.items.length === 0) {
     throw new Error("Cart is empty", { cause: 400 });
   }
+};
+
+export const applyCouponToCart = async (
+  userId,
+  couponCode,
+  userCurrencyCode,
+  lang = "en",
+) => {
+  if (!couponCode || !couponCode.trim()) {
+    throwError("coupon_invalid", lang, {}, 400);
+  }
+
+  const trimmedCode = couponCode.trim().toUpperCase();
+
+  const cart = await getOrCreateCart(userId);
+  const detailedCart = await getDetailedCart(cart._id);
+
+  if (!detailedCart || !detailedCart.items || detailedCart.items.length === 0) {
+    throwError("cart_empty", lang, {}, 400);
+  }
+
+  const coupon = await findOne({
+    model: CouponModel,
+    filter: { code: trimmedCode, isActive: true },
+    populate: [
+      { path: "productId", select: "name" },
+      { path: "categoryId", select: "name" },
+      { path: "currency", select: "code symbol" },
+    ],
+  });
+
+  if (!coupon) {
+    throwError("coupon_invalid", lang, {}, 400);
+  }
+
+  if (coupon.expiryDate && new Date(coupon.expiryDate) < new Date()) {
+    throwError("coupon_expired", lang, {}, 400);
+  }
+
+  if (coupon.usesCount >= coupon.maxUses) {
+    throwError("coupon_usage_limit", lang, {}, 400);
+  }
+
+  const defaultCurrency = await getDefaultCurrency("en");
+  const targetCurrencyCode = userCurrencyCode || defaultCurrency.code;
+
+  const applicableItems = [];
+  let applicableItemsSubtotal = 0;
+
+  for (const item of detailedCart.items) {
+    if (!item.product || !item.product._id) continue;
+
+    const product = item.product;
+    const productId = product._id.toString();
+
+    const matchesVendor =
+      !coupon.vendorId ||
+      product.createdBy?.toString() === coupon.vendorId.toString();
+    if (!matchesVendor) continue;
+
+    let isApplicable = false;
+
+    if (coupon.appliesTo === "all_products") {
+      isApplicable = true;
+    } else if (coupon.appliesTo === "single_product") {
+      isApplicable = productId === coupon.productId?._id?.toString();
+    } else if (coupon.appliesTo === "category") {
+      const productCategories = product.categories || [];
+      isApplicable = productCategories.some(
+        (cat) => cat.toString() === coupon.categoryId?._id?.toString(),
+      );
+    }
+
+    if (isApplicable) {
+      let itemPrice = 0;
+      if (item.variant) {
+        itemPrice = parseFloat(
+          item.variant.disCountPrice || item.variant.price || 0,
+        );
+      } else {
+        itemPrice = parseFloat(product.disCountPrice || product.mainPrice || 0);
+      }
+
+      const productCurrencyId = product.currency?._id || product.currency;
+      if (!productCurrencyId) {
+        throwError("product_without_currency", lang, {}, 400);
+      }
+
+      const productCurrencyDoc = await findById({
+        model: Currency,
+        id: productCurrencyId.toString(),
+        select: "code",
+      });
+
+      const fromCode = productCurrencyDoc?.code || "USD";
+
+      let exchangeRate = 1;
+      if (fromCode !== targetCurrencyCode) {
+        const rate = await getExchangeRate(fromCode, targetCurrencyCode);
+        exchangeRate = rate !== null && rate > 0 ? rate : 1;
+      }
+
+      const itemTotalInUserCurrency = itemPrice * exchangeRate * item.quantity;
+      applicableItemsSubtotal += itemTotalInUserCurrency;
+
+      applicableItems.push({
+        productId: productId,
+        variantId: item.variant?._id?.toString() || null,
+        quantity: item.quantity,
+        itemPrice: itemPrice * exchangeRate,
+        itemTotal: itemTotalInUserCurrency,
+      });
+    }
+  }
+
+  if (applicableItems.length === 0) {
+    throwError("coupon_not_applicable", lang, {}, 400);
+  }
+
+  let discountAmount = 0;
+
+  if (coupon.discountType === "percentage") {
+    discountAmount = (applicableItemsSubtotal * coupon.discountValue) / 100;
+  } else if (coupon.discountType === "fixed") {
+    if (!coupon.currency || !coupon.currency._id) {
+      throwError("coupon_no_currency", lang, {}, 400);
+    }
+
+    const couponCurrencyCode = coupon.currency.code;
+
+    let exchangeRate = 1;
+    if (couponCurrencyCode !== targetCurrencyCode) {
+      const rate = await getExchangeRate(
+        couponCurrencyCode,
+        targetCurrencyCode,
+      );
+      if (!rate || rate <= 0) {
+        throwError("coupon_no_currency", lang, {}, 503);
+      }
+      exchangeRate = rate;
+    }
+
+    const discountInUserCurrency = coupon.discountValue * exchangeRate;
+    discountAmount = Math.min(discountInUserCurrency, applicableItemsSubtotal);
+  }
+
+  discountAmount = Number(discountAmount.toFixed(2));
+
+  const convertedCart = await convertCartToUserPreferences(
+    detailedCart,
+    targetCurrencyCode,
+    lang,
+  );
+
+  const cartSubtotal = convertedCart.subTotal || 0;
+  const finalTotal = Math.max(0, cartSubtotal - discountAmount);
+
+  return {
+      ...convertedCart,
+      appliedCoupon: {
+        code: coupon.code,
+        discountType: coupon.discountType,
+        discountValue: coupon.discountValue,
+        discountAmount: discountAmount,
+        applicableItems: applicableItems.map((item) => ({
+          productId: item.productId,
+          variantId: item.variantId,
+          quantity: item.quantity,
+        })),
+      },
+      discountAmount: discountAmount,
+      total: Number(finalTotal.toFixed(2)),
+  };
 };
