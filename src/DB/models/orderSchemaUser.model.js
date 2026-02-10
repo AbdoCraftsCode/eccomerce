@@ -1,5 +1,48 @@
 import mongoose from "mongoose";
 
+// Reusable sub-schemas
+const localizedStringSchema = { ar: String, en: String };
+
+const currencyDetailsSchema = {
+  code: String,
+  name: { ar: String, en: String },
+  symbol: String,
+};
+
+const productSnapshotSchema = {
+  _id: { type: mongoose.Schema.Types.ObjectId },
+  name: localizedStringSchema,
+  description: localizedStringSchema,
+  images: [String],
+  weight: String,
+  currency: currencyDetailsSchema,
+  mainPrice: Number,
+  discountPrice: Number,
+  mainPriceInCustomerCurrency: Number,
+  discountPriceInCustomerCurrency: Number,
+  mainPriceInUSD: Number,
+  discountPriceInUSD: Number,
+};
+
+const variantSnapshotSchema = {
+  _id: { type: mongoose.Schema.Types.ObjectId },
+  attributes: [
+    {
+      attributeName: localizedStringSchema,
+      valueName: localizedStringSchema,
+      hexCode: String,
+    },
+  ],
+  images: [String],
+  weight: String,
+  mainPrice: Number,
+  discountPrice: Number,
+  mainPriceInCustomerCurrency: Number,
+  discountPriceInCustomerCurrency: Number,
+  mainPriceInUSD: Number,
+  discountPriceInUSD: Number,
+};
+
 const orderSchema = new mongoose.Schema(
   {
     orderNumber: {
@@ -14,28 +57,11 @@ const orderSchema = new mongoose.Schema(
     },
     items: [
       {
-        productId: {
-          type: mongoose.Schema.Types.ObjectId,
-          ref: "Producttttt",
-          required: true,
-        },
-        variantId: {
-          type: mongoose.Schema.Types.ObjectId,
-          ref: "Variant",
+        product: productSnapshotSchema,
+        variant: {
+          type: variantSnapshotSchema,
           default: null,
         },
-        productName: {
-          ar: String,
-          en: String,
-        },
-        variantAttributes: [
-          {
-            attributeId: mongoose.Schema.Types.ObjectId,
-            valueId: mongoose.Schema.Types.ObjectId,
-            attributeName: { en: String, ar: String },
-            valueName: { en: String, ar: String },
-          },
-        ], // Consistent array
         quantity: {
           type: Number,
           required: true,
@@ -78,6 +104,9 @@ const orderSchema = new mongoose.Schema(
         enum: ["percentage", "fixed"],
       },
       discountValue: Number,
+      discountValueInCustomerCurrency: Number,
+      discountValueInUSD: Number,
+      currency: currencyDetailsSchema,
       appliesTo: {
         type: String,
         enum: ["single_product", "category", "all_products"],
@@ -103,15 +132,8 @@ const orderSchema = new mongoose.Schema(
       },
       appliedItems: [
         {
-          productId: {
-            type: mongoose.Schema.Types.ObjectId,
-            ref: "Producttttt",
-          },
-          variantId: {
-            type: mongoose.Schema.Types.ObjectId,
-            ref: "Variant",
-            default: null,
-          },
+          productId: mongoose.Schema.Types.ObjectId,
+          variantId: mongoose.Schema.Types.ObjectId,
           quantity: Number,
           unitPrice: Number,
           itemTotal: Number,
@@ -130,6 +152,7 @@ const orderSchema = new mongoose.Schema(
       type: String,
       default: "USD",
     },
+    customerCurrency: currencyDetailsSchema,
     shippingAddress: {
       addressName: String,
       addressDetails: String,

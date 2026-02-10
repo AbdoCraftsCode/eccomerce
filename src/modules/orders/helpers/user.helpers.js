@@ -1,7 +1,7 @@
 import Usermodel from "../../../DB/models/User.model.js";
 
 export const validateUser = async (customerId) => {
-  const user = await Usermodel.findById(customerId);
+  const user = await Usermodel.findById(customerId).populate("currency", "code name symbol");
   if (!user) {
     throw new Error("User not found", { cause: 401 });
   }

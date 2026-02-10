@@ -2,7 +2,10 @@ import mongoose from "mongoose";
 import { CartModel } from "../../../DB/models/cart.model.js";
 import { OrderModelUser } from "../../../DB/models/orderSchemaUser.model.js";
 import { SubOrderModel } from "../../../DB/models/subOrdersSchema.model.js";
-import { getCartWithDetails , validateCart} from "../../cart/services/cart.service.js";
+import {
+  getCartWithDetails,
+  validateCart,
+} from "../../cart/services/cart.service.js";
 import {
   validateUser,
   validateShippingAddress,
@@ -13,7 +16,7 @@ import {
   createProductsMap,
   fetchAndValidateVariants,
 } from "../helpers/product.helpers.js";
-import { processCartItemsWithUSD } from "../helpers/order-items.helpers.js";
+import { processCartItems } from "../helpers/order-items.helpers.js";
 import {
   validateAndApplyCoupon,
   incrementCouponUsage,
@@ -34,13 +37,54 @@ import {
   registerActiveSession,
   unregisterActiveSession,
 } from "./cleanup.service.js";
+import { getOrderMessage } from "../helpers/responseMessages.js";
 
+const transformOrderResponse = (order, lang = "en") => {
+  if (!order) return order;
+
+  const localize = (obj) => {
+    if (!obj) return "";
+    if (typeof obj === "string") return obj;
+    return obj[lang] || obj.en || "";
+  };
+
+  const transformItem = (item) => {
+    const transformed = { ...item };
+
+    if (transformed.product) {
+      transformed.product = {
+        ...transformed.product,
+        name: localize(transformed.product.name),
+        description: localize(transformed.product.description),
+      };
+    }
+
+    if (transformed.variant && transformed.variant.attributes) {
+      transformed.variant = {
+        ...transformed.variant,
+        attributes: transformed.variant.attributes.map((attr) => ({
+          ...attr,
+          attributeName: localize(attr.attributeName),
+          valueName: localize(attr.valueName),
+        })),
+      };
+    }
+
+    return transformed;
+  };
+
+  return {
+    ...order,
+    items: (order.items || []).map(transformItem),
+  };
+};
 
 export const createOrderforUser = async (
   customerId,
   shippingAddressId,
   paymentMethod,
-  couponCode = null
+  couponCode = null,
+  lang = "en"
 ) => {
   let session;
   let reservedItems = [];
@@ -52,6 +96,19 @@ export const createOrderforUser = async (
     const user = await validateUser(customerId);
     const shippingAddress = validateShippingAddress(user, shippingAddressId);
     validatePaymentMethod(paymentMethod);
+
+    // Get customer currency details
+    const customerCurrencyCode = user.currency?.code || "USD";
+    const customerCurrency = user.currency
+      ? {
+          code: user.currency.code || "USD",
+          name: {
+            ar: user.currency.name?.ar || "",
+            en: user.currency.name?.en || "",
+          },
+          symbol: user.currency.symbol || "",
+        }
+      : { code: "USD", name: { ar: "", en: "" }, symbol: "$" };
 
     const cart = await getCartWithDetails(customerId);
     validateCart(cart);
@@ -71,23 +128,34 @@ export const createOrderforUser = async (
         : null,
     }));
 
-    const { formattedItems, subtotal } = await processCartItemsWithUSD(
+    // Step 5: Process items — build embedded objects + convert prices
+    const { formattedItems, subtotal } = await processCartItems(
       cart,
-      productsMap
+      productsMap,
+      customerCurrencyCode
     );
 
+    // Step 6: Reserve stock
     await reserveAllItemsStock(formattedItems, session);
     reservedItems = formattedItems;
 
-    const { coupon, discountAmount, couponAppliedItems, applicableSubtotal } =
-      await validateAndApplyCoupon(
-        couponCode,
-        formattedItems,
-        productsMap,
-        subtotal,
-        session
-      );
+    // Step 7: Validate and apply coupon
+    const {
+      coupon,
+      discountAmount,
+      discountAmountInCustomerCurrency,
+      couponAppliedItems,
+      applicableSubtotal,
+    } = await validateAndApplyCoupon(
+      couponCode,
+      formattedItems,
+      productsMap,
+      subtotal,
+      customerCurrencyCode,
+      session
+    );
 
+    // Step 8: Create order items with coupon discount
     const orderItems = createOrderItems(
       formattedItems,
       coupon,
@@ -96,14 +164,19 @@ export const createOrderforUser = async (
       discountAmount
     );
 
+    // Step 9: Build coupon used object
     const couponUsed = buildCouponUsedObject(
       coupon,
       applicableSubtotal,
-      orderItems
+      orderItems,
+      discountAmountInCustomerCurrency,
+      discountAmount
     );
 
+    // Step 10: Calculate totals
     const totals = calculateOrderTotals(subtotal, discountAmount, 0);
 
+    // Step 11: Build order data
     const orderData = {
       customerId,
       items: orderItems.map(({ discountApplied, ...item }) => item),
@@ -113,6 +186,7 @@ export const createOrderforUser = async (
       shippingCost: 0,
       totalAmount: totals.totalAmount,
       currency: "USD",
+      customerCurrency,
       shippingAddress: {
         addressName: shippingAddress.addressName,
         addressDetails: shippingAddress.addressDetails,
@@ -125,10 +199,12 @@ export const createOrderforUser = async (
       subOrders: [],
     };
 
+    // Step 12: Create main order
     const order = await createOrder(orderData, session);
 
     registerActiveSession(order._id, session.id);
 
+    // Step 13: Group items by vendor and create sub-orders
     const itemsByVendor = {};
     orderItems.forEach((item) => {
       const vid = item.vendorId.toString();
@@ -163,8 +239,8 @@ export const createOrderforUser = async (
               0
             ),
             appliedItems: vendorAppliedItems.map((i) => ({
-              productId: i.productId,
-              variantId: i.variantId,
+              productId: i.product._id,
+              variantId: i.variant?._id || null,
               quantity: i.quantity,
               unitPrice: i.unitPrice,
               itemTotal: i.totalPrice,
@@ -179,13 +255,16 @@ export const createOrderforUser = async (
         subOrderNumber,
         orderId: order._id,
         vendorId,
-        items: vendorItems.map(({ vendorId, discountApplied, ...rest }) => rest),
+        items: vendorItems.map(
+          ({ vendorId, discountApplied, ...rest }) => rest
+        ),
         subtotal: vendorSubtotal,
         discountAmount: vendorDiscount,
         couponUsed: subCouponUsed,
         shippingCost: 0,
         totalAmount: vendorTotal,
         currency: "USD",
+        customerCurrency,
         shippingAddress: order.shippingAddress,
         paymentStatus: order.paymentStatus,
         paymentMethod: order.paymentMethod,
@@ -205,44 +284,36 @@ export const createOrderforUser = async (
     order.subOrders = subOrders.map((s) => s._id);
     await order.save({ session });
 
-    // Step 13: Increment coupon usage ONLY after order is successfully created
+    // Step 14: Increment coupon usage ONLY after order is successfully created
     if (coupon) {
       await incrementCouponUsage(coupon._id, session);
     }
 
-    // Step 14: Clear cart
+    // Step 15: Clear cart
     await CartModel.findByIdAndUpdate(
       cart._id,
       { items: [] },
       { session }
     );
 
-    // Step 15: Commit transaction - all or nothing
+    // Step 16: Commit transaction - all or nothing
     await session.commitTransaction();
 
     // Unregister session
     unregisterActiveSession(order._id);
 
-    // Step 16: Populate and return order
-    const populatedOrder = await OrderModelUser.findById(order._id)
-      .populate({
-        path: "items.productId",
-        select: "name images mainPrice disCountPrice currency stock",
-      })
-      .populate({
-        path: "items.variantId",
-        select: "price disCountPrice images attributes stock",
-      })
-      .lean();
+    // Step 17: Get the final order and transform for response
+    const savedOrder = await OrderModelUser.findById(order._id).lean();
 
-    let statusMessage = "Your order has been created and is awaiting payment.";
-    if (paymentMethod === "cash_on_delivery") {
-      statusMessage =
-        "Your order is confirmed — payment will be collected on delivery.";
-    }
+    const statusMessage =
+      paymentMethod === "cash_on_delivery"
+        ? getOrderMessage("order_confirmed_cod", lang)
+        : getOrderMessage("order_created_awaiting_payment", lang);
+
+    const transformedOrder = transformOrderResponse(savedOrder, lang);
 
     return {
-      ...populatedOrder,
+      ...transformedOrder,
       statusDescription: statusMessage,
     };
   } catch (error) {
@@ -250,7 +321,6 @@ export const createOrderforUser = async (
     if (session) {
       await session.abortTransaction();
     }
-
 
     if (reservedItems && reservedItems.length > 0) {
       try {
@@ -267,7 +337,9 @@ export const createOrderforUser = async (
     // Unregister session if registered
     if (session) {
       try {
-        const tempOrder = await OrderModelUser.findOne({ customerId }).sort({ createdAt: -1 });
+        const tempOrder = await OrderModelUser.findOne({ customerId }).sort({
+          createdAt: -1,
+        });
         if (tempOrder) {
           unregisterActiveSession(tempOrder._id);
         }
@@ -282,10 +354,9 @@ export const createOrderforUser = async (
       error.message.includes("currency conversion") ||
       error.message.includes("Currency conversion failed")
     ) {
-      throw new Error(
-        "Unable to create order: currency conversion to USD failed. Please try again later.",
-        { cause: 503 }
-      );
+      throw new Error(getOrderMessage("currency_conversion_failed", lang), {
+        cause: 503,
+      });
     }
 
     if (error.message.includes("Insufficient")) {
@@ -318,8 +389,8 @@ export const confirmOrderPayment = async (orderId, session = null) => {
     // Confirm stock reservation (convert reserved to sold)
     for (const item of order.items) {
       await confirmStockReservation(
-        item.productId,
-        item.variantId,
+        item.product._id,
+        item.variant?._id || null,
         item.quantity,
         session
       );

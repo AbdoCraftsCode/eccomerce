@@ -185,9 +185,12 @@ export const reserveAllItemsStock = async (formattedItems, session = null) => {
   
   for (const item of formattedItems) {
     try {
+      const productId = item.product?._id || item.productId;
+      const variantId = item.variant?._id || item.variantId || null;
+      const productName = item.product?.name?.en || item.product?.name?.ar || 'item';
       const result = await reserveStockAtomic(
-        item.productId,
-        item.variantId,
+        productId,
+        variantId,
         item.quantity,
         session
       );
@@ -195,7 +198,7 @@ export const reserveAllItemsStock = async (formattedItems, session = null) => {
     } catch (error) {
       // Don't manually release here - session abort will handle rollback
       throw new Error(
-        `Reservation failed for ${item.productName?.en || item.productName?.ar || 'item'}: ${error.message}`,
+        `Reservation failed for ${item.product?.name?.en || item.product?.name?.ar || 'item'}: ${error.message}`,
         { cause: error.cause || 400 }
       );
     }
@@ -210,9 +213,11 @@ export const reserveAllItemsStock = async (formattedItems, session = null) => {
 export const releaseMultipleStocks = async (items, session = null) => {
   for (const item of items) {
     try {
+      const productId = item.product?._id || item.productId;
+      const variantId = item.variant?._id || item.variantId || null;
       await releaseReservedStock(
-        item.productId,
-        item.variantId,
+        productId,
+        variantId,
         item.quantity,
         session
       );

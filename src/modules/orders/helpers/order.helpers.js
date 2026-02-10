@@ -14,6 +14,10 @@ export const calculateOrderTotals = (
   };
 };
 
+/**
+ * Create order items with coupon discount applied
+ * Items now have embedded product/variant objects
+ */
 export const createOrderItems = (
   formattedItems,
   coupon,
@@ -22,7 +26,9 @@ export const createOrderItems = (
   discountAmount
 ) => {
   return formattedItems.map((item) => {
-    const isDiscounted = couponAppliedItems.includes(item.productId.toString());
+    const isDiscounted = couponAppliedItems.includes(
+      item.product._id.toString()
+    );
     let itemDiscount = 0;
 
     if (isDiscounted && coupon && subtotal > 0) {
@@ -53,14 +59,44 @@ export const createOrder = async (orderData, session) => {
   return order[0];
 };
 
-export const buildCouponUsedObject = (coupon, applicableSubtotal, orderItems) => {
+/**
+ * Build the couponUsed object with currency details and multi-currency values
+ *
+ * @param {Object} coupon - The coupon document
+ * @param {number} applicableSubtotal
+ * @param {Array} orderItems
+ * @param {number} discountAmountInCustomerCurrency
+ * @param {number} discountAmountInUSD
+ */
+export const buildCouponUsedObject = (
+  coupon,
+  applicableSubtotal,
+  orderItems,
+  discountAmountInCustomerCurrency = 0,
+  discountAmountInUSD = 0
+) => {
   if (!coupon) return null;
+
+  // Build coupon currency details
+  const couponCurrency = coupon.currency
+    ? {
+        code: coupon.currency.code || "",
+        name: {
+          ar: coupon.currency.name?.ar || "",
+          en: coupon.currency.name?.en || "",
+        },
+        symbol: coupon.currency.symbol || "",
+      }
+    : null;
 
   return {
     couponId: coupon._id,
     code: coupon.code,
     discountType: coupon.discountType,
     discountValue: coupon.discountValue,
+    discountValueInCustomerCurrency: discountAmountInCustomerCurrency,
+    discountValueInUSD: discountAmountInUSD,
+    currency: couponCurrency,
     appliesTo: coupon.appliesTo,
     productId: coupon.productId?._id || null,
     categoryId: coupon.categoryId?._id || null,
@@ -69,8 +105,8 @@ export const buildCouponUsedObject = (coupon, applicableSubtotal, orderItems) =>
     appliedItems: orderItems
       .filter((item) => item.discountApplied > 0)
       .map((item) => ({
-        productId: item.productId,
-        variantId: item.variantId,
+        productId: item.product._id,
+        variantId: item.variant?._id || null,
         quantity: item.quantity,
         unitPrice: item.unitPrice,
         itemTotal: item.totalPrice,

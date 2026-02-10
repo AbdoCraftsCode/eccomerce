@@ -37,12 +37,13 @@ export const checkout = asyncHandelr(async (req, res, next) => {
     const userId = req.user._id;
     const { shippingAddressId, couponCode } = req.body;
 
+    const lang = req.user?.lang || "en";
     const order = await createOrderforUser(
       userId,
       shippingAddressId,
       "cash_on_delivery",
       couponCode,
-      // taxAmount, shippingAmount, etc. i will do them with aramex and coupon
+      lang
     );
 
     return res.status(201).json({

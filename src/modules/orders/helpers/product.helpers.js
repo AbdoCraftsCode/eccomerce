@@ -13,7 +13,7 @@ export const validateAndFetchProducts = async (cartItems, session = null) => {
     isActive: true,
     status: "published",
   })
-    .populate("currency", "code")
+    .populate("currency", "code name symbol")
     .session(session)
     .lean();
 
@@ -48,6 +48,8 @@ export const fetchAndValidateVariants = async (cartItems, session = null) => {
     _id: { $in: variantIds },
     isActive: true,
   })
+    .populate("attributes.attributeId", "name type")
+    .populate("attributes.valueId", "value hexCode")
     .session(session)
     .lean();
 
