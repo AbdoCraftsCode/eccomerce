@@ -43,13 +43,8 @@ const buildProductSnapshot = (product, currencyDetails) => {
     images: product.images || [],
     weight: product.weight || null,
     currency: currencyDetails,
-    mainPrice: Number(product.mainPrice) || 0,
-    discountPrice: Number(product.disCountPrice) || 0,
-    // USD and customer currency prices are added later
-    mainPriceInCustomerCurrency: 0,
-    discountPriceInCustomerCurrency: 0,
-    mainPriceInUSD: 0,
-    discountPriceInUSD: 0,
+    mainPrice: { vendor: Number(product.mainPrice) || 0, customer: 0, usd: 0 },
+    discountPrice: { vendor: Number(product.disCountPrice) || 0, customer: 0, usd: 0 },
   };
 };
 
@@ -68,13 +63,8 @@ const buildVariantSnapshot = (variant) => {
     attributes,
     images: variant.images || [],
     weight: variant.weight || null,
-    mainPrice: Number(variant.price) || 0,
-    discountPrice: Number(variant.disCountPrice) || 0,
-    // USD and customer currency prices are added later
-    mainPriceInCustomerCurrency: 0,
-    discountPriceInCustomerCurrency: 0,
-    mainPriceInUSD: 0,
-    discountPriceInUSD: 0,
+    mainPrice: { vendor: Number(variant.price) || 0, customer: 0, usd: 0 },
+    discountPrice: { vendor: Number(variant.disCountPrice) || 0, customer: 0, usd: 0 },
   };
 };
 
@@ -146,8 +136,8 @@ export const processCartItems = async (
       product: productSnapshot,
       variant: variantSnapshot,
       quantity,
-      unitPrice: applicablePrice, // Temporary — overwritten with USD below
-      totalPrice: applicablePrice * quantity,
+      unitPrice: { vendor: applicablePrice, customer: 0, usd: 0 },
+      totalPrice: { vendor: applicablePrice * quantity, customer: 0, usd: 0 },
       vendorId: product.createdBy,
       // Temp fields for conversion
       _basePrice: basePrice,
@@ -158,10 +148,12 @@ export const processCartItems = async (
 
     formattedItems.push(item);
 
+
     // Queue all conversion promises:
     // [0] unitPrice -> USD, [1] totalPrice -> USD,
     // [2] mainPrice -> USD, [3] discountPrice -> USD,
     // [4] mainPrice -> customerCurrency, [5] discountPrice -> customerCurrency
+    // [6] unitPrice -> customerCurrency
     conversionPromises.push(
       convertToUSD(applicablePrice, product.currency?._id || product.currency),
       convertToUSD(
@@ -171,7 +163,8 @@ export const processCartItems = async (
       convertAmount(basePrice, fromCode, "USD"),
       convertAmount(discountPrice, fromCode, "USD"),
       convertAmount(basePrice, fromCode, customerCurrencyCode),
-      convertAmount(discountPrice, fromCode, customerCurrencyCode)
+      convertAmount(discountPrice, fromCode, customerCurrencyCode),
+      convertAmount(applicablePrice, fromCode, customerCurrencyCode)
     );
   }
 
@@ -180,23 +173,25 @@ export const processCartItems = async (
     const converted = await Promise.all(conversionPromises);
 
     for (let i = 0; i < formattedItems.length; i++) {
-      const offset = i * 6;
+      const offset = i * 7;
       const item = formattedItems[i];
 
-      // Set USD prices on item
-      item.unitPrice = converted[offset];
-      item.totalPrice = converted[offset + 1];
+      // Set USD and customer prices on item
+      item.unitPrice.usd = converted[offset];
+      item.unitPrice.customer = converted[offset + 6];
+      item.totalPrice.usd = converted[offset + 1];
+      item.totalPrice.customer = item.unitPrice.customer * item.quantity;
 
       // Set product multi-currency prices
-      item.product.mainPriceInUSD = converted[offset + 2];
-      item.product.discountPriceInUSD = converted[offset + 3];
-      item.product.mainPriceInCustomerCurrency = converted[offset + 4];
-      item.product.discountPriceInCustomerCurrency = converted[offset + 5];
+      item.product.mainPrice.usd = converted[offset + 2];
+      item.product.discountPrice.usd = converted[offset + 3];
+      item.product.mainPrice.customer = converted[offset + 4];
+      item.product.discountPrice.customer = converted[offset + 5];
 
       // If variant exists, also convert variant prices
       if (item.variant) {
-        const variantMainPrice = item.variant.mainPrice;
-        const variantDiscountPrice = item.variant.discountPrice;
+        const variantMainPrice = item.variant.mainPrice.vendor;
+        const variantDiscountPrice = item.variant.discountPrice.vendor;
         const fromCode = item._fromCode;
 
         // These are done synchronously using the same rate — we'll do a small batch
@@ -207,10 +202,10 @@ export const processCartItems = async (
           convertAmount(variantDiscountPrice, fromCode, customerCurrencyCode),
         ]);
 
-        item.variant.mainPriceInUSD = vMainUSD;
-        item.variant.discountPriceInUSD = vDiscUSD;
-        item.variant.mainPriceInCustomerCurrency = vMainCust;
-        item.variant.discountPriceInCustomerCurrency = vDiscCust;
+        item.variant.mainPrice.usd = vMainUSD;
+        item.variant.discountPrice.usd = vDiscUSD;
+        item.variant.mainPrice.customer = vMainCust;
+        item.variant.discountPrice.customer = vDiscCust;
       }
 
       // Clean up temp fields
@@ -220,10 +215,11 @@ export const processCartItems = async (
       delete item._productId;
     }
 
-    const subtotal = formattedItems.reduce(
-      (sum, item) => sum + item.totalPrice,
-      0
-    );
+    const subtotal = {
+      vendor: formattedItems.reduce((sum, item) => sum + item.totalPrice.vendor, 0),
+      customer: formattedItems.reduce((sum, item) => sum + item.totalPrice.customer, 0),
+      usd: formattedItems.reduce((sum, item) => sum + item.totalPrice.usd, 0),
+    };
 
     return { formattedItems, subtotal };
   } catch (error) {

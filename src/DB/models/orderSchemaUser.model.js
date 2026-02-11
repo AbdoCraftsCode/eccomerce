@@ -16,12 +16,16 @@ const productSnapshotSchema = {
   images: [String],
   weight: String,
   currency: currencyDetailsSchema,
-  mainPrice: Number,
-  discountPrice: Number,
-  mainPriceInCustomerCurrency: Number,
-  discountPriceInCustomerCurrency: Number,
-  mainPriceInUSD: Number,
-  discountPriceInUSD: Number,
+  mainPrice: {
+    vendor: Number,
+    customer: Number,
+    usd: Number,
+  },
+  discountPrice: {
+    vendor: Number,
+    customer: Number,
+    usd: Number,
+  },
 };
 
 const variantSnapshotSchema = {
@@ -35,12 +39,16 @@ const variantSnapshotSchema = {
   ],
   images: [String],
   weight: String,
-  mainPrice: Number,
-  discountPrice: Number,
-  mainPriceInCustomerCurrency: Number,
-  discountPriceInCustomerCurrency: Number,
-  mainPriceInUSD: Number,
-  discountPriceInUSD: Number,
+  mainPrice: {
+    vendor: Number,
+    customer: Number,
+    usd: Number,
+  },
+  discountPrice: {
+    vendor: Number,
+    customer: Number,
+    usd: Number,
+  },
 };
 
 const orderSchema = new mongoose.Schema(
@@ -72,11 +80,15 @@ const orderSchema = new mongoose.Schema(
           },
         },
         unitPrice: {
-          type: Number,
-          required: true,
-          min: 0,
+          vendor: { type: Number, required: true, min: 0 },
+          customer: { type: Number, required: true, min: 0 },
+          usd: { type: Number, required: true, min: 0 },
         },
-        totalPrice: Number,
+        totalPrice: {
+          vendor: { type: Number, required: true, min: 0 },
+          customer: { type: Number, required: true, min: 0 },
+          usd: { type: Number, required: true, min: 0 },
+        },
         vendorId: {
           type: mongoose.Schema.Types.ObjectId,
           ref: "User",
@@ -85,12 +97,9 @@ const orderSchema = new mongoose.Schema(
       },
     ],
     subtotal: {
-      type: Number,
-      required: true,
-    },
-    discountAmount: {
-      type: Number,
-      default: 0,
+      vendor: { type: Number, required: true },
+      customer: { type: Number, required: true },
+      usd: { type: Number, required: true },
     },
     couponUsed: {
       couponId: {
@@ -103,9 +112,11 @@ const orderSchema = new mongoose.Schema(
         type: String,
         enum: ["percentage", "fixed"],
       },
-      discountValue: Number,
-      discountValueInCustomerCurrency: Number,
-      discountValueInUSD: Number,
+      discountValue: {
+        vendor: Number,
+        customer: Number,
+        usd: Number,
+      },
       currency: currencyDetailsSchema,
       appliesTo: {
         type: String,
@@ -145,12 +156,9 @@ const orderSchema = new mongoose.Schema(
       default: 0,
     },
     totalAmount: {
-      type: Number,
-      required: true,
-    },
-    currency: {
-      type: String,
-      default: "USD",
+      vendor: { type: Number, required: true },
+      customer: { type: Number, required: true },
+      usd: { type: Number, required: true },
     },
     customerCurrency: currencyDetailsSchema,
     shippingAddress: {

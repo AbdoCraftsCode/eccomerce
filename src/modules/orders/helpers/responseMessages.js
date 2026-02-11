@@ -81,14 +81,52 @@ const messages = {
   },
 };
 
-/**
- * Get a localized order message
- * @param {string} key - Message key
- * @param {string} lang - Language code ("en" or "ar")
- * @returns {string}
- */
 export const getOrderMessage = (key, lang = "en") => {
   const message = messages[key];
   if (!message) return key;
   return message[lang] || message.en || key;
+};
+
+export const getResponseMessage = (key, lang = "en") => {
+  const responseMessages = {
+    en: {
+      fetched: "Orders fetched successfully",
+      not_found: "Order not found",
+      no_orders: "No orders found",
+    },
+    ar: {
+      fetched: "تم جلب الطلبات بنجاح",
+      not_found: "الطلب غير موجود",
+      no_orders: "لا توجد طلبات",
+    },
+  };
+
+  return responseMessages[lang][key] || responseMessages.en[key];
+};
+
+export const getOrderErrorMessage = (key, lang = "en", params = {}) => {
+  const errorMessages = {
+    en: {
+      not_found: "Order not found",
+      unauthorized: "You are not authorized to view this order",
+    },
+    ar: {
+      not_found: "الطلب غير موجود",
+      unauthorized: "غير مصرح لك بعرض هذا الطلب",
+    },
+  };
+
+  let message = errorMessages[lang]?.[key] || errorMessages.en[key] || "Unexpected error";
+
+  Object.keys(params).forEach((p) => {
+    message = message.replace(`{${p}}`, params[p]);
+  });
+
+  return message;
+};
+
+export const throwError = (key, lang, params = {}, status = 400) => {
+  const error = new Error(getOrderErrorMessage(key, lang, params));
+  error.status = status;
+  throw error;
 };

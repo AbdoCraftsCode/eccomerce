@@ -29,21 +29,19 @@ import cloud from "../../../utlis/multer/cloudinary.js";
 import fs from "fs";
 
 export const login = asyncHandelr(async (req, res, next) => {
-  const { phone, password } = req.body; // تسجيل الدخول فقط برقم الهاتف
+  const { phone, password } = req.body;
   console.log(phone, password);
 
   if (!phone) {
     return next(new Error("يرجى إدخال رقم الهاتف", { cause: 400 }));
   }
 
-  // ✅ البحث عن المستخدم حسب رقم الهاتف فقط
   const checkUser = await Usermodel.findOne({ phone });
 
   if (!checkUser) {
     return next(new Error("User not found", { cause: 404 }));
   }
 
-  // ✅ لو المستخدم staff أو manager → تسجيل مباشر بدون تحقق OTP أو شروط إضافية
   if (
     checkUser.accountType === "staff" ||
     checkUser.accountType === "manager"
@@ -63,7 +61,7 @@ export const login = asyncHandelr(async (req, res, next) => {
 
     return successresponse(
       res,
-      "✅ Staff or Manager logged in successfully",
+      "Staff or Manager logged in successfully",
       200,
       {
         access_Token,
@@ -77,33 +75,26 @@ export const login = asyncHandelr(async (req, res, next) => {
     return next(new Error("Invalid account", { cause: 404 }));
   }
 
-  // ✅ تحقق من حالة التأكيد
   if (!checkUser.isConfirmed) {
     try {
       if (checkUser.phone) {
-        // ✅ إرسال OTP للهاتف
         await sendOTP(checkUser.phone);
-        console.log(`📩 OTP تم إرساله إلى الهاتف: ${checkUser.phone}`);
       }
 
-      return successresponse(
-        res,
-        "الحساب غير مفعل، تم إرسال رمز التحقق من جديد",
-        200,
-        { status: "notverified" },
+      return next(
+        new Error("الحساب غير مفعل، تم إرسال رمز التحقق من جديد", {
+          cause: 401,
+        }),
       );
     } catch (error) {
-      console.error("❌ فشل في إرسال OTP أثناء تسجيل الدخول:", error.message);
       return next(new Error("فشل في إرسال رمز التحقق", { cause: 500 }));
     }
   }
 
-  // ✅ التحقق من كلمة المرور
   if (!comparehash({ planText: password, valuehash: checkUser.password })) {
     return next(new Error("Password is incorrect", { cause: 404 }));
   }
 
-  // ✅ إنشاء التوكنات
   const access_Token = generatetoken({
     payload: { id: checkUser._id },
   });
@@ -2887,11 +2878,14 @@ export const getProductByIdForEndUser = asyncHandelr(async (req, res, next) => {
         attributes: formattedAttributes,
         weight: variant.weight || null,
         sku: variant.sku || null,
-        offer: variant.offerId && variant.offerStatus === "approved"?{
-          offerId:variant.offerId,
-          offerStart:variant.offerStart,
-          offerEnd:variant.offerEnd,
-        }:undefined
+        offer:
+          variant.offerId && variant.offerStatus === "approved"
+            ? {
+                offerId: variant.offerId,
+                offerStart: variant.offerStart,
+                offerEnd: variant.offerEnd,
+              }
+            : undefined,
       };
     });
   }
@@ -2941,11 +2935,14 @@ export const getProductByIdForEndUser = asyncHandelr(async (req, res, next) => {
         product.inStock !== false &&
         (product.unlimitedStock || (product.stock || 0) > 0),
     }),
-    offer: product.offerId && product.offerStatus === "approved"?{
-          offerId:product.offerId,
-          offerStart:product.offerStart,
-          offerEnd:product.offerEnd,
-        }:undefined
+    offer:
+      product.offerId && product.offerStatus === "approved"
+        ? {
+            offerId: product.offerId,
+            offerStart: product.offerStart,
+            offerEnd: product.offerEnd,
+          }
+        : undefined,
   };
 
   let finalProduct = formattedProduct;
@@ -3144,11 +3141,14 @@ export const GetProductsByCategory = asyncHandelr(async (req, res, next) => {
         stock: variant.stock,
         images: variant.images,
         attributes: formattedAttributes,
-        offer: variant.offerId && variant.offerStatus === "approved"?{
-          offerId:variant.offerId,
-          offerStart:variant.offerStart,
-          offerEnd:variant.offerEnd,
-        }:undefined
+        offer:
+          variant.offerId && variant.offerStatus === "approved"
+            ? {
+                offerId: variant.offerId,
+                offerStart: variant.offerStart,
+                offerEnd: variant.offerEnd,
+              }
+            : undefined,
       });
     });
   }
@@ -3183,11 +3183,14 @@ export const GetProductsByCategory = asyncHandelr(async (req, res, next) => {
       stock: product.stock || 0,
       tags: product.tags || [],
       bulkDiscounts: product.bulkDiscounts || [],
-      offer: product.offerId && product.offerStatus === "approved"?{
-          offerId:product.offerId,
-          offerStart:product.offerStart,
-          offerEnd:product.offerEnd,
-        }:undefined
+      offer:
+        product.offerId && product.offerStatus === "approved"
+          ? {
+              offerId: product.offerId,
+              offerStart: product.offerStart,
+              offerEnd: product.offerEnd,
+            }
+          : undefined,
     };
 
     if (product.hasVariants) {
@@ -4664,7 +4667,6 @@ export const createCoupon = asyncHandelr(async (req, res, next) => {
     isActive = true, // حالة التفعيل
   } = req.body;
 
-  // ✅ التحقق من وجود  الكوبون على منتج واحد → تحقق من المنتجتوكن وبائع مسجل دخول
   if (!req.user) {
     return next(new Error("❌ يجب تسجيل الدخول لإنشاء كوبون", { cause: 401 }));
   }
@@ -4679,7 +4681,6 @@ export const createCoupon = asyncHandelr(async (req, res, next) => {
     );
   }
 
-  // ✅ التحقق من الحقول الأساسية
   if (!discountType || !["percentage", "fixed"].includes(discountType)) {
     return next(
       new Error("❌ نوع الخصم مطلوب ويجب أن يكون percentage أو fixed", {
@@ -7025,10 +7026,6 @@ export const getCustomersWithOrders = asyncHandelr(async (req, res, next) => {
 });
 
 export const getAllVendorsWithStats = asyncHandelr(async (req, res, next) => {
-  // التحقق من صلاحية الأدمن
-  // if (!req.user || !["Admin", "Owner"].includes(req.user.accountType)) {
-  //     return next(new Error("❌ غير مصرح لك بعرض إحصائيات التجار", { cause: 403 }));
-  // }
 
   const {
     page = 1,
@@ -7112,17 +7109,14 @@ export const getAllVendorsWithStats = asyncHandelr(async (req, res, next) => {
     isActive: true,
   });
 
-  // عمولة المنصة
   const platformCommissionRate = 0.05;
   const commissionDue = orderStats.totalSales * platformCommissionRate;
 
-  // متوسطات شهرية
   const avgMonthlySales = orderStats.monthlySales;
   const avgMonthlyOrders = orderStats.monthlyOrders;
   const avgOrderValue =
     avgMonthlyOrders > 0 ? avgMonthlySales / avgMonthlyOrders : 0;
 
-  // معدلات الأداء
   const completionRate =
     orderStats.totalOrders > 0
       ? ((orderStats.completedOrders / orderStats.totalOrders) * 100).toFixed(
@@ -7136,7 +7130,6 @@ export const getAllVendorsWithStats = asyncHandelr(async (req, res, next) => {
         ) + "%"
       : "0%";
 
-  // المنتجات الأكثر مبيعًا
   const topProductsAggregation = await OrderModelUser.aggregate([
     { $match: { paymentStatus: "paid" } },
     { $unwind: "$items" },
@@ -7176,7 +7169,6 @@ export const getAllVendorsWithStats = asyncHandelr(async (req, res, next) => {
     sales: p.sales,
   }));
 
-  // إحصائيات عامة حقيقية
   const overallStats = {
     totalSales:
       orderStats.totalSales > 0
@@ -7210,7 +7202,6 @@ export const getAllVendorsWithStats = asyncHandelr(async (req, res, next) => {
     },
   };
 
-  // إحصائيات كل بائع
   const vendorStats = await OrderModelUser.aggregate([
     { $match: { paymentStatus: "paid" } },
     {
@@ -7241,7 +7232,6 @@ export const getAllVendorsWithStats = asyncHandelr(async (req, res, next) => {
     statsMap[stat._id.toString()] = stat;
   });
 
-  // متوسط التقييم وعدد المنتجات
   const productStats = await ProductModellll.aggregate([
     { $match: { isActive: true } },
     {
@@ -7261,10 +7251,8 @@ export const getAllVendorsWithStats = asyncHandelr(async (req, res, next) => {
     };
   });
 
-  // جلب التجار مع فلترة جديدة
   let vendorsQuery = Usermodel.find({ accountType: "vendor" });
 
-  // فلتر الحالة
   if (status) {
     const validStatuses = ["ACCEPTED", "PENDING", "REFUSED", "SUSPENDED"];
     if (!validStatuses.includes(status)) {
@@ -7278,7 +7266,6 @@ export const getAllVendorsWithStats = asyncHandelr(async (req, res, next) => {
     vendorsQuery = vendorsQuery.where("status", status);
   }
 
-  // بحث بالاسم أو الإيميل
   if (search) {
     const searchRegex = new RegExp(search.trim(), "i");
     vendorsQuery = vendorsQuery.or([
@@ -7287,7 +7274,6 @@ export const getAllVendorsWithStats = asyncHandelr(async (req, res, next) => {
     ]);
   }
 
-  // فلتر بالقسم (categoryId)
   if (categoryId) {
     if (!mongoose.Types.ObjectId.isValid(categoryId)) {
       return next(new Error("❌ معرف القسم غير صحيح", { cause: 400 }));
@@ -7359,7 +7345,6 @@ export const getAllVendorsWithStats = asyncHandelr(async (req, res, next) => {
     };
   });
 
-  // ترتيب التجار
   let sortField = "totalSales";
   if (sortBy === "rating") sortField = "avgRating";
   if (sortBy === "orders") sortField = "totalOrders";
@@ -7395,7 +7380,6 @@ import { NotificationModelUser } from "../../../DB/models/notificationSchemaUser
 export const getVendorDetailedStats = asyncHandelr(async (req, res, next) => {
   const { vendorId } = req.params;
 
-  // تحقق من صحة vendorId
   if (!mongoose.Types.ObjectId.isValid(vendorId)) {
     return next(new Error("❌ معرف التاجر غير صحيح", { cause: 400 }));
   }
@@ -7418,10 +7402,8 @@ export const getVendorDetailedStats = asyncHandelr(async (req, res, next) => {
   const startOfLastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
   const endOfLastMonth = new Date(now.getFullYear(), now.getMonth(), 0);
 
-  // فلتر الطلبات المدفوعة للتاجر
   const orderFilter = { vendorId: vendorObjectId, paymentStatus: "paid" };
 
-  // إحصائيات الطلبات
   const orderStatsAggregation = await OrderModelUser.aggregate([
     { $match: orderFilter },
     {
@@ -7471,7 +7453,6 @@ export const getVendorDetailedStats = asyncHandelr(async (req, res, next) => {
     lastMonthSales: 0,
   };
 
-  // نسبة الزيادة من الشهر الماضي
   let growthPercentage = 0;
   if (stats.lastMonthSales > 0) {
     growthPercentage =
@@ -7485,26 +7466,22 @@ export const getVendorDetailedStats = asyncHandelr(async (req, res, next) => {
       ? `↑ ${growthPercentage.toFixed(1)}% من الشهر الماضي`
       : `↓ ${Math.abs(growthPercentage).toFixed(1)}% من الشهر الماضي`;
 
-  // عمولة المنصة
   const commissionRate = 0.05;
   const salesForCommission =
     period === "monthly" ? stats.monthlySales : stats.totalSales;
   const commissionDue = salesForCommission * commissionRate;
 
-  // عدد المنتجات النشطة
   const productCount = await ProductModellll.countDocuments({
     createdBy: vendorObjectId,
     isActive: true,
   });
 
-  // متوسطات
   const displaySales =
     period === "monthly" ? stats.monthlySales : stats.totalSales;
   const displayOrders =
     period === "monthly" ? stats.monthlyOrders : stats.totalOrders;
   const avgOrderValue = displayOrders > 0 ? displaySales / displayOrders : 0;
 
-  // المنتجات الأكثر مبيعًا
   const topProductsAggregation = await OrderModelUser.aggregate([
     { $match: orderFilter },
     { $unwind: "$items" },
@@ -7544,7 +7521,6 @@ export const getVendorDetailedStats = asyncHandelr(async (req, res, next) => {
     sales: p.sales,
   }));
 
-  // جلب المنتجات لو مطلوب
   let vendorProducts = [];
   let productsPagination = null;
 
@@ -7574,7 +7550,6 @@ export const getVendorDetailedStats = asyncHandelr(async (req, res, next) => {
     };
   }
 
-  // ✅ جلب بيانات التاجر (الإضافة الجديدة)
   const vendor = await Usermodel.findById(vendorObjectId)
     .select("fullName email phone companyName status createdAt")
     .lean();
@@ -7649,7 +7624,6 @@ export const getVendorSalesChart = asyncHandelr(async (req, res, next) => {
   let startDate;
 
   if (type === "monthly") {
-    // آخر 12 شهر
     groupFormat = {
       year: { $year: "$createdAt" },
       month: { $month: "$createdAt" },
@@ -7658,7 +7632,6 @@ export const getVendorSalesChart = asyncHandelr(async (req, res, next) => {
     startDate = new Date();
     startDate.setMonth(startDate.getMonth() - 12);
   } else {
-    // آخر 30 يوم
     groupFormat = {
       year: { $year: "$createdAt" },
       month: { $month: "$createdAt" },
@@ -7688,7 +7661,6 @@ export const getVendorSalesChart = asyncHandelr(async (req, res, next) => {
     { $sort: { date: 1 } },
   ]);
 
-  // إنشاء labels و data كاملة (مع 0 للأيام/الشهور الفاضية)
   let labels = [];
   let sales = [];
   let orders = [];
@@ -7717,7 +7689,7 @@ export const getVendorSalesChart = asyncHandelr(async (req, res, next) => {
   while (current <= end) {
     let key;
     if (type === "monthly") {
-      key = current.toISOString().slice(0, 7); // YYYY-MM
+      key = current.toISOString().slice(0, 7); 
       labels.push(
         current.toLocaleDateString("ar-SA", { year: "numeric", month: "long" }),
       );
@@ -7768,15 +7740,14 @@ export const getVendorSalesChart = asyncHandelr(async (req, res, next) => {
 
 export const createCategoryRequest = asyncHandelr(async (req, res, next) => {
   const {
-    categoryType, // "main" or "sub"
-    parentCategoryId, // مطلوب لو sub
+    categoryType,
+    parentCategoryId,
     nameAr,
     nameEn,
     descriptionAr,
     descriptionEn,
   } = req.body;
 
-  // ✅ التحقق من تسجيل الدخول
   if (!req.user) {
     return next(
       new Error("❌ يجب تسجيل الدخول لتقديم طلب قسم جديد", { cause: 401 }),
@@ -7785,7 +7756,6 @@ export const createCategoryRequest = asyncHandelr(async (req, res, next) => {
 
   const userId = req.user._id;
 
-  // ✅ التحقق من الحقول الأساسية
   if (!categoryType || !["main", "sub"].includes(categoryType)) {
     return next(
       new Error("❌ نوع القسم مطلوب ويجب أن يكون main أو sub", { cause: 400 }),
@@ -7804,7 +7774,6 @@ export const createCategoryRequest = asyncHandelr(async (req, res, next) => {
     );
   }
 
-  // ✅ لو فرعي → تحقق من وجود القسم الأب
   if (categoryType === "sub") {
     if (!parentCategoryId) {
       return next(
@@ -7824,7 +7793,6 @@ export const createCategoryRequest = asyncHandelr(async (req, res, next) => {
     }
   }
 
-  // ✅ إنشاء طلب القسم
   const request = await CategoryRequestModel.create({
     userId,
     categoryType,
@@ -7839,7 +7807,6 @@ export const createCategoryRequest = asyncHandelr(async (req, res, next) => {
     },
   });
 
-  // ✅ إنشاء إشعار للأدمن
   const admins = await Usermodel.find({
     accountType: { $in: ["Admin", "Owner"] },
   });
@@ -7872,10 +7839,6 @@ export const createCategoryRequest = asyncHandelr(async (req, res, next) => {
 });
 
 export const getCategoryRequests = asyncHandelr(async (req, res, next) => {
-  // ✅ صلاحية أدمن فقط
-  // if (!req.user || !["Admin", "Owner"].includes(req.user.accountType)) {
-  //     return next(new Error("❌ غير مصرح لك بعرض طلبات الأقسام", { cause: 403 }));
-  // }
 
   const {
     page = 1,
@@ -7952,9 +7915,6 @@ export const updateCategoryRequest = asyncHandelr(async (req, res, next) => {
   const { requestId } = req.params;
   const { status, rejectionReason } = req.body; // status: "approved" or "rejected"
 
-  // if (!req.user || !["Admin", "Owner"].includes(req.user.accountType)) {
-  //     return next(new Error("❌ غير مصرح لك بتحديث طلبات الأقسام", { cause: 403 }));
-  // }
 
   if (!["approved", "rejected"].includes(status)) {
     return next(
@@ -7986,7 +7946,6 @@ export const updateCategoryRequest = asyncHandelr(async (req, res, next) => {
 
   await request.save();
 
-  // إشعار للعميل
   await NotificationModelUser.create({
     recipientId: request.userId._id,
     type: "category_request",
@@ -8028,24 +7987,18 @@ export const updateCategoryRequest = asyncHandelr(async (req, res, next) => {
 });
 
 export const getAllNotificationsAdmin = asyncHandelr(async (req, res, next) => {
-  // // ✅ صلاحية أدمن فقط
-  // if (!req.user || !["Admin", "Owner"].includes(req.user.accountType)) {
-  //     return next(new Error("❌ غير مصرح لك بعرض جميع الإشعارات", { cause: 403 }));
-  // }
-
   const {
     page = 1,
     limit = 20,
     unreadOnly = "false",
-    type, // فلتر بنوع الإشعار مثل "category_request"
-    userId, // فلتر بيوزر معين (recipientId)
+    type,
+    userId, 
   } = req.query;
 
   const pageNum = Math.max(1, parseInt(page) || 1);
   const limitNum = Math.min(100, Math.max(1, parseInt(limit) || 20));
   const skip = (pageNum - 1) * limitNum;
 
-  // فلتر عام
   let filter = { isDeleted: false };
 
   if (unreadOnly === "true") {
@@ -8170,7 +8123,6 @@ export const MarkAllNotificationsAsRead = asyncHandelr(
 
     const userId = req.user._id;
 
-    // تحديث كل الإشعارات غير المقروءة للمستخدم
     const result = await NotificationModelUser.updateMany(
       {
         recipientId: userId,
@@ -8192,7 +8144,7 @@ export const MarkAllNotificationsAsRead = asyncHandelr(
           : "لا توجد إشعارات غير مقروءة",
       data: {
         updatedCount,
-        unreadCountNow: 0, // بعد التحديث
+        unreadCountNow: 0, 
       },
     });
   },

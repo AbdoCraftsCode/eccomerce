@@ -174,18 +174,19 @@ export const createOrderforUser = async (
     );
 
     // Step 10: Calculate totals
-    const totals = calculateOrderTotals(subtotal, discountAmount, 0);
+    const totals = calculateOrderTotals(subtotal.usd, discountAmount, 0);
 
-    // Step 11: Build order data
     const orderData = {
       customerId,
       items: orderItems.map(({ discountApplied, ...item }) => item),
-      subtotal: totals.subtotal,
-      discountAmount: totals.discountAmount,
+      subtotal,
       couponUsed,
       shippingCost: 0,
-      totalAmount: totals.totalAmount,
-      currency: "USD",
+      totalAmount: {
+        vendor: subtotal.vendor - discountAmount,
+        customer: subtotal.customer - discountAmount,
+        usd: totals.totalAmount,
+      },
       customerCurrency,
       shippingAddress: {
         addressName: shippingAddress.addressName,
@@ -199,12 +200,10 @@ export const createOrderforUser = async (
       subOrders: [],
     };
 
-    // Step 12: Create main order
     const order = await createOrder(orderData, session);
 
     registerActiveSession(order._id, session.id);
 
-    // Step 13: Group items by vendor and create sub-orders
     const itemsByVendor = {};
     orderItems.forEach((item) => {
       const vid = item.vendorId.toString();
@@ -215,17 +214,16 @@ export const createOrderforUser = async (
     const subOrders = [];
 
     for (const [vendorId, vendorItems] of Object.entries(itemsByVendor)) {
-      const vendorSubtotal = vendorItems.reduce(
-        (sum, i) => sum + i.unitPrice * i.quantity,
-        0
-      );
+      const vendorSubtotal = {
+        vendor: vendorItems.reduce((sum, i) => sum + i.unitPrice.vendor * i.quantity, 0),
+        customer: vendorItems.reduce((sum, i) => sum + i.unitPrice.customer * i.quantity, 0),
+        usd: vendorItems.reduce((sum, i) => sum + i.unitPrice.usd * i.quantity, 0),
+      };
       const vendorDiscount = vendorItems.reduce(
         (sum, i) => sum + (i.discountApplied || 0),
         0
       );
-      const vendorTotal = vendorSubtotal - vendorDiscount;
 
-      // Build vendor-specific coupon data if applicable
       let subCouponUsed = null;
       if (coupon) {
         const vendorAppliedItems = vendorItems.filter(
@@ -235,7 +233,7 @@ export const createOrderforUser = async (
           subCouponUsed = {
             ...couponUsed,
             applicableSubtotal: vendorAppliedItems.reduce(
-              (sum, i) => sum + i.unitPrice * i.quantity,
+              (sum, i) => sum + i.unitPrice.usd * i.quantity,
               0
             ),
             appliedItems: vendorAppliedItems.map((i) => ({
@@ -259,11 +257,13 @@ export const createOrderforUser = async (
           ({ vendorId, discountApplied, ...rest }) => rest
         ),
         subtotal: vendorSubtotal,
-        discountAmount: vendorDiscount,
         couponUsed: subCouponUsed,
         shippingCost: 0,
-        totalAmount: vendorTotal,
-        currency: "USD",
+        totalAmount: {
+          vendor: vendorSubtotal.vendor - vendorDiscount,
+          customer: vendorSubtotal.customer - vendorDiscount,
+          usd: vendorSubtotal.usd - vendorDiscount,
+        },
         customerCurrency,
         shippingAddress: order.shippingAddress,
         paymentStatus: order.paymentStatus,
@@ -280,26 +280,21 @@ export const createOrderforUser = async (
       subOrders.push(sub[0]);
     }
 
-    // Update main order with sub-order references
     order.subOrders = subOrders.map((s) => s._id);
     await order.save({ session });
 
-    // Step 14: Increment coupon usage ONLY after order is successfully created
     if (coupon) {
       await incrementCouponUsage(coupon._id, session);
     }
 
-    // Step 15: Clear cart
     await CartModel.findByIdAndUpdate(
       cart._id,
       { items: [] },
       { session }
     );
 
-    // Step 16: Commit transaction - all or nothing
     await session.commitTransaction();
 
-    // Unregister session
     unregisterActiveSession(order._id);
 
     // Step 17: Get the final order and transform for response
@@ -317,7 +312,6 @@ export const createOrderforUser = async (
       statusDescription: statusMessage,
     };
   } catch (error) {
-    // Abort transaction - automatic rollback of all database changes
     if (session) {
       await session.abortTransaction();
     }
@@ -334,7 +328,6 @@ export const createOrderforUser = async (
       }
     }
 
-    // Unregister session if registered
     if (session) {
       try {
         const tempOrder = await OrderModelUser.findOne({ customerId }).sort({
@@ -348,7 +341,6 @@ export const createOrderforUser = async (
       }
     }
 
-    // Enhance error messages for better user experience
     if (
       error.message.includes("exchange rate") ||
       error.message.includes("currency conversion") ||
@@ -371,9 +363,7 @@ export const createOrderforUser = async (
   }
 };
 
-/**
- * Confirm order payment and convert reserved stock to actual sale
- */
+
 export const confirmOrderPayment = async (orderId, session = null) => {
   try {
     const order = await OrderModelUser.findById(orderId);
@@ -386,7 +376,6 @@ export const confirmOrderPayment = async (orderId, session = null) => {
       );
     }
 
-    // Confirm stock reservation (convert reserved to sold)
     for (const item of order.items) {
       await confirmStockReservation(
         item.product._id,
@@ -396,13 +385,11 @@ export const confirmOrderPayment = async (orderId, session = null) => {
       );
     }
 
-    // Update order status
     order.paymentStatus = "paid";
     order.status = "confirmed";
     order.expireAt = undefined; // Remove expiration
     await order.save({ session });
 
-    // Update sub-orders
     await SubOrderModel.updateMany(
       { orderId: order._id },
       { paymentStatus: "paid", status: "confirmed" },
@@ -415,9 +402,7 @@ export const confirmOrderPayment = async (orderId, session = null) => {
   }
 };
 
-/**
- * Cancel pending order and release reserved stock
- */
+
 export const cancelPendingOrder = async (orderId) => {
   try {
     const order = await OrderModelUser.findById(orderId);
@@ -430,19 +415,15 @@ export const cancelPendingOrder = async (orderId) => {
       );
     }
 
-    // Release reserved stock
     await releaseMultipleStocks(order.items);
 
-    // Decrement coupon usage
     if (order.couponUsed?.couponId) {
       await decrementCouponUsage(order.couponUsed.couponId);
     }
 
-    // Update order status
     order.status = "cancelled";
     await order.save();
 
-    // Update sub-orders
     await SubOrderModel.updateMany(
       { orderId: order._id },
       { status: "cancelled" }
@@ -452,4 +433,49 @@ export const cancelPendingOrder = async (orderId) => {
   } catch (error) {
     throw error;
   }
+};
+
+export const getUserOrders = async (userId, options = {}) => {
+  const {
+    page = 1,
+    limit = 10,
+    sort = "createdAt",
+    order = "desc",
+    paymentStatus,
+    lang = "en",
+  } = options;
+
+  let query = { customerId: userId };
+
+  if (paymentStatus) {
+    query.paymentStatus = paymentStatus;
+  }
+
+  const skip = (page - 1) * limit;
+  const sortOrder = order === "desc" ? -1 : 1;
+  const sortObj = { [sort]: sortOrder };
+
+  const orders = await OrderModelUser.find(query)
+    .select("orderNumber items subtotal shippingCost totalAmount currency customerCurrency paymentStatus paymentMethod status createdAt")
+    .sort(sortObj)
+    .skip(skip)
+    .limit(parseInt(limit))
+    .lean();
+
+  const formattedOrders = orders.map((order) => transformOrderResponse(order, lang));
+
+  const total = await OrderModelUser.countDocuments(query);
+  const totalPages = Math.ceil(total / limit);
+
+  return {
+    orders: formattedOrders,
+    pagination: {
+      total,
+      page: parseInt(page),
+      limit: parseInt(limit),
+      totalPages,
+      hasNext: page < totalPages,
+      hasPrev: page > 1,
+    },
+  };
 };

@@ -24,6 +24,7 @@ import countriesRoutes from "./modules/country/country.routes.js";
 import slidersRoutes from "./modules/sliders/slider.routes.js";
 import puahNotificationsRoutes from "./modules/pushNotificationsAdmin/notification.routes.js";
 import invoicesRoutes from "./modules/invoice/invoice.routes.js";
+import ordersRoutes from "./modules/orders/orders.routes.js";
 
 
 import cors from "cors";
@@ -52,6 +53,7 @@ export const bootstap = (app, express) => {
   app.use("/countries", countriesRoutes);
   app.use("/sliders", slidersRoutes);
   app.use("/pushNotifications", puahNotificationsRoutes);
+  app.use("/orders",ordersRoutes)
 
   app.use("/invoice", invoicesRoutes);
 

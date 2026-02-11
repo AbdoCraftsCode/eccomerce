@@ -31,20 +31,18 @@ export const createOrderItems = (
     );
     let itemDiscount = 0;
 
-    if (isDiscounted && coupon && subtotal > 0) {
+    if (isDiscounted && coupon && subtotal.usd > 0) {
       if (coupon.discountType === "percentage") {
-        itemDiscount = (item.totalPrice * coupon.discountValue) / 100;
+        itemDiscount = (item.totalPrice.usd * coupon.discountValue) / 100;
       } else if (coupon.discountType === "fixed") {
-        // Distribute fixed discount proportionally
-        const itemShare = (item.totalPrice / subtotal) * discountAmount;
-        itemDiscount = Math.min(itemShare, item.totalPrice);
+        // Distribute fixed discount proportionally using USD values
+        const itemShare = (item.totalPrice.usd / subtotal.usd) * discountAmount;
+        itemDiscount = Math.min(itemShare, item.totalPrice.usd);
       }
     }
 
     return {
       ...item,
-      unitPrice: item.unitPrice,
-      totalPrice: item.totalPrice - itemDiscount,
       discountApplied: itemDiscount,
     };
   });
@@ -93,9 +91,11 @@ export const buildCouponUsedObject = (
     couponId: coupon._id,
     code: coupon.code,
     discountType: coupon.discountType,
-    discountValue: coupon.discountValue,
-    discountValueInCustomerCurrency: discountAmountInCustomerCurrency,
-    discountValueInUSD: discountAmountInUSD,
+    discountValue: {
+      vendor: coupon.discountValue,
+      customer: discountAmountInCustomerCurrency,
+      usd: discountAmountInUSD,
+    },
     currency: couponCurrency,
     appliesTo: coupon.appliesTo,
     productId: coupon.productId?._id || null,

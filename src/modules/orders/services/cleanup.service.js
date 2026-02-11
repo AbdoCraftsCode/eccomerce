@@ -5,9 +5,7 @@ import { ProductModellll } from "../../../DB/models/productSchemaaaa.js";
 import { VariantModel } from "../../../DB/models/variantSchema.js";
 import { decrementCouponUsage } from "../helpers/coupon.helpers.js";
 
-/**
- * Track active sessions to prevent cleanup during order creation
- */
+
 const activeSessions = new Map();
 
 export const registerActiveSession = (orderId, sessionId) => {
@@ -18,9 +16,7 @@ export const unregisterActiveSession = (orderId) => {
   activeSessions.delete(orderId.toString());
 };
 
-/**
- * Release stock from an expired order
- */
+
 const releaseStockFromExpiredOrder = async (order) => {
   try {
     console.log(`Releasing stock for expired order ${order._id}`);
@@ -60,10 +56,7 @@ const releaseStockFromExpiredOrder = async (order) => {
   }
 };
 
-/**
- * Clean up expired orders (run periodically)
- * Skip orders with active sessions to prevent conflicts
- */
+
 export const cleanupExpiredOrders = async () => {
   try {
     const now = new Date();
@@ -111,14 +104,10 @@ export const cleanupExpiredOrders = async () => {
   }
 };
 
-/**
- * Start the cleanup job (runs every 5 minutes)
- */
+
 export const startOrderCleanupJob = () => {
-  // Run immediately on startup
   cleanupExpiredOrders();
   
-  // Then run every 5 minutes
   setInterval(cleanupExpiredOrders, 5 * 60 * 1000);
   
   console.log("Order cleanup job started");
