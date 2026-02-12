@@ -620,58 +620,6 @@ export const deleteMyAccount = async (req, res) => {
   }
 };
 
-export const loginRestaurant = asyncHandelr(async (req, res, next) => {
-  const { email, password } = req.body;
-  console.log(email, password);
-
-  // ✅ لازم ترجع كلمة المرور عشان تقدر تقارنها
-  const checkUser = await Usermodel.findOne({ email }).select("+password");
-
-  if (!checkUser) {
-    return next(new Error("User not found", { cause: 404 }));
-  }
-
-  if (!checkUser.isConfirmed) {
-    return next(new Error("Please confirm your email tmm ", { cause: 404 }));
-  }
-  // ✅ قارن كلمة المرور المشفرة
-  const isMatch = await comparehash({
-    planText: password,
-    valuehash: checkUser.password,
-  });
-
-  if (!isMatch) {
-    return next(new Error("Password is incorrect", { cause: 404 }));
-  }
-
-  // ✅ توليد Access Token و Refresh Token
-  const access_Token = generatetoken({
-    payload: { id: checkUser._id },
-  });
-
-  const refreshToken = generatetoken({
-    payload: { id: checkUser._id },
-    expiresIn: "365d",
-  });
-
-  const restaurantLink = `https://morezk12.github.io/Restaurant-system/#/restaurant/${checkUser.subdomain}`;
-
-  // ✅ رجع كل بيانات المستخدم + التوكنات
-  const allData = {
-    message: "Login successful",
-    id: checkUser._id,
-    fullName: checkUser.fullName,
-    email: checkUser.email,
-    phone: checkUser.phone,
-    country: checkUser.country,
-    subdomain: checkUser.subdomain,
-    restaurantLink,
-    access_Token,
-    refreshToken,
-  };
-
-  return successresponse(res, allData, 200);
-});
 
 export const getMyProfile = async (req, res, next) => {
   try {
@@ -4657,14 +4605,14 @@ export const loginWithPassword = asyncHandelr(async (req, res, next) => {
 
 export const createCoupon = asyncHandelr(async (req, res, next) => {
   const {
-    code, // اختياري: لو مش بعته، هيتولد تلقائيًا
-    discountType, // "percentage" أو "fixed"
-    discountValue, // رقم (1-100 للنسبة، أي رقم للثابت)
-    appliesTo, // "single_product" أو "all_products"
-    productId, // مطلوب لو appliesTo = single_product
-    maxUses = 1, // عدد الاستخدامات (default 1)
-    expiryDate, // تاريخ الانتهاء (ISO string)
-    isActive = true, // حالة التفعيل
+    code, 
+    discountType, 
+    discountValue, 
+    appliesTo, 
+    productId, 
+    maxUses = 1, 
+    expiryDate, 
+    isActive = true,
   } = req.body;
 
   if (!req.user) {
@@ -4719,7 +4667,13 @@ export const createCoupon = asyncHandelr(async (req, res, next) => {
     );
   }
 
-  // ✅ لو
+  const vendorCurrencyId = req.user.currency?._id;
+  if (discountType === "fixed" && !vendorCurrencyId) {
+    return next(
+      new Error("يجب تحديد عملة الحساب لإنشاء كوبون خصم ثابت", { cause: 400 })
+    );
+  }
+
   if (appliesTo === "single_product") {
     if (!productId) {
       return next(
@@ -4731,7 +4685,7 @@ export const createCoupon = asyncHandelr(async (req, res, next) => {
 
     const product = await ProductModellll.findOne({
       _id: productId,
-      createdBy: req.user._id, // لازم يكون المنتج تابع للبائع
+      createdBy: req.user._id, 
       isActive: true,
     });
 
@@ -4756,7 +4710,6 @@ export const createCoupon = asyncHandelr(async (req, res, next) => {
     );
   }
 
-  // ✅ تحويل expiryDate إلى Date لو موجود
   let parsedExpiryDate = null;
   if (expiryDate) {
     parsedExpiryDate = new Date(expiryDate);
@@ -4772,7 +4725,6 @@ export const createCoupon = asyncHandelr(async (req, res, next) => {
     }
   }
 
-  // ✅ إنشاء الكوبون
   const coupon = await CouponModel.create({
     code: couponCode,
     discountType,
@@ -4784,6 +4736,7 @@ export const createCoupon = asyncHandelr(async (req, res, next) => {
     usesCount: 0,
     expiryDate: parsedExpiryDate,
     isActive: !!isActive,
+    currency: discountType === "fixed" ? vendorCurrencyId : null, 
   });
 
   res.status(201).json({
@@ -4794,7 +4747,6 @@ export const createCoupon = asyncHandelr(async (req, res, next) => {
 });
 
 export const getMyCoupons = asyncHandelr(async (req, res, next) => {
-  // ✅ التحقق من توكن وبائع
   if (!req.user || req.user.accountType !== "vendor") {
     return next(new Error("❌ غير مصرح لك بعرض الكوبونات", { cause: 401 }));
   }
@@ -4830,6 +4782,10 @@ export const getMyCoupons = asyncHandelr(async (req, res, next) => {
       match: { isActive: true },
       select: "name sku images mainPrice",
     })
+    .populate({
+      path: "currency",
+      select: "code symbol",
+    })
     .sort({ createdAt: -1 })
     .skip(skip)
     .limit(limitNum)
@@ -4850,6 +4806,7 @@ export const getMyCoupons = asyncHandelr(async (req, res, next) => {
           image: coupon.productId.images[0] || null,
         }
       : null,
+    currency: coupon.currency || null, 
     maxUses: coupon.maxUses,
     usesCount: coupon.usesCount,
     remainingUses: coupon.maxUses - coupon.usesCount,
@@ -4942,6 +4899,10 @@ export const getCouponDetails = asyncHandelr(async (req, res, next) => {
       match: { isActive: true },
       select: "name sku images mainPrice",
     })
+    .populate({
+      path: "currency",
+      select: "code symbol",
+    })
     .lean();
 
   if (!coupon) {
@@ -4964,6 +4925,7 @@ export const getCouponDetails = asyncHandelr(async (req, res, next) => {
           image: coupon.productId.images[0] || null,
         }
       : null,
+    currency: coupon.currency || null, // ← إضافة فقط
     maxUses: coupon.maxUses,
     usesCount: coupon.usesCount,
     remainingUses: coupon.maxUses - coupon.usesCount,
@@ -5117,6 +5079,11 @@ export const updateCoupon = asyncHandelr(async (req, res, next) => {
 
   await coupon.save();
 
+  await coupon.populate({
+    path: "currency",
+    select: "code symbol",
+  });
+
   res.status(200).json({
     success: true,
     message: "تم تعديل الكوبون بنجاح ✅",
@@ -5127,12 +5094,10 @@ export const updateCoupon = asyncHandelr(async (req, res, next) => {
 export const deleteCoupon = asyncHandelr(async (req, res, next) => {
   const { couponId } = req.params;
 
-  // ✅ التحقق من توكن وبائع
   if (!req.user || req.user.accountType !== "vendor") {
     return next(new Error("❌ غير مصرح لك بحذف الكوبونات", { cause: 401 }));
   }
 
-  // جلب الكوبون مع التحقق من الانتماء للبائع
   const coupon = await CouponModel.findOne({
     _id: couponId,
     vendorId: req.user._id,
@@ -5664,1177 +5629,7 @@ export const deleteAdminCoupon = asyncHandelr(async (req, res, next) => {
   });
 });
 
-import { CartModel } from "../../../DB/models/cart.model.js";
-
-export const applyCoupon = asyncHandelr(async (req, res, next) => {
-  const { couponCode } = req.body;
-
-  if (!req.user) {
-    return next(
-      new Error("❌ يجب تسجيل الدخول لتطبيق الكوبون", { cause: 401 }),
-    );
-  }
-
-  const customerId = req.user._id;
-
-  if (!couponCode) {
-    return next(new Error("❌ كود الكوبون مطلوب", { cause: 400 }));
-  }
-
-  const cart = await CartModel.findOne({ user: customerId })
-    .populate({
-      path: "items.product",
-      select:
-        "name mainPrice disCountPrice createdBy categories hasVariants stock isActive status",
-      match: { isActive: true, status: "published" },
-    })
-    .populate({
-      path: "items.variant",
-      select: "price disCountPrice attributes stock isActive",
-      match: { isActive: true },
-    });
-
-  if (!cart || cart.items.length === 0) {
-    return next(new Error("❌ السلة فارغة أو غير موجودة", { cause: 400 }));
-  }
-
-  // فلترة العناصر الصالحة فقط (لو الـ populate match عمل شغله)
-  const validItems = cart.items.filter(
-    (item) => item.product && (!item.variant || item.variant),
-  );
-
-  if (validItems.length === 0) {
-    return next(new Error("❌ لا توجد عناصر صالحة في السلة", { cause: 400 }));
-  }
-
-  const trimmedCode = couponCode.trim().toUpperCase();
-
-  const coupon = await CouponModel.findOne({
-    code: trimmedCode,
-    isActive: true,
-  }).populate("productId categoryId");
-
-  if (!coupon) {
-    return next(
-      new Error("❌ كود الكوبون غير صحيح أو غير مفعل", { cause: 400 }),
-    );
-  }
-
-  if (coupon.expiryDate && new Date(coupon.expiryDate) < new Date()) {
-    return next(new Error("❌ الكوبون منتهي الصلاحية", { cause: 400 }));
-  }
-
-  if (coupon.usesCount >= coupon.maxUses) {
-    return next(
-      new Error("❌ تم استنفاد عدد استخدامات هذا الكوبون", { cause: 400 }),
-    );
-  }
-
-  // حساب الإجمالي والخصم
-  let subtotal = 0;
-  let applicableSubtotal = 0;
-  let appliedItems = [];
-
-  for (const item of validItems) {
-    const product = item.product;
-    const variant = item.variant;
-
-    let itemPrice = 0;
-    let usedDiscountPrice = false;
-
-    // حالة 1: variant محدد
-    if (variant && product.hasVariants) {
-      const variantDiscount = Number(variant.disCountPrice) || 0;
-      itemPrice =
-        variantDiscount > 0 ? variantDiscount : Number(variant.price || 0);
-      usedDiscountPrice = variantDiscount > 0;
-    }
-    // حالة 2: المنتج الأساسي
-    else {
-      const productDiscount = Number(product.disCountPrice) || 0;
-      itemPrice =
-        productDiscount > 0 ? productDiscount : Number(product.mainPrice || 0);
-      usedDiscountPrice = productDiscount > 0;
-    }
-
-    const itemTotal = itemPrice * item.quantity;
-    subtotal += itemTotal;
-
-    let isApplicable = false;
-
-    if (coupon.appliesTo === "all_products") {
-      isApplicable = true;
-    } else if (coupon.appliesTo === "single_product") {
-      if (
-        coupon.productId &&
-        coupon.productId._id.toString() === product._id.toString()
-      ) {
-        isApplicable = true;
-      }
-    } else if (coupon.appliesTo === "category") {
-      if (
-        coupon.categoryId &&
-        product.categories.some(
-          (cat) => cat.toString() === coupon.categoryId._id.toString(),
-        )
-      ) {
-        isApplicable = true;
-      }
-    }
-
-    if (isApplicable && coupon.vendorId) {
-      if (
-        !product.createdBy ||
-        product.createdBy.toString() !== coupon.vendorId.toString()
-      ) {
-        isApplicable = false;
-      }
-    }
-
-    if (isApplicable) {
-      applicableSubtotal += itemTotal;
-
-      appliedItems.push({
-        productId: product._id,
-        productName: product.name,
-        variantId: variant?._id || null,
-        variantAttributes: variant ? variant.attributes : null,
-        isBaseProduct: !item.variantId,
-        quantity: item.quantity,
-        unitPrice: itemPrice,
-        wasDiscounted: usedDiscountPrice,
-        itemTotal,
-      });
-    }
-  }
-
-  if (applicableSubtotal === 0) {
-    return next(
-      new Error("❌ هذا الكوبون لا ينطبق على أي منتج في سلتك", { cause: 400 }),
-    );
-  }
-
-  // حساب الخصم
-  let discountAmount = 0;
-  if (coupon.discountType === "percentage") {
-    discountAmount = (applicableSubtotal * coupon.discountValue) / 100;
-  } else if (coupon.discountType === "fixed") {
-    discountAmount = Math.min(coupon.discountValue, applicableSubtotal);
-  }
-
-  const totalAfterDiscount = subtotal - discountAmount;
-
-  res.status(200).json({
-    success: true,
-    message: "تم تطبيق الكوبون بنجاح ",
-    data: {
-      coupon: {
-        code: coupon.code,
-        discountType: coupon.discountType,
-        discountValue: coupon.discountValue,
-        appliesTo: coupon.appliesTo,
-        appliedOn:
-          coupon.appliesTo === "single_product"
-            ? coupon.productId?.name || "منتج محدد"
-            : coupon.appliesTo === "category"
-              ? coupon.categoryId?.name || "فئة محددة"
-              : "جميع المنتجات",
-        remainingUses: coupon.maxUses - coupon.usesCount - 1,
-      },
-      cartSummary: {
-        subtotal: Number(subtotal.toFixed(2)),
-        applicableSubtotal: Number(applicableSubtotal.toFixed(2)),
-        discountAmount: Number(discountAmount.toFixed(2)),
-        totalAfterDiscount: Number(totalAfterDiscount.toFixed(2)),
-      },
-      appliedItems: appliedItems,
-    },
-  });
-});
-
-export const createOrderforUser = asyncHandelr(async (req, res, next) => {
-  const { cartItems, couponCode, paymentMethod, shippingAddress } = req.body;
-
-  if (!req.user) {
-    return next(new Error("❌ يجب تسجيل الدخول لإنشاء طلب", { cause: 401 }));
-  }
-
-  const customerId = req.user._id;
-
-  if (!cartItems || cartItems.length === 0) {
-    return next(new Error("❌ السلة فارغة", { cause: 400 }));
-  }
-
-  if (
-    !shippingAddress ||
-    !shippingAddress.latitude ||
-    !shippingAddress.longitude
-  ) {
-    return next(
-      new Error("❌ عنوان التوصيل وإحداثياته مطلوبة", { cause: 400 }),
-    );
-  }
-
-  // جلب المنتجات الفريدة
-  const productIds = [...new Set(cartItems.map((item) => item.productId))];
-  const products = await ProductModellll.find({
-    _id: { $in: productIds },
-    isActive: true,
-    status: "published",
-  }).lean();
-
-  if (products.length !== productIds.length) {
-    return next(
-      new Error("❌ واحد أو أكثر من المنتجات غير موجود أو غير متاح", {
-        cause: 400,
-      }),
-    );
-  }
-
-  const productsMap = {};
-  products.forEach((p) => (productsMap[p._id.toString()] = p));
-
-  // جلب الـ variants
-  const variantIds = cartItems
-    .filter((item) => item.variantId)
-    .map((item) => item.variantId);
-  let variantsMap = {};
-  if (variantIds.length > 0) {
-    const variants = await VariantModel.find({
-      _id: { $in: variantIds },
-      isActive: true,
-    }).lean();
-
-    variants.forEach((v) => (variantsMap[v._id.toString()] = v));
-  }
-
-  // ✅ تحديد vendorId + حساب الإجمالي
-  let vendorId = null;
-  let subtotal = 0;
-  let formattedItems = [];
-  let coupon = null;
-  let discountAmount = 0;
-  let applicableSubtotal = 0;
-
-  for (const item of cartItems) {
-    const product = productsMap[item.productId?.toString()];
-    if (!product) continue;
-
-    // تحديد vendorId من المنتج
-    if (!vendorId) {
-      vendorId = product.createdBy;
-    } else if (vendorId.toString() !== product.createdBy.toString()) {
-      return next(
-        new Error("❌ لا يمكن دمج منتجات من بائعين مختلفين في طلب واحد", {
-          cause: 400,
-        }),
-      );
-    }
-
-    let variant = null;
-    let basePrice = Number(product.mainPrice) || 0;
-    let discountPrice = Number(product.disCountPrice) || 0;
-
-    if (item.variantId && product.hasVariants) {
-      variant = variantsMap[item.variantId?.toString()];
-      if (variant) {
-        basePrice = Number(variant.price) || basePrice;
-        discountPrice = Number(variant.disCountPrice) || discountPrice;
-      }
-    }
-
-    const applicablePrice = discountPrice > 0 ? discountPrice : basePrice;
-    const itemTotal = applicablePrice * item.quantity;
-    subtotal += itemTotal;
-
-    formattedItems.push({
-      productId: product._id,
-      variantId: variant?._id || null,
-      productName: product.name,
-      variantAttributes: variant ? variant.attributes : null,
-      quantity: item.quantity,
-      unitPrice: applicablePrice,
-      totalPrice: itemTotal,
-    });
-  }
-
-  // ✅ تطبيق الكوبون
-  if (couponCode) {
-    const trimmedCode = couponCode.trim().toUpperCase();
-
-    coupon = await CouponModel.findOne({
-      code: trimmedCode,
-      isActive: true,
-      vendorId: vendorId, // الكوبون لازم يكون تابع لنفس البائع
-    }).populate("productId");
-
-    if (!coupon) {
-      return next(
-        new Error("❌ كود الكوبون غير صحيح أو غير مفعل أو لا يخص هذا البائع", {
-          cause: 400,
-        }),
-      );
-    }
-
-    if (coupon.expiryDate && new Date(coupon.expiryDate) < new Date()) {
-      return next(new Error("❌ الكوبون منتهي الصلاحية", { cause: 400 }));
-    }
-
-    if (coupon.usesCount >= coupon.maxUses) {
-      return next(
-        new Error("❌ تم استنفاد عدد استخدامات هذا الكوبون", { cause: 400 }),
-      );
-    }
-
-    let isApplicable = false;
-    if (coupon.appliesTo === "all_products") {
-      isApplicable = true;
-      applicableSubtotal = subtotal;
-    } else if (coupon.appliesTo === "single_product") {
-      const itemsFromProduct = formattedItems.filter(
-        (i) => i.productId.toString() === coupon.productId._id.toString(),
-      );
-      if (itemsFromProduct.length > 0) {
-        isApplicable = true;
-        applicableSubtotal = itemsFromProduct.reduce(
-          (sum, i) => sum + i.totalPrice,
-          0,
-        );
-      }
-    }
-
-    if (!isApplicable) {
-      return next(
-        new Error("❌ هذا الكوبون لا ينطبق على منتجات سلتك", { cause: 400 }),
-      );
-    }
-
-    if (coupon.discountType === "percentage") {
-      discountAmount = (applicableSubtotal * coupon.discountValue) / 100;
-    } else if (coupon.discountType === "fixed") {
-      discountAmount = Math.min(coupon.discountValue, applicableSubtotal);
-    }
-
-    coupon.usesCount += 1;
-    await coupon.save();
-  }
-
-  const shippingCost = 0;
-  const totalAmount = subtotal - discountAmount + shippingCost;
-
-  // توليد orderNumber ديناميكي
-  const date = new Date();
-  const year = date.getFullYear();
-  const count = await OrderModelUser.countDocuments({
-    createdAt: { $gte: new Date(year, 0, 1) },
-  });
-  const orderNumber = `ORDER-${year}-${String(count + 1).padStart(4, "0")}`;
-
-  // إنشاء الطلب
-  const order = await OrderModelUser.create({
-    orderNumber,
-    paymentMethod,
-    customerId,
-    vendorId, // من createdBy بتاع المنتج
-    items: formattedItems,
-    subtotal: Number(subtotal.toFixed(2)),
-    discountAmount: Number(discountAmount.toFixed(2)),
-    couponUsed: coupon
-      ? {
-          couponId: coupon._id,
-          code: coupon.code,
-          discountType: coupon.discountType,
-          discountValue: coupon.discountValue,
-        }
-      : null,
-    shippingCost,
-    totalAmount: Number(totalAmount.toFixed(2)),
-    currency: "USD",
-    shippingAddress,
-    paymentStatus: "pending",
-    status: "pending",
-  });
-
-  res.status(201).json({
-    success: true,
-    message: "تم إنشاء الطلب بنجاح، في انتظار الدفع ✅",
-    data: {
-      orderId: order._id,
-      orderNumber: order.orderNumber,
-      totalAmount: order.totalAmount,
-      paymentStatus: "pending",
-      nextStep: "انتقل إلى بوابة الدفع Payoneer",
-    },
-  });
-});
-
-export const GetMyOrders = asyncHandelr(async (req, res, next) => {
-  if (!req.user) {
-    return next(new Error("❌ يجب تسجيل الدخول لعرض طلباتك", { cause: 401 }));
-  }
-
-  const customerId = req.user._id;
-
-  const { page = 1, limit = 10, delivered = false } = req.query;
-
-  const pageNum = Math.max(1, parseInt(page) || 1);
-  const limitNum = Math.min(50, Math.max(1, parseInt(limit) || 10));
-  const skip = (pageNum - 1) * limitNum;
-
-  let filter = {
-    customerId,
-    paymentStatus: "paid",
-  };
-
-  if (delivered === "true") {
-    filter.shippingStatus = "delivered";
-  }
-
-  const totalOrders = await OrderModelUser.countDocuments(filter);
-
-  const orders = await OrderModelUser.find(filter)
-    .populate({
-      path: "items.productId",
-      select: "name sku images mainPrice disCountPrice",
-    })
-    .populate({
-      path: "items.variantId",
-      select: "price disCountPrice attributes images weight sku",
-      populate: [
-        { path: "attributes.attributeId", select: "name type" },
-        { path: "attributes.valueId", select: "value hexCode" },
-      ],
-    })
-    .populate("couponUsed.couponId", "code discountType discountValue")
-    .sort({ createdAt: -1 })
-    .skip(skip)
-    .limit(limitNum)
-    .lean();
-
-  const formattedOrders = orders.map((order) => {
-    const items = order.items.map((item) => {
-      const product = item.productId;
-      const variant = item.variantId;
-
-      if (variant) {
-        const variantAttributes = variant.attributes.map((attr) => ({
-          name: attr.attributeId?.name || { ar: "غير معروف", en: "Unknown" },
-          type: attr.attributeId?.type || "text",
-          value: attr.valueId?.value || { ar: "غير معروف", en: "Unknown" },
-          hexCode: attr.valueId?.hexCode || null,
-        }));
-
-        return {
-          productId: product?._id,
-          productName: item.productName,
-          variantId: variant._id,
-          variantAttributes,
-          variantImages: variant.images || null,
-          variantSku: variant.sku || null,
-          variantWeight: variant.weight || null,
-          quantity: item.quantity,
-          unitPrice: item.unitPrice,
-          totalPrice: item.totalPrice,
-        };
-      }
-
-      // بدون variant → بيانات المنتج الأساسي
-      return {
-        productId: product?._id,
-        productName: item.productName,
-        variantId: null,
-        variantAttributes: null,
-        variantImages: product?.images || null,
-        variantSku: product?.sku || null,
-        variantWeight: variant ? variant.weight : product?.weight || null,
-        quantity: item.quantity,
-        unitPrice: item.unitPrice,
-        totalPrice: item.totalPrice,
-      };
-    });
-
-    return {
-      _id: order._id,
-      orderNumber: order.orderNumber,
-      totalAmount: order.totalAmount,
-      currency: order.currency,
-      paymentStatus: order.paymentStatus,
-      shippingStatus: order.shippingStatus,
-      shippingMethod: order.shippingMethod,
-      shippingDetails: order.shippingDetails,
-      status: order.status,
-      shippingAddress: order.shippingAddress,
-      createdAt: order.createdAt,
-      updatedAt: order.updatedAt,
-      items,
-      discountAmount: order.discountAmount,
-      couponUsed: order.couponUsed,
-      shippingCost: order.shippingCost,
-    };
-  });
-  const pagination = {
-    currentPage: pageNum,
-    totalPages: Math.ceil(totalOrders / limitNum),
-    totalItems: totalOrders,
-    itemsPerPage: limitNum,
-    hasNext: pageNum < Math.ceil(totalOrders / limitNum),
-    hasPrev: pageNum > 1,
-  };
-
-  res.status(200).json({
-    success: true,
-    message: "تم جلب طلباتك المدفوعة بنجاح ✅",
-    count: formattedOrders.length,
-    pagination,
-    data: formattedOrders,
-  });
-});
-
-export const getVendorOrders = asyncHandelr(async (req, res, next) => {
-  if (!req.user || req.user.accountType !== "vendor") {
-    return next(new Error("❌ غير مصرح لك بعرض الطلبات", { cause: 403 }));
-  }
-
-  const vendorId = req.user._id;
-
-  const {
-    page = 1,
-    limit = 10,
-    paymentStatus,
-    shippingStatus,
-    status,
-    orderNumber,
-  } = req.query;
-
-  const pageNum = Math.max(1, parseInt(page) || 1);
-  const limitNum = Math.min(50, Math.max(1, parseInt(limit) || 10));
-  const skip = (pageNum - 1) * limitNum;
-
-  let filter = { vendorId };
-
-  if (paymentStatus) {
-    const validPayment = ["pending", "paid", "failed", "refunded"];
-    if (!validPayment.includes(paymentStatus)) {
-      return next(new Error("❌ حالة الدفع غير صحيحة", { cause: 400 }));
-    }
-    filter.paymentStatus = paymentStatus;
-  }
-
-  if (shippingStatus) {
-    const validShipping = [
-      "not_shipped",
-      "preparing",
-      "shipped",
-      "in_transit",
-      "delivered",
-      "failed",
-    ];
-    if (!validShipping.includes(shippingStatus)) {
-      return next(new Error("❌ حالة الشحن غير صحيحة", { cause: 400 }));
-    }
-    filter.shippingStatus = shippingStatus;
-  }
-
-  if (status) {
-    const validStatus = [
-      "pending",
-      "confirmed",
-      "processing",
-      "shipped",
-      "delivered",
-      "cancelled",
-    ];
-    if (!validStatus.includes(status)) {
-      return next(new Error("❌ حالة الطلب غير صحيحة", { cause: 400 }));
-    }
-    filter.status = status;
-  }
-
-  if (orderNumber) {
-    filter.orderNumber = { $regex: orderNumber.trim(), $options: "i" };
-  }
-
-  // ✅ حساب الإحصائيات العامة
-
-  const statsAggregation = await OrderModelUser.aggregate([
-    { $match: { vendorId } },
-    {
-      $group: {
-        _id: "$paymentStatus",
-        count: { $sum: 1 },
-        totalPendingAmount: {
-          $sum: {
-            $cond: [{ $eq: ["$paymentStatus", "pending"] }, "$totalAmount", 0],
-          },
-        },
-      },
-    },
-  ]);
-
-  let pendingCount = 0;
-  let pendingAmount = 0;
-  let paidCount = 0;
-  let refundedCount = 0;
-  let failedCount = 0;
-
-  statsAggregation.forEach((stat) => {
-    if (stat._id === "pending") {
-      pendingCount = stat.count;
-      pendingAmount = stat.totalPendingAmount;
-    } else if (stat._id === "paid") {
-      paidCount = stat.count;
-    } else if (stat._id === "refunded") {
-      refundedCount = stat.count;
-    } else if (stat._id === "failed") {
-      failedCount = stat.count;
-    }
-  });
-
-  const totalOrders = await OrderModelUser.countDocuments(filter);
-
-  const orders = await OrderModelUser.find(filter)
-    .populate("customerId", "fullName email phone")
-    .populate({
-      path: "items.productId",
-      select: "name sku images mainPrice disCountPrice",
-    })
-    .populate({
-      path: "items.variantId",
-      select: "price disCountPrice attributes images weight sku",
-      populate: [
-        { path: "attributes.attributeId", select: "name type" },
-        { path: "attributes.valueId", select: "value hexCode" },
-      ],
-    })
-    .populate("couponUsed.couponId", "code discountType discountValue")
-    .sort({ createdAt: -1 })
-    .skip(skip)
-    .limit(limitNum)
-    .lean();
-
-  const formattedOrders = orders.map((order) => {
-    const items = order.items.map((item) => {
-      const product = item.productId;
-      const variant = item.variantId;
-
-      let variantFormattedAttributes = null;
-      let variantImages = product?.images || null;
-      let variantSku = product?.sku || null;
-      let variantWeight = product?.weight || null;
-      let vendorAddress = item.vendorAddress;
-
-      if (variant) {
-        variantFormattedAttributes = variant.attributes.map((attr) => ({
-          name: attr.attributeId?.name || { ar: "غير معروف", en: "Unknown" },
-          type: attr.attributeId?.type || "text",
-          value: attr.valueId?.value || { ar: "غير معروف", en: "Unknown" },
-          hexCode: attr.valueId?.hexCode || null,
-        }));
-        variantImages = variant.images || null;
-        variantSku = variant.sku || null;
-        variantWeight = variant.weight || null;
-      }
-
-      return {
-        productId: product?._id,
-        productName: item.productName,
-        variantId: variant?._id || null,
-        variantAttributes: variantFormattedAttributes,
-        variantImages,
-        vendorAddress,
-        variantSku,
-        variantWeight,
-        quantity: item.quantity,
-        unitPrice: item.unitPrice,
-        totalPrice: item.totalPrice,
-      };
-    });
-
-    return {
-      _id: order._id,
-      orderNumber: order.orderNumber,
-      customer: {
-        _id: order.customerId?._id,
-        fullName: order.customerId?.fullName,
-        email: order.customerId?.email,
-        phone: order.customerId?.phone,
-      },
-      totalAmount: order.totalAmount,
-      currency: order.currency,
-      paymentStatus: order.paymentStatus,
-      shippingStatus: order.shippingStatus,
-      shippingMethod: order.shippingMethod,
-      shippingDetails: order.shippingDetails,
-      status: order.status,
-      shippingAddress: order.shippingAddress,
-      createdAt: order.createdAt,
-      items,
-      discountAmount: order.discountAmount,
-      couponUsed: order.couponUsed,
-      shippingCost: order.shippingCost,
-    };
-  });
-
-  const pagination = {
-    currentPage: pageNum,
-    totalPages: Math.ceil(totalOrders / limitNum),
-    totalItems: totalOrders,
-    itemsPerPage: limitNum,
-    hasNext: pageNum < Math.ceil(totalOrders / limitNum),
-    hasPrev: pageNum > 1,
-  };
-
-  // ✅ الإحصائيات العامة
-  const summary = {
-    pendingPayment: {
-      count: pendingCount,
-      totalAmount: pendingAmount,
-    },
-    completed: paidCount, // paid = completed
-    refunded: refundedCount,
-    failed: failedCount,
-  };
-
-  res.status(200).json({
-    success: true,
-    message: "تم جلب طلباتك بنجاح ✅",
-    summary,
-    count: formattedOrders.length,
-    pagination,
-    data: formattedOrders,
-  });
-});
-
-export const getAllOrdersAdmin = asyncHandelr(async (req, res, next) => {
-  if (!req.user || !["Admin", "Owner"].includes(req.user.accountType)) {
-    return next(new Error("❌ غير مصرح لك بعرض الطلبات", { cause: 403 }));
-  }
-
-  const {
-    page = 1,
-    limit = 10,
-    paymentStatus,
-    shippingStatus,
-    status,
-    orderNumber,
-    vendorId, // اختياري: فلتر بتاجر معين
-  } = req.query;
-
-  const pageNum = Math.max(1, parseInt(page) || 1);
-  const limitNum = Math.min(50, Math.max(1, parseInt(limit) || 10));
-  const skip = (pageNum - 1) * limitNum;
-
-  let filter = {};
-
-  // فلتر اختياري بتاجر معين
-  if (vendorId) {
-    if (!mongoose.Types.ObjectId.isValid(vendorId)) {
-      return next(new Error("❌ معرف التاجر غير صحيح", { cause: 400 }));
-    }
-    filter.vendorId = vendorId;
-  }
-
-  if (paymentStatus) {
-    const validPayment = ["pending", "paid", "failed", "refunded"];
-    if (!validPayment.includes(paymentStatus)) {
-      return next(new Error("❌ حالة الدفع غير صحيحة", { cause: 400 }));
-    }
-    filter.paymentStatus = paymentStatus;
-  }
-
-  if (shippingStatus) {
-    const validShipping = [
-      "not_shipped",
-      "preparing",
-      "shipped",
-      "in_transit",
-      "delivered",
-      "failed",
-    ];
-    if (!validShipping.includes(shippingStatus)) {
-      return next(new Error("❌ حالة الشحن غير صحيحة", { cause: 400 }));
-    }
-    filter.shippingStatus = shippingStatus;
-  }
-
-  if (status) {
-    const validStatus = [
-      "pending",
-      "confirmed",
-      "processing",
-      "shipped",
-      "delivered",
-      "cancelled",
-    ];
-    if (!validStatus.includes(status)) {
-      return next(new Error("❌ حالة الطلب غير صحيحة", { cause: 400 }));
-    }
-    filter.status = status;
-  }
-
-  if (orderNumber) {
-    filter.orderNumber = { $regex: orderNumber.trim(), $options: "i" };
-  }
-
-  // ✅ حساب الإحصائيات العامة (لكل النظام أو للتاجر المفلتر)
-  const statsAggregation = await OrderModelUser.aggregate([
-    { $match: filter },
-    {
-      $group: {
-        _id: "$paymentStatus",
-        count: { $sum: 1 },
-        totalPendingAmount: {
-          $sum: {
-            $cond: [{ $eq: ["$paymentStatus", "pending"] }, "$totalAmount", 0],
-          },
-        },
-      },
-    },
-  ]);
-
-  let pendingCount = 0;
-  let pendingAmount = 0;
-  let paidCount = 0;
-  let refundedCount = 0;
-  let failedCount = 0;
-
-  statsAggregation.forEach((stat) => {
-    if (stat._id === "pending") {
-      pendingCount = stat.count;
-      pendingAmount = stat.totalPendingAmount;
-    } else if (stat._id === "paid") {
-      paidCount = stat.count;
-    } else if (stat._id === "refunded") {
-      refundedCount = stat.count;
-    } else if (stat._id === "failed") {
-      failedCount = stat.count;
-    }
-  });
-
-  // عدد الطلبات الكلي للـ pagination
-  const totalOrders = await OrderModelUser.countDocuments(filter);
-
-  const orders = await OrderModelUser.find(filter)
-    .populate("customerId", "fullName email phone")
-    .populate("vendorId", "fullName companyName") // إضافة اسم التاجر
-    .populate({
-      path: "items.productId",
-      select: "name sku images mainPrice disCountPrice",
-    })
-    .populate({
-      path: "items.variantId",
-      select: "price disCountPrice attributes images weight sku",
-      populate: [
-        { path: "attributes.attributeId", select: "name type" },
-        { path: "attributes.valueId", select: "value hexCode" },
-      ],
-    })
-    .populate("couponUsed.couponId", "code discountType discountValue")
-    .sort({ createdAt: -1 })
-    .skip(skip)
-    .limit(limitNum)
-    .lean();
-
-  const formattedOrders = orders.map((order) => {
-    const items = order.items.map((item) => {
-      const product = item.productId;
-      const variant = item.variantId;
-
-      let variantFormattedAttributes = null;
-      let variantImages = product?.images || null;
-      let variantSku = product?.sku || null;
-      let variantWeight = product?.weight || null;
-
-      if (variant) {
-        variantFormattedAttributes = variant.attributes.map((attr) => ({
-          name: attr.attributeId?.name || { ar: "غير معروف", en: "Unknown" },
-          type: attr.attributeId?.type || "text",
-          value: attr.valueId?.value || { ar: "غير معروف", en: "Unknown" },
-          hexCode: attr.valueId?.hexCode || null,
-        }));
-        variantImages = variant.images || null;
-        variantSku = variant.sku || null;
-        variantWeight = variant.weight || null;
-      }
-
-      return {
-        productId: product?._id,
-        productName: item.productName,
-        variantId: variant?._id || null,
-        variantAttributes: variantFormattedAttributes,
-        variantImages,
-        variantSku,
-        variantWeight,
-        quantity: item.quantity,
-        unitPrice: item.unitPrice,
-        totalPrice: item.totalPrice,
-      };
-    });
-
-    return {
-      _id: order._id,
-      orderNumber: order.orderNumber,
-      vendor: {
-        _id: order.vendorId?._id,
-        fullName: order.vendorId?.fullName,
-        companyName: order.vendorId?.companyName,
-      },
-      customer: {
-        _id: order.customerId?._id,
-        fullName: order.customerId?.fullName,
-        email: order.customerId?.email,
-        phone: order.customerId?.phone,
-      },
-      totalAmount: order.totalAmount,
-      currency: order.currency,
-      paymentStatus: order.paymentStatus,
-      shippingStatus: order.shippingStatus,
-      shippingMethod: order.shippingMethod,
-      shippingDetails: order.shippingDetails,
-      status: order.status,
-      shippingAddress: order.shippingAddress,
-      createdAt: order.createdAt,
-      items,
-      discountAmount: order.discountAmount,
-      couponUsed: order.couponUsed,
-      shippingCost: order.shippingCost,
-    };
-  });
-
-  const pagination = {
-    currentPage: pageNum,
-    totalPages: Math.ceil(totalOrders / limitNum),
-    totalItems: totalOrders,
-    itemsPerPage: limitNum,
-    hasNext: pageNum < Math.ceil(totalOrders / limitNum),
-    hasPrev: pageNum > 1,
-  };
-
-  const summary = {
-    pendingPayment: {
-      count: pendingCount,
-      totalAmount: pendingAmount,
-    },
-    completed: paidCount,
-    refunded: refundedCount,
-    failed: failedCount,
-  };
-
-  res.status(200).json({
-    success: true,
-    message: "تم جلب جميع الطلبات بنجاح ",
-    summary,
-    count: formattedOrders.length,
-    pagination,
-    data: formattedOrders,
-  });
-});
-
-export const getOrderDetails = asyncHandelr(async (req, res, next) => {
-  const { orderId } = req.params;
-
-  // ✅ التحقق من تسجيل الدخول
-  if (!req.user) {
-    return next(new Error("❌ يجب تسجيل الدخول", { cause: 401 }));
-  }
-
-  // جلب الطلب مع التحقق من الانتماء للبائع
-  const order = await OrderModelUser.findOne({
-    _id: orderId,
-    vendorId: req.user._id, // البائع يشوف طلباته بس
-  })
-    .populate("customerId", "fullName email phone")
-    .populate({
-      path: "items.productId",
-      select: "name sku images mainPrice disCountPrice",
-    })
-    .populate({
-      path: "items.variantId",
-      select: "price disCountPrice attributes images weight sku",
-      populate: [
-        { path: "attributes.attributeId", select: "name type" },
-        { path: "attributes.valueId", select: "value hexCode" },
-      ],
-    })
-    .populate("couponUsed.couponId", "code discountType discountValue")
-    .lean();
-
-  if (!order) {
-    return next(new Error("❌ الطلب غير موجود أو لا يخصك", { cause: 404 }));
-  }
-
-  // تنسيق الـ items زي getVendorOrders
-  const items = order.items.map((item) => {
-    const product = item.productId;
-    const variant = item.variantId;
-
-    let variantFormattedAttributes = null;
-    let variantImages = product?.images || null;
-    let variantSku = product?.sku || null;
-    let variantWeight = product?.weight || null;
-
-    if (variant) {
-      variantFormattedAttributes = variant.attributes.map((attr) => ({
-        name: attr.attributeId?.name || { ar: "غير معروف", en: "Unknown" },
-        type: attr.attributeId?.type || "text",
-        value: attr.valueId?.value || { ar: "غير معروف", en: "Unknown" },
-        hexCode: attr.valueId?.hexCode || null,
-      }));
-      variantImages = variant.images || null;
-      variantSku = variant.sku || null;
-      variantWeight = variant.weight || null;
-    }
-
-    return {
-      productId: product?._id,
-      productName: item.productName,
-      variantId: variant?._id || null,
-      variantAttributes: variantFormattedAttributes,
-      variantImages,
-      variantSku,
-      variantWeight,
-      quantity: item.quantity,
-      unitPrice: item.unitPrice,
-      totalPrice: item.totalPrice,
-    };
-  });
-
-  const formattedOrder = {
-    _id: order._id,
-    orderNumber: order.orderNumber,
-    customer: {
-      _id: order.customerId?._id,
-      fullName: order.customerId?.fullName,
-      email: order.customerId?.email,
-      phone: order.customerId?.phone,
-    },
-    totalAmount: order.totalAmount,
-    currency: order.currency,
-    paymentStatus: order.paymentStatus,
-    shippingStatus: order.shippingStatus,
-    shippingMethod: order.shippingMethod,
-    shippingDetails: order.shippingDetails,
-    status: order.status,
-    shippingAddress: order.shippingAddress,
-    createdAt: order.createdAt,
-    items,
-    discountAmount: order.discountAmount,
-    couponUsed: order.couponUsed,
-    shippingCost: order.shippingCost,
-  };
-
-  res.status(200).json({
-    success: true,
-    message: "تم جلب تفاصيل الطلب بنجاح ",
-    data: formattedOrder,
-  });
-});
-
-export const getOrderDetailsAdmin = asyncHandelr(async (req, res, next) => {
-  const { orderId } = req.params;
-
-  // ✅ صلاحية أدمن فقط
-  if (!req.user || !["Admin", "Owner"].includes(req.user.accountType)) {
-    return next(new Error("❌ غير مصرح لك بعرض تفاصيل الطلب", { cause: 403 }));
-  }
-
-  // جلب الطلب بدون شرط vendorId
-  const order = await OrderModelUser.findById(orderId)
-    .populate("customerId", "fullName email phone")
-    .populate("vendorId", "fullName companyName") // إضافة معلومات التاجر
-    .populate({
-      path: "items.productId",
-      select: "name sku images mainPrice disCountPrice",
-    })
-    .populate({
-      path: "items.variantId",
-      select: "price disCountPrice attributes images weight sku",
-      populate: [
-        { path: "attributes.attributeId", select: "name type" },
-        { path: "attributes.valueId", select: "value hexCode" },
-      ],
-    })
-    .populate("couponUsed.couponId", "code discountType discountValue")
-    .lean();
-
-  if (!order) {
-    return next(new Error("❌ الطلب غير موجود", { cause: 404 }));
-  }
-
-  // تنسيق الـ items نفس الطريقة
-  const items = order.items.map((item) => {
-    const product = item.productId;
-    const variant = item.variantId;
-
-    let variantFormattedAttributes = null;
-    let variantImages = product?.images || null;
-    let variantSku = product?.sku || null;
-    let variantWeight = product?.weight || null;
-
-    if (variant) {
-      variantFormattedAttributes = variant.attributes.map((attr) => ({
-        name: attr.attributeId?.name || { ar: "غير معروف", en: "Unknown" },
-        type: attr.attributeId?.type || "text",
-        value: attr.valueId?.value || { ar: "غير معروف", en: "Unknown" },
-        hexCode: attr.valueId?.hexCode || null,
-      }));
-      variantImages = variant.images || null;
-      variantSku = variant.sku || null;
-      variantWeight = variant.weight || null;
-    }
-
-    return {
-      productId: product?._id,
-      productName: item.productName,
-      variantId: variant?._id || null,
-      variantAttributes: variantFormattedAttributes,
-      variantImages,
-      variantSku,
-      variantWeight,
-      quantity: item.quantity,
-      unitPrice: item.unitPrice,
-      totalPrice: item.totalPrice,
-    };
-  });
-
-  const formattedOrder = {
-    _id: order._id,
-    orderNumber: order.orderNumber,
-    vendor: {
-      _id: order.vendorId?._id,
-      fullName: order.vendorId?.fullName,
-      companyName: order.vendorId?.companyName,
-    },
-    customer: {
-      _id: order.customerId?._id,
-      fullName: order.customerId?.fullName,
-      email: order.customerId?.email,
-      phone: order.customerId?.phone,
-    },
-    totalAmount: order.totalAmount,
-    currency: order.currency,
-    paymentStatus: order.paymentStatus,
-    shippingStatus: order.shippingStatus,
-    shippingMethod: order.shippingMethod,
-    shippingDetails: order.shippingDetails,
-    status: order.status,
-    shippingAddress: order.shippingAddress,
-    createdAt: order.createdAt,
-    items,
-    discountAmount: order.discountAmount,
-    couponUsed: order.couponUsed,
-    shippingCost: order.shippingCost,
-  };
-
-  res.status(200).json({
-    success: true,
-    message: "تم جلب تفاصيل الطلب بنجاح ",
-    data: formattedOrder,
-  });
-});
-
 export const getVendorDashboardStats = asyncHandelr(async (req, res, next) => {
-  // ✅ التحقق من توكن وبائع
   if (!req.user || req.user.accountType !== "vendor") {
     return next(new Error("❌ غير مصرح لك بعرض الإحصائيات", { cause: 403 }));
   }

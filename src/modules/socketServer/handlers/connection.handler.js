@@ -6,7 +6,7 @@ export const handleDisconnection = async (socket, reason) => {
     if (!userId) return;
     removeUserSocket(userId, socket.id);
     console.log(
-      `User disconnected: ${socket.user?.username} (${socket.id}) - Reason: ${reason}`,
+      `User disconnected: ${socket.user?.fullName} (${socket.id}) - Reason: ${reason}`,
     );
   } catch (error) {
     console.error("Error handle disconnection:", error);

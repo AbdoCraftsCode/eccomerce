@@ -1,6 +1,11 @@
 import { ContactChatModel } from "../../../DB/models/contactChatSchema.js";
-import { asyncHandelr } from "../../../utlis/response/error.response.js";
+import { getContactUsErrorMessage } from "../helpers/responseMessages.js";
 
+const throwError = (key, lang, params = {}, status = 400) => {
+  const error = new Error(getContactUsErrorMessage(key, lang, params));
+  error.status = status;
+  throw error;
+};
 
 export const getOrCreateUserChat = async (userId) => {
   let chat = await ContactChatModel.findOne({ user: userId });
@@ -15,8 +20,8 @@ export const getOrCreateUserChat = async (userId) => {
   return chat;
 };
 
-export const getAllChatsForAdmin = asyncHandelr(async (req, res, next) => {
-  const { page = 1, limit = 20 } = req.query;
+export const getAllChatsForAdmin = async (options = {}, lang = "en") => {
+  const { page = 1, limit = 20 } = options;
   const pageNum = parseInt(page);
   const limitNum = parseInt(limit);
   const skip = (pageNum - 1) * limitNum;
@@ -78,10 +83,10 @@ export const getAllChatsForAdmin = asyncHandelr(async (req, res, next) => {
     user: chat.user
       ? {
           _id: chat.user._id,
-          name: chat.user.name,
+          name: chat.user.fullName,
           email: chat.user.email,
           phone: chat.user.phone,
-          avatar: chat.user.avatar,
+          avatar: chat.user.profiePicture,
         }
       : null,
     lastMessage: chat.lastMessagePreview,
@@ -91,9 +96,8 @@ export const getAllChatsForAdmin = asyncHandelr(async (req, res, next) => {
     updatedAt: chat.updatedAt,
   }));
 
-  res.status(200).json({
-    success: true,
-    data: formattedChats,
+  return {
+    chats: formattedChats,
     pagination: {
       page: pageNum,
       limit: limitNum,
@@ -105,42 +109,38 @@ export const getAllChatsForAdmin = asyncHandelr(async (req, res, next) => {
       sortedBy: "lastMessageSentAt",
       order: "desc",
     },
-  });
-});
+  };
+};
 
-export const getChatById = asyncHandelr(async (req, res, next) => {
-  const { chatId } = req.params;
-  const { page = 1, limit = 50 } = req.query;
+export const getChatById = async (chatId, user, options = {}, lang = "en") => {
+  const { page = 1, limit = 50 } = options;
   const pageNum = parseInt(page);
   const limitNum = parseInt(limit);
   const skipNum = (pageNum - 1) * limitNum;
 
   let chat;
 
-  if (req.user.accountType === "Admin") {
+  if (user.accountType === "Admin" || user.accountType === "Owner") {
     chat = await ContactChatModel.findById(chatId)
       .populate({
         path: "user",
-        select: "name email phone avatar",
+        select: "fullName email phone profiePicture",
       })
       .lean();
   } else {
     chat = await ContactChatModel.findOne({
       _id: chatId,
-      user: req.user._id,
+      user: user._id,
     })
       .populate({
         path: "user",
-        select: "name email phone avatar",
+        select: "fullName email phone profiePicture",
       })
       .lean();
   }
 
   if (!chat) {
-    return res.status(404).json({
-      success: false,
-      message: "Chat not found",
-    });
+    throwError("not_found", lang, {}, 404);
   }
 
   const sortedMessages = chat.messages.sort(
@@ -151,20 +151,67 @@ export const getChatById = asyncHandelr(async (req, res, next) => {
 
   const totalMessages = chat.messages.length;
 
-  res.status(200).json({
-    success: true,
-    data: {
-      _id: chat._id,
-      user: chat.user,
-      lastMessageSentAt: chat.lastMessageSentAt,
-      totalMessages,
-      messages: paginatedMessages,
-      pagination: {
-        page: pageNum,
-        limit: limitNum,
-        total: totalMessages,
-        pages: Math.ceil(totalMessages / limitNum),
-      },
+  return {
+    _id: chat._id,
+    user: chat.user,
+    lastMessageSentAt: chat.lastMessageSentAt,
+    totalMessages,
+    messages: paginatedMessages,
+    pagination: {
+      page: pageNum,
+      limit: limitNum,
+      total: totalMessages,
+      pages: Math.ceil(totalMessages / limitNum),
     },
-  });
-});
+  };
+};
+
+export const getUserChat = async (userId, options = {}, lang = "en") => {
+  const { page = 1, limit = 50 } = options;
+  const pageNum = parseInt(page);
+  const limitNum = parseInt(limit);
+  const skipNum = (pageNum - 1) * limitNum;
+
+  let chat = await ContactChatModel.findOne({ user: userId })
+    .populate({
+      path: "user",
+      select: "fullName email phone profiePicture",
+    })
+    .lean();
+
+  if (!chat) {
+    chat = await ContactChatModel.create({
+      user: userId,
+      messages: [],
+    });
+
+    chat = await ContactChatModel.findById(chat._id)
+      .populate({
+        path: "user",
+        select: "fullName email phone profiePicture",
+      })
+      .lean();
+  }
+
+  const sortedMessages = chat.messages.sort(
+    (a, b) => new Date(b.createdAt) - new Date(a.createdAt),
+  );
+
+  const paginatedMessages = sortedMessages.slice(skipNum, skipNum + limitNum);
+
+  const totalMessages = chat.messages.length;
+
+  return {
+    _id: chat._id,
+    user: chat.user,
+    lastMessageSentAt: chat.lastMessageSentAt,
+    totalMessages,
+    messages: paginatedMessages,
+    pagination: {
+      page: pageNum,
+      limit: limitNum,
+      total: totalMessages,
+      pages: Math.ceil(totalMessages / limitNum),
+    },
+  };
+};

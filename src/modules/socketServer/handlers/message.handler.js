@@ -1,12 +1,13 @@
 import { ContactChatModel } from "../../../DB/models/contactChatSchema.js";
 import { getUserSocket } from "../helpers/storeSockets.helper.js";
 import { getOrCreateUserChat } from "../../contactUs/services/contactUs.service.js";
+import { sendChatNotification } from "../../contactUs/helpers/notification.helper.js";
 
 export const handleSendMessage = async (io, socket, data) => {
   try {
     const { content, image, voice, type = "text", chatId } = data;
     const user = socket.user;
-    const isAdmin = user.accountType === "admin";
+    const isAdmin = user.accountType === "Admin";
 
     if (type === "text" && !content) {
       socket.emit("message-error", {
@@ -99,6 +100,14 @@ export const handleSendMessage = async (io, socket, data) => {
           message: messageData,
         });
       }
+
+      sendChatNotification({
+        senderType: "admin",
+        senderName: user.fullName || "Support",
+        chatId: chat._id,
+        userId: chat.user,
+      }).catch((err) => console.error("FCM notification error:", err));
+
       socket.emit("message-sent", {
         success: true,
         message: messageData,
@@ -109,8 +118,15 @@ export const handleSendMessage = async (io, socket, data) => {
         message: messageData,
       });
 
+      sendChatNotification({
+        senderType: "user",
+        senderName: user.fullName || "User",
+        chatId: chat._id,
+        userId: user._id,
+      }).catch((err) => console.error("FCM notification error:", err));
+
       const adminSockets = Array.from(io.sockets.sockets.values()).filter(
-        (sock) => sock.user?.accountType === "admin",
+        (sock) => sock.user?.accountType === "Admin",
       );
 
       adminSockets.forEach((adminSocket) => {

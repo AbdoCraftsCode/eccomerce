@@ -24,7 +24,7 @@ export const authMiddleware = async (socket, next) => {
     socket.user = user;
 
     console.log(
-      `User authenticated: ${socket.user.username} (${socket.user._id})`,
+      `User authenticated: ${socket.user.fullName} (${socket.user._id})`,
     );
     next();
   } catch (error) {

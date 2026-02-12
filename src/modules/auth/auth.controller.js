@@ -3,17 +3,11 @@ import { validation } from "../../middlewere/validation.middlewere.js";
 import * as validators from "../auth/auth.validate.js";
 import {
   addAuthorizedUser,
-  addProduct,
-  addSection,
   confirmOTP,
   createAdminUser,
-  createProduct,
   createUserByOwner,
   deleteAdminUser,
   deleteAppSettings,
-  deleteProduct,
-  deleteProducts,
-  deleteSection,
   deleteUserByAdmin,
   deleteUserByOwner,
   forgetPassword,
@@ -32,8 +26,6 @@ import {
   signupServiceProvider,
   signupwithGmail,
   updateAdminUser,
-  updateProduct,
-  updateSection,
   updateUser,
   updateUserByOwner,
   uploadImages,
@@ -44,7 +36,6 @@ import {
   getAdminCoupons,
   createAdminCoupon,
   deleteAdminCoupon,
-  applyCoupon,
   becomeSeller,
   confirOtp,
   createAttribute,
@@ -67,7 +58,6 @@ import {
   forgetPasswordphone,
   forgetPasswordphoneadmin,
   getAllNotificationsAdmin,
-  getAllOrdersAdmin,
   getProductByIdForEndUser,
   GetAllProducts,
   getAllVendors,
@@ -87,10 +77,7 @@ import {
   getMyCompactProfile,
   getMyCoupons,
   getMyNotifications,
-  GetMyOrders,
   getMyProfile,
-  getOrderDetails,
-  getOrderDetailsAdmin,
   GetProductById,
   getProducts,
   GetProductsByCategory,
@@ -99,11 +86,9 @@ import {
   getVendorDashboardStats,
   getVendorDetailedStats,
   getVendorDetails,
-  getVendorOrders,
   getVendorSalesChart,
   login,
   loginAdmin,
-  loginRestaurant,
   loginwithGmail,
   loginWithPassword,
   MarkAllNotificationsAsRead,
@@ -163,25 +148,14 @@ routr.post(
 routr.post(
   "/CreateProdut",
   authentication(),
-
   uploadCloudFile(fileValidationTypes.image).array("images"),
   CreateProdut,
 );
 
 routr.post(
   "/createVariant",
-  // authentication(),
   uploadCloudFile(fileValidationTypes.image).array("images"),
   createVariant,
-);
-
-routr.post(
-  "/addProduct/:sectionId",
-  authentication(),
-  uploadCloudFile([...fileValidationTypes.image]).fields([
-    { name: "images", maxCount: 10 },
-  ]),
-  addProduct,
 );
 
 routr.post("/signup", signup);
@@ -207,12 +181,6 @@ routr.patch("/updateUserByOwner/:id", authentication(), updateUserByOwner);
 routr.delete("/deleteUserByOwner/:userId", authentication(), deleteUserByOwner);
 
 routr.post("/verifyOTP", verifyOTP);
-
-routr.patch("/updateSection/:id", authentication(), updateSection);
-
-routr.delete("/deleteSection/:id", authentication(), deleteSection);
-
-routr.delete("/deleteProducts/:id", authentication(), deleteProducts);
 
 routr.post("/createOrUpdateSettings", createOrUpdateSettings);
 routr.post(
@@ -249,18 +217,7 @@ routr.get("/getAttributeValues/:attributeId", getAttributeValues);
 
 routr.delete("/deleteAppSettings", deleteAppSettings);
 
-routr.delete("/deleteProduct/:id", deleteProduct);
-
 routr.get("/getAppSettingsAdmin", getAppSettingsAdmin);
-
-routr.patch(
-  "/updateProduct/:id",
-  authentication(),
-  uploadCloudFile([...fileValidationTypes.image]).fields([
-    { name: "images", maxCount: 10 },
-  ]),
-  updateProduct,
-);
 
 routr.get("/getVariants/:productId", getVariants);
 
@@ -275,10 +232,8 @@ routr.put("/updateAttribute/:attributeId", updateAttribute);
 routr.post("/resetPassword", resetPassword);
 routr.post("/login", login);
 
-routr.post("/loginRestaurant", loginRestaurant);
 routr.post("/resendOTP", resendOTP);
 routr.patch("/resetPasswordphone", resetPasswordphone);
-
 routr.put(
   "/UpdateProduct/:productId",
   uploadCloudFile(fileValidationTypes.image).array("images"),
@@ -289,7 +244,6 @@ routr.delete("/DeleteProduct/:productId", DeleteProduct);
 
 routr.put(
   "/updateVariant/:variantId",
-  // authentication(),
   uploadCloudFile(fileValidationTypes.image).array("images"),
   updateVariant,
 );
@@ -302,22 +256,12 @@ routr.get("/getCategoryTreeById/:categoryId", getCategoryTreeById);
 
 routr.get("/GetProductById/:productId", authentication(), GetProductById);
 
-routr.get("/getOrderDetails/:orderId", authentication(), getOrderDetails);
-
 routr.post("/verifyOtpLogin", verifyOtpLogin);
 routr.post("/becomeSeller", becomeSeller);
 
 routr.post("/sendOtpforeach", sendOtpforeach);
 
 routr.delete("/deleteUserByAdmin/userId", deleteUserByAdmin);
-
-routr.get("/getAllOrdersAdmin", authentication(), getAllOrdersAdmin);
-
-routr.get(
-  "/getOrderDetailsAdmin/:orderId",
-  authentication(),
-  getOrderDetailsAdmin,
-);
 
 routr.get("/getVendorDetails/:vendorId", authentication(), getVendorDetails);
 
@@ -361,12 +305,6 @@ routr.get("/getAllServiceProviders", getAllServiceProviders);
 routr.post("/createCoupon", authentication(), createCoupon);
 
 routr.get("/getMyCoupons", authentication(), getMyCoupons);
-
-routr.get("/GetMyOrders", authentication(), GetMyOrders);
-
-routr.post("/applyCoupon", authentication(), applyCoupon);
-
-routr.get("/getVendorOrders", authentication(), getVendorOrders);
 
 routr.get(
   "/getVendorDashboardStats",
@@ -464,6 +402,5 @@ routr.patch(
 );
 
 routr.get("/getAllAdminUsers", authentication(), getAllAdminUsers);
-
 
 export default routr;

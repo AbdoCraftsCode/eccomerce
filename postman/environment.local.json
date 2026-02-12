@@ -1,0 +1,37 @@
+{
+  "id": "contact-us-local-environment",
+  "name": "Contact Us - Local",
+  "values": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:3000/api/v1",
+      "type": "default",
+      "enabled": true
+    },
+    {
+      "key": "authToken",
+      "value": "",
+      "type": "secret",
+      "enabled": true
+    },
+    {
+      "key": "adminToken",
+      "value": "",
+      "type": "secret",
+      "enabled": true
+    },
+    {
+      "key": "language",
+      "value": "en",
+      "type": "default",
+      "enabled": true
+    },
+    {
+      "key": "socketUrl",
+      "value": "http://localhost:3000",
+      "type": "default",
+      "enabled": true
+    }
+  ],
+  "_postman_variable_scope": "environment"
+}

@@ -18,12 +18,12 @@ export const setupConnectionEvents = (io, socket) => {
     }
 
     setUserSocket(userId, socket.id);
-    console.log(`User connected: ${socket.user.username} (${socket.id})`);
+    console.log(`User connected: ${socket.user.fullName} (${socket.id})`);
     socket.emit("connection-success", {
       success: true,
       message: "Connected to chat server",
       userId: socket.user._id,
-      username: socket.user.username,
+      username: socket.user.fullName,
     });
 
     socket.on("disconnect", async (reason) => {
