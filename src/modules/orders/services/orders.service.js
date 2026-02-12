@@ -441,14 +441,18 @@ export const getUserOrders = async (userId, options = {}) => {
     limit = 10,
     sort = "createdAt",
     order = "desc",
-    paymentStatus,
+    orderStatus,
     lang = "en",
   } = options;
 
   let query = { customerId: userId };
 
-  if (paymentStatus) {
-    query.paymentStatus = paymentStatus;
+  if (orderStatus) {
+    if (orderStatus === "completed") {
+      query.status = { $in: ["delivered", "cancelled"] };
+    } else if (orderStatus === "ongoing") {
+      query.status = { $in: ["pending", "confirmed", "processing", "shipped"] };
+    }
   }
 
   const skip = (page - 1) * limit;

@@ -5,14 +5,14 @@ import { getUserLanguage } from "../../utlis/localization/langUserHelper.js";
 
 export const getUserOrders = asyncHandelr(async (req, res) => {
   const lang = getUserLanguage(req);
-  const { page, limit, sort, order, paymentStatus } = req.query;
+  const { page, limit, sort, order, orderStatus } = req.query;
 
   const result = await ordersService.getUserOrders(req.user._id, {
     page,
     limit,
     sort,
     order,
-    paymentStatus,
+    orderStatus,
     lang,
   });
 
