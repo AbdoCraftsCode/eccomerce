@@ -75,7 +75,7 @@ export const getProductsWithFilters = async (filters, userCurrency, lang = "en")
           })
           .populate({
             path: "attributes.valueId",
-            select: "name hexCode",
+            select: "value hexCode",
           })
           .lean();
 
@@ -83,7 +83,7 @@ export const getProductsWithFilters = async (filters, userCurrency, lang = "en")
           ...variant,
           attributes: variant.attributes.map((attr) => ({
             attributeName: attr.attributeId?.name || {},
-            valueName: attr.valueId?.name || {},
+            valueName: attr.valueId?.value || {},
             hexCode: attr.valueId?.hexCode || null,
           })),
         }));
@@ -155,7 +155,7 @@ export const getProductById = async (productId, userCurrency, lang = "en") => {
       })
       .populate({
         path: "attributes.valueId",
-        select: "name hexCode",
+        select: "value hexCode",
       })
       .lean();
 
@@ -163,7 +163,7 @@ export const getProductById = async (productId, userCurrency, lang = "en") => {
       ...variant,
       attributes: variant.attributes.map((attr) => ({
         attributeName: attr.attributeId?.name || {},
-        valueName: attr.valueId?.name || {},
+        valueName: attr.valueId?.value || {},
         hexCode: attr.valueId?.hexCode || null,
       })),
     }));

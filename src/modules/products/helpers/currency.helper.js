@@ -1,9 +1,7 @@
 import { getExchangeRate } from "../../auth/service/changeCurrencyHelper.service.js";
 import { throwError } from "./responseMessages.js";
 
-/**
- * Convert single product prices with provided exchange rate
- */
+
 const convertProductWithRate = (product, targetCurrency, exchangeRate) => {
   const productCopy = JSON.parse(JSON.stringify(product));
 

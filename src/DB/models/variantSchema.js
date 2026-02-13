@@ -45,7 +45,7 @@ const variantSchema = new mongoose.Schema(
     },
     weight: { type: String },
     sku: { type: String, unique: true },
-    disCountPrice: { type: String },
+    disCountPrice: { type: Number },
     images: [
       {
         url: String,
