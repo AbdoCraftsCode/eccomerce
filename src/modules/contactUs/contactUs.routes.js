@@ -10,10 +10,28 @@ import {
   getChatByIdSchema,
   getUserChatSchema,
 } from "./contactUs.validation.js";
-import { uploadCloudFile, fileValidationTypes } from "../../utlis/multer/cloud.multer.js";
+import {
+  uploadCloudFile,
+  fileValidationTypes,
+} from "../../utlis/multer/cloud.multer.js";
 
-const imageUpload = uploadCloudFile([...fileValidationTypes.image]).single("image");
-const voiceUpload = uploadCloudFile(["audio/mpeg", "audio/mp3", "audio/wav", "audio/ogg", "audio/webm"]).single("voice");
+const imageUpload = uploadCloudFile([...fileValidationTypes.image]).single(
+  "image",
+);
+const voiceUpload = uploadCloudFile([
+  "audio/mpeg",
+  "audio/mp3",
+  "audio/wav",
+  "audio/ogg",
+  "audio/webm",
+  "audio/mp4",
+  "audio/3gpp2",
+  "audio/aac",
+  "audio/x-m4a",
+  "audio/flac",
+  "audio/x-wav",
+  "audio/3gpp",
+]).single("voice");
 
 const router = Router();
 

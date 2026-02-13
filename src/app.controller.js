@@ -26,6 +26,7 @@ import puahNotificationsRoutes from "./modules/pushNotificationsAdmin/notificati
 import invoicesRoutes from "./modules/invoice/invoice.routes.js";
 import ordersRoutes from "./modules/orders/orders.routes.js";
 import contactUsRoutes from "./modules/contactUs/contactUs.routes.js";
+import productsRoutes from "./modules/products/products.routes.js";
 
 
 import cors from "cors";
@@ -56,6 +57,7 @@ export const bootstap = (app, express) => {
   app.use("/pushNotifications", puahNotificationsRoutes);
   app.use("/orders",ordersRoutes)
   app.use("/contactUs",contactUsRoutes)
+  app.use("/products", productsRoutes)
 
   app.use("/invoice", invoicesRoutes);
 

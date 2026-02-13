@@ -1349,7 +1349,7 @@ export const getProducts = asyncHandelr(async (req, res, next) => {
     status,
     page = 1,
     limit = 10,
-    search, // ← فلتر جديد: بحث بالاسم أو الـ SKU
+    search,
   } = req.query;
 
   const pageNum = Math.max(1, parseInt(page) || 1);
@@ -1404,10 +1404,9 @@ export const getProducts = asyncHandelr(async (req, res, next) => {
     filter.categories = { $in: allCategoryIds };
   }
 
-  // ✅ فلتر البحث الجديد (بالاسم أو الـ SKU)
   if (search) {
     const searchTerm = search.trim();
-    const searchRegex = new RegExp(searchTerm, "i"); // بحث غير حساس لحالة الحروف
+    const searchRegex = new RegExp(searchTerm, "i");
 
     filter.$or = [
       { "name.ar": searchRegex },
@@ -1416,7 +1415,6 @@ export const getProducts = asyncHandelr(async (req, res, next) => {
     ];
   }
 
-  // ✅ جلب المنتجات مع الفلترة والـ pagination
   let productsQuery = ProductModellll.find(filter)
     .populate({
       path: "categories",
@@ -1437,10 +1435,7 @@ export const getProducts = asyncHandelr(async (req, res, next) => {
 
   let products = await productsQuery.lean();
 
-  // باقي الكود زي ما هو بالضبط (stock، variant، summary، pagination، children)
-  // ... (كل الكود من variantStockMap لحد الـ res.json)
 
-  // ✅ جلب stock الكلي من الـ variants
   const productsWithVariants = products
     .filter((p) => p.hasVariants)
     .map((p) => p._id);
@@ -2377,8 +2372,8 @@ export const filterProducts = asyncHandelr(async (req, res, next) => {
     lang = "en",
     page = 1,
     limit = 10,
-    color, // مثال: "أحمر" أو "Red"
-    size, // مثال: "42" أو "M"
+    color, 
+    size,
   } = req.query;
 
   const pageNum = Math.max(1, parseInt(page) || 1);
@@ -2607,7 +2602,6 @@ export const GetAllProducts = asyncHandelr(async (req, res, next) => {
     status: "published",
   });
 
-  // جلب المنتجات مع pagination + populate
   let products = await ProductModellll.find({
     isActive: true,
     status: "published",
@@ -2628,7 +2622,6 @@ export const GetAllProducts = asyncHandelr(async (req, res, next) => {
     .limit(limitNum)
     .lean();
 
-  // جلب الـ variants فقط للمنتجات الموجودة في الصفحة الحالية
   const productIdsWithVariants = products
     .filter((p) => p.hasVariants)
     .map((p) => p._id);

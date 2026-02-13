@@ -97,7 +97,6 @@ export const createOrderforUser = async (
     const shippingAddress = validateShippingAddress(user, shippingAddressId);
     validatePaymentMethod(paymentMethod);
 
-    // Get customer currency details
     const customerCurrencyCode = user.currency?.code || "USD";
     const customerCurrency = user.currency
       ? {
@@ -113,7 +112,6 @@ export const createOrderforUser = async (
     const cart = await getCartWithDetails(customerId);
     validateCart(cart);
 
-    // Step 3: Fetch and validate products with session (transactional read)
     const products = await validateAndFetchProducts(cart.items, session);
     const productsMap = createProductsMap(products);
 
