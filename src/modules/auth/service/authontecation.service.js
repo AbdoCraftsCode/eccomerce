@@ -828,8 +828,8 @@ export const getCategories = asyncHandelr(async (req, res, next) => {
         totalPrice: {
           $sum: {
             $cond: [
-              { $regexMatch: { input: "$mainPrice", regex: /^\d+(\.\d+)?$/ } },
-              { $toDouble: "$mainPrice" },
+              { $ifNull: ["$mainPrice", false] },
+              "$mainPrice",
               0,
             ],
           },
@@ -983,8 +983,8 @@ export const getCategoryTreeById = asyncHandelr(async (req, res, next) => {
         totalPrice: {
           $sum: {
             $cond: [
-              { $regexMatch: { input: "$mainPrice", regex: /^\d+(\.\d+)?$/ } },
-              { $toDouble: "$mainPrice" },
+              { $ifNull: ["$mainPrice", false] },
+              "$mainPrice",
               0,
             ],
           },
@@ -2275,7 +2275,7 @@ export const updateVariant = asyncHandelr(async (req, res, next) => {
 
   // ✅ إضافة: تحديث disCountPrice
   if (disCountPrice !== undefined) {
-    variant.disCountPrice = disCountPrice.trim() || null;
+    variant.disCountPrice = disCountPrice || null;
   }
 
   // ✅ تحديث الصور (استبدال كامل: حذف القديمة + رفع الجديدة)

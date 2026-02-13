@@ -2,11 +2,28 @@ import { asyncHandelr } from "../../utlis/response/error.response.js";
 import * as productsService from "./services/products.service.js";
 import { getResponseMessage } from "./helpers/responseMessages.js";
 import { getUserLanguage } from "../../utlis/localization/langUserHelper.js";
+import { getCurrencyByCode } from "../currency/services/currency.service.js";
 
 
 export const getProducts = asyncHandelr(async (req, res) => {
   const lang = getUserLanguage(req);
-  const userCurrency = req.user?.currency || { code: "USD", name: { en: "US Dollar", ar: "دولار أمريكي" }, symbol: "$" };
+  
+  // Get currency code from user or default to USD
+  let currencyCode = "USD";
+  if (req.user?.currency) {
+    // Handle if currency is populated object or just ID (though usually populated)
+    currencyCode = req.user.currency.code || req.user.currency;
+    if (typeof currencyCode !== 'string') currencyCode = "USD"; // fallback
+  }
+
+  // Fetch full localized currency object
+  let userCurrency;
+  try {
+    userCurrency = await getCurrencyByCode(currencyCode, lang);
+  } catch (error) {
+    // specific error handling or fallback
+    userCurrency = { code: "USD", name: lang==='ar' ? "دولار أمريكي" : "US Dollar", symbol: "$" };
+  }
 
   const filters = {
     categoryId: req.query.categoryId,
@@ -34,7 +51,20 @@ export const getProducts = asyncHandelr(async (req, res) => {
  */
 export const getProductById = asyncHandelr(async (req, res) => {
   const lang = getUserLanguage(req);
-  const userCurrency = req.user?.currency || { code: "USD", name: { en: "US Dollar", ar: "دولار أمريكي" }, symbol: "$" };
+  
+  // Get currency code from user or default to USD
+  let currencyCode = "USD";
+  if (req.user?.currency) {
+    currencyCode = req.user.currency.code || req.user.currency;
+    if (typeof currencyCode !== 'string') currencyCode = "USD";
+  }
+
+  let userCurrency;
+  try {
+      userCurrency = await getCurrencyByCode(currencyCode, lang);
+  } catch (error) {
+      userCurrency = { code: "USD", name: lang==='ar' ? "دولار أمريكي" : "US Dollar", symbol: "$" };
+  }
 
   const product = await productsService.getProductById(req.params.productId, userCurrency, lang);
 

@@ -38,18 +38,18 @@ export const convertProductPrices = async (products, countryCode) => {
         if (productCopy.mainPrice) {
           const originalPrice = parseFloat(productCopy.mainPrice);
           if (!isNaN(originalPrice)) {
-            productCopy.mainPrice = (originalPrice * exchangeRate)
-              .toFixed(2)
-              .toString();
+            productCopy.mainPrice = parseFloat(
+              (originalPrice * exchangeRate).toFixed(2)
+            );
           }
         }
 
         if (productCopy.disCountPrice) {
           const discountPrice = parseFloat(productCopy.disCountPrice);
           if (!isNaN(discountPrice)) {
-            productCopy.disCountPrice = (discountPrice * exchangeRate)
-              .toFixed(2)
-              .toString();
+            productCopy.disCountPrice = parseFloat(
+              (discountPrice * exchangeRate).toFixed(2)
+            );
           }
         }
 
@@ -61,17 +61,17 @@ export const convertProductPrices = async (products, countryCode) => {
             if (variantCopy.price) {
               const originalVariantPrice = parseFloat(variantCopy.price);
               if (!isNaN(originalVariantPrice)) {
-                variantCopy.price = (originalVariantPrice * exchangeRate)
-                  .toFixed(2)
-                  .toString();
+                variantCopy.price = parseFloat(
+                  (originalVariantPrice * exchangeRate).toFixed(2)
+                );
               }
             }
             if (variantCopy.disCountPrice) {
               const variantDiscountPrice = parseFloat(variantCopy.disCountPrice);
               if (!isNaN(variantDiscountPrice)) {
-                variantCopy.disCountPrice = (variantDiscountPrice * exchangeRate)
-                  .toFixed(2)
-                  .toString();
+                variantCopy.disCountPrice = parseFloat(
+                  (variantDiscountPrice * exchangeRate).toFixed(2)
+                );
               }
             }
             return variantCopy;

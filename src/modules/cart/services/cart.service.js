@@ -171,14 +171,14 @@ export const convertCartToUserPreferences = async (
       if (product.mainPrice) {
         const val = parseFloat(product.mainPrice);
         if (!isNaN(val)) {
-          product.mainPrice = (val * exchangeRate).toFixed(2).toString();
+          product.mainPrice = (val * exchangeRate).toFixed(2);
         }
       }
 
       if (product.disCountPrice) {
         const val = parseFloat(product.disCountPrice);
         if (!isNaN(val)) {
-          product.disCountPrice = (val * exchangeRate).toFixed(2).toString();
+          product.disCountPrice = (val * exchangeRate).toFixed(2);
         }
       }
 
@@ -193,14 +193,14 @@ export const convertCartToUserPreferences = async (
       if (variant.price) {
         const val = parseFloat(variant.price);
         if (!isNaN(val)) {
-          variant.price = (val * exchangeRate).toFixed(2).toString();
+          variant.price = (val * exchangeRate).toFixed(2);
         }
       }
 
       if (variant.disCountPrice) {
         const val = parseFloat(variant.disCountPrice);
         if (!isNaN(val)) {
-          variant.disCountPrice = (val * exchangeRate).toFixed(2).toString();
+          variant.disCountPrice = (val * exchangeRate).toFixed(2);
         }
       }
     }

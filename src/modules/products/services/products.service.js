@@ -54,7 +54,7 @@ export const getProductsWithFilters = async (filters, userCurrency, lang = "en")
 
   let products = await ProductModellll.find(query)
     .populate("currency", "code name symbol")
-    .populate("categories", "name slug")
+    .populate("categories", "name slug description")
     .populate("brands", "name slug")
     .populate("createdBy", "fullName")
     .sort({ createdAt: -1 })
@@ -94,7 +94,6 @@ export const getProductsWithFilters = async (filters, userCurrency, lang = "en")
     })
   );
 
-  // Convert prices to user currency with caching
   let convertedProducts = await convertProductsArrayToCurrency(
     productsWithVariants,
     userCurrency,
