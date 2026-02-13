@@ -47,6 +47,7 @@ export const getMaxDailySales = asyncHandelr(async (req, res) => {
     },
   });
 });
+
 //=========================
 export const getTodayHourlyStats = asyncHandelr(async (req, res) => {
   const data = await getTodayHourlyStatsService();

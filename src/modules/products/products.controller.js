@@ -8,20 +8,16 @@ import { getCurrencyByCode } from "../currency/services/currency.service.js";
 export const getProducts = asyncHandelr(async (req, res) => {
   const lang = getUserLanguage(req);
   
-  // Get currency code from user or default to USD
   let currencyCode = "USD";
   if (req.user?.currency) {
-    // Handle if currency is populated object or just ID (though usually populated)
     currencyCode = req.user.currency.code || req.user.currency;
-    if (typeof currencyCode !== 'string') currencyCode = "USD"; // fallback
+    if (typeof currencyCode !== 'string') currencyCode = "USD"; 
   }
 
-  // Fetch full localized currency object
   let userCurrency;
   try {
     userCurrency = await getCurrencyByCode(currencyCode, lang);
   } catch (error) {
-    // specific error handling or fallback
     userCurrency = { code: "USD", name: lang==='ar' ? "دولار أمريكي" : "US Dollar", symbol: "$" };
   }
 

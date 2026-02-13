@@ -1,7 +1,10 @@
+import mongoose from "mongoose";
 import User from "../../../DB/models/User.model.js";
 import { OrderModelUser } from "../../../DB/models/orderSchemaUser.model.js";
 import { SubOrderModel } from "../../../DB/models/subOrdersSchema.model.js";
 import { ProductModellll } from "../../../DB/models/productSchemaaaa.js";
+import { transformSubOrderResponse } from "../helpers/response.helpers.js";
+
 export const getCustomersForVendorService = async (vendorId) => {
     if (!vendorId) {
       throw new Error("Vendor ID is required");
@@ -45,7 +48,7 @@ export const getCustomersForVendorService = async (vendorId) => {
           phone: { $first: "$customer.phone" },   // ✅ added
           country: { $first: "$customer.country" },
           numSubOrders: { $sum: 1 },
-          totalSpent: { $sum: "$totalAmount" },
+          totalSpent: { $sum: "$totalAmount.vendor" }, // ✅ Use vendor price
         },
       },
       {
@@ -91,7 +94,7 @@ export const getVendorStatsByDateRangeService = async (
       {
         $group: {
           _id: null,
-          totalSales: { $sum: "$totalAmount" },
+          totalSales: { $sum: "$totalAmount.vendor" }, // ✅ Use vendor price
           totalOrders: { $sum: 1 },
         },
       },
@@ -112,7 +115,7 @@ export const getVendorStatsByDateRangeService = async (
     );
   };
   //===============================
-  export const getSubOrdersByVendorIdService = async (vendorId, query) => {
+  export const getSubOrdersByVendorIdService = async (vendorId, query, lang = "en") => {
     if (!vendorId) {
       throw new Error("Vendor ID is required");
     }
@@ -129,8 +132,12 @@ export const getVendorStatsByDateRangeService = async (
     const limitNum = Math.min(100, Math.max(1, parseInt(limit)));
     const skip = (pageNum - 1) * limitNum;
   
-    // 🔹 Build dynamic filter
-    const filter = { vendorId };
+    // 🔹 Build dynamic filter - ensure vendorId is ObjectId
+    const filter = { 
+      vendorId: mongoose.Types.ObjectId.isValid(vendorId) 
+        ? new mongoose.Types.ObjectId(vendorId) 
+        : vendorId 
+    };
   
     if (paymentStatus) {
       filter.paymentStatus = paymentStatus;
@@ -147,14 +154,10 @@ export const getVendorStatsByDateRangeService = async (
     }
   
     // 🔹 Fetch suborders + count
+    // Note: items contain embedded product/variant objects, not references
     const [subOrders, total] = await Promise.all([
       SubOrderModel.find(filter)
         .populate("orderId", "orderNumber createdAt paymentStatus shippingStatus")
-        .populate({
-          path: "items.productId", // nested populate inside items array
-          select: "name mainPrice",
-          model: "Producttttt",
-        })
         .sort({ createdAt: -1 })
         .skip(skip)
         .limit(limitNum)
@@ -163,15 +166,20 @@ export const getVendorStatsByDateRangeService = async (
       SubOrderModel.countDocuments(filter),
     ]);
   
+    // ✅ Transform suborders with localization and VENDOR pricing
+    const formattedSubOrders = subOrders.map((subOrder) =>
+      transformSubOrderResponse(subOrder, lang, "vendor")
+    );
+  
     return {
-      count: subOrders.length,
+      count: formattedSubOrders.length,
       pagination: {
         currentPage: pageNum,
         totalPages: Math.ceil(total / limitNum),
         totalItems: total,
         itemsPerPage: limitNum,
       },
-      data: subOrders,
+      data: formattedSubOrders,
     };
   };
   //==============================
@@ -194,7 +202,7 @@ export const getVendorStatsByDateRangeService = async (
           numCustomers: { $addToSet: "$orderId" }, // we will count unique customers later
           numProducts: { $sum: "$items.quantity" },
           totalSales: { $sum: 1 }, // total suborders
-          totalRevenue: { $sum: "$totalAmount" },
+          totalRevenue: { $sum: "$totalAmount.vendor" }, // ✅ Use vendor price
         },
       },
       {
@@ -223,7 +231,7 @@ export const getVendorStatsByDateRangeService = async (
       totalRevenue: 0,
     };
   };
-  //==========================
+  //============================
   export const getVendorDashboardStatsService = async (user) => {
     if (!user || user.accountType !== "vendor") {
       throw new Error("Only vendor can get dashboard stats");
@@ -238,7 +246,7 @@ export const getVendorStatsByDateRangeService = async (
       createdBy: vendorId,
     });
   
-    // ================= TOTAL REVENUE =================
+    // ================= TOTAL REVENUE (VENDOR PRICE) =================
     const revenueAgg = await SubOrderModel.aggregate([
       {
         $match: {
@@ -249,27 +257,28 @@ export const getVendorStatsByDateRangeService = async (
       {
         $group: {
           _id: null,
-          totalRevenue: { $sum: "$totalAmount" },
+          totalRevenue: { $sum: "$totalAmount.vendor" }, // ✅ Use vendor price
         },
       },
     ]);
   
     const totalRevenue = revenueAgg.length ? revenueAgg[0].totalRevenue : 0;
   
-    // ================= POPULAR PRODUCTS (UNCHANGED) =================
-    const popularProducts = await OrderModelUser.aggregate([
+    // ================= POPULAR PRODUCTS (VENDOR PRICE) =================
+    const popularProducts = await SubOrderModel.aggregate([
       {
         $match: {
+          vendorId,
           paymentStatus: "paid",
         },
       },
       { $unwind: "$items" },
       {
         $group: {
-          _id: "$items.productId",
+          _id: "$items.product._id",
           totalSold: { $sum: "$items.quantity" },
-          totalRevenue: { $sum: "$items.totalPrice" },
-          productName: { $first: "$items.productName" },
+          totalRevenue: { $sum: "$items.totalPrice.vendor" }, // ✅ Use vendor price
+          productName: { $first: "$items.product.name" },
         },
       },
       { $sort: { totalSold: -1 } },
@@ -299,7 +308,7 @@ export const getVendorStatsByDateRangeService = async (
       {
         $group: {
           _id: null,
-          totalSales: { $sum: "$totalAmount" },
+          totalSales: { $sum: "$totalAmount.vendor" }, // ✅ Use vendor price
           ordersCount: { $sum: 1 },
         },
       },
@@ -342,7 +351,7 @@ export const getVendorStatsByDateRangeService = async (
       {
         $group: {
           _id: null,
-          totalSales: { $sum: "$totalAmount" },
+          totalSales: { $sum: "$totalAmount.vendor" }, // ✅ Use vendor price
           ordersCount: { $sum: 1 },
         },
       },
@@ -361,6 +370,6 @@ export const getVendorStatsByDateRangeService = async (
       totalRevenue,
       latestDaySales,
       latestMonthSales,
-      popularProducts, // unchanged ✅
+      popularProducts,
     };
   };

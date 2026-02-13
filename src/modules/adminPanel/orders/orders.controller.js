@@ -8,24 +8,23 @@ import { getLastMonthSalesAndOrdersService  } from "./orders.service.js";
 import { getCustomersByVendorService  } from "./orders.service.js";
 import { getLastDayPaymentStatsService ,getLastMonthPaymentStatsService  } from "./orders.service.js";
 import { getUserLanguage } from "../../../utlis/localization/langUserHelper.js";
+import { getMessage } from "../helpers/responseMessages.js";
 
 export const getAllCustomers = asyncHandelr(async (req, res) => {
-  const lang = getUserLanguage(req);
-  const customers = await getAllCustomersService();
+  const result = await getAllCustomersService(req.query);
   res.status(200).json({
     success: true,
-    count: customers.length,
-    data: customers,
+    ...result,
   });
 });
 //----------------------------------------------------------------------------
 export const getAllOrders = asyncHandelr(async (req, res) => {
   const lang = getUserLanguage(req);
-  const result = await getAllOrdersService(req.query);
+  const result = await getAllOrdersService(req.query, lang);
 
   res.status(200).json({
     success: true,
-    message: (lang)?"Orders fetched successfully":"تم استلام الطلبات بنجاح",
+    message: getMessage("orders_fetched_successfully", lang),
     ...result,
   });
 });
@@ -33,19 +32,20 @@ export const getAllOrders = asyncHandelr(async (req, res) => {
 export const getSubOrdersByOrderId = asyncHandelr(async (req, res, next) => {
   const lang = getUserLanguage(req);
   const { orderId } = req.params;
-  console.log(orderId);
+  
   if (!orderId) {
-    return next(new Error("Order ID is required", { cause: 400 }));
+    return next(new Error(getMessage("order_id_required", lang), { cause: 400 }));
   }
 
-  const subOrders = await getSubOrdersByOrderIdService(orderId);
+  const subOrders = await getSubOrdersByOrderIdService(orderId, lang);
 
   if (!subOrders.length) {
-    return next(new Error("No suborders found for this order", { cause: 404 }));
+    return next(new Error(getMessage("no_suborders_found", lang), { cause: 404 }));
   }
 
   res.status(200).json({
     success: true,
+    message: getMessage("suborders_fetched_successfully", lang),
     count: subOrders.length,
     data: subOrders,
   });
@@ -53,10 +53,11 @@ export const getSubOrdersByOrderId = asyncHandelr(async (req, res, next) => {
 //-----------------------------------------------------------------------------------------
 export const getAllSubOrders = asyncHandelr(async (req, res) => {
   const lang = getUserLanguage(req);
-  const result = await getAllSubOrdersService(req.query);
+  const result = await getAllSubOrdersService(req.query, lang);
 
   res.status(200).json({
     success: true,
+    message: getMessage("suborders_fetched_successfully", lang),
     ...result,
   });
 });
@@ -68,7 +69,7 @@ export const getPaymentStatusStats = asyncHandelr(async (req, res) => {
 
   res.status(200).json({
     success: true,
-    message:(lang=='en') ?"Payment status statistics fetched successfully":"تم جلب إحصائيات حالة الدفع بنجاح",
+    message: getMessage("payment_status_stats_fetched", lang),
     data,
   });
 });
@@ -80,7 +81,7 @@ export const getDailyPaymentStats = asyncHandelr(async (req, res) => {
 
   res.status(200).json({
     success: true,
-    message:(lang=='en')? "Last daily payment statistics fetched successfully":"تم جلب إحصائيات الدفعات اليومية الأخيرة بنجاح",
+    message: getMessage("daily_payment_stats_fetched", lang),
     data,
   });
 });
@@ -92,7 +93,7 @@ export const getMonthlyPaymentStats = asyncHandelr(async (req, res) => {
 
   res.status(200).json({
     success: true,
-    message: (lang=='en')?"Last monthly payment statistics fetched successfully":"تم جلب إحصائيات الدفعة الشهرية الأخيرة بنجاح",
+    message: getMessage("monthly_payment_stats_fetched", lang),
     data,
   });
 });
@@ -107,7 +108,7 @@ export const getLastMonthSalesAndOrders = asyncHandelr(async (req, res) => {
 
   res.status(200).json({
     success: true,
-    message: (lang=='en')?"Last month sales and orders fetched successfully":"تم تحقيق مبيعات وطلبات الشهر الماضي بنجاح",
+    message: getMessage("last_month_sales_fetched", lang),
     data: stats,
   });
 });
@@ -119,7 +120,7 @@ export const getCustomersByVendor = asyncHandelr(async (req, res) => {
 
   res.status(200).json({
     success: true,
-    message: (lang=='en')?"Customers fetched successfully":"تم استلام العملاء بنجاح",
+    message: getMessage("customers_fetched_successfully", lang),
     count: data.length,
     data,
   });

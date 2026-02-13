@@ -5,6 +5,7 @@ import { getVendorOverallStatsService } from "../vendors/vendors.service.js";
 import { getVendorDashboardStatsService } from "../vendors/vendors.service.js";
 import { getSubOrdersByVendorIdService } from "./vendors.service.js";
 import { getUserLanguage } from "../../../utlis/localization/langUserHelper.js";
+import { getMessage } from "../helpers/responseMessages.js";
 
 export const getCustomersForVendor = asyncHandelr(async (req, res) => {
   const vendorId = req.user._id;
@@ -13,7 +14,7 @@ export const getCustomersForVendor = asyncHandelr(async (req, res) => {
 
   res.status(200).json({
     success: true,
-    message:(lang == 'en')? "Customers fetched successfully":"تم استلام العملاء بنجاح",
+    message: getMessage("customers_fetched_successfully", lang),
     count: customers.length,
     data: customers,
   });
@@ -22,7 +23,6 @@ export const getCustomersForVendor = asyncHandelr(async (req, res) => {
   export const getDailyVendorStats = asyncHandelr(async (req, res) => {
     const lang = getUserLanguage(req);
     const vendorId = req.user._id;
-    // console.log(vendorId);
     const endDate = new Date();
     const startDate = new Date();
     startDate.setDate(endDate.getDate() - 1);
@@ -35,7 +35,7 @@ export const getCustomersForVendor = asyncHandelr(async (req, res) => {
   
     res.status(200).json({
       success: true,
-      message:(lang=='en')? "Last day vendor statistics":"إحصائيات البائعين في اليوم الأخير",
+      message: getMessage("vendor_stats_daily", lang),
       data: stats,
     });
   });
@@ -62,37 +62,36 @@ export const getCustomersForVendor = asyncHandelr(async (req, res) => {
       59,
       59
     );
-    // console.log(firstDayLastMonth);
-    // console.log(lastDayLastMonth);
+  
     const stats = await getVendorStatsByDateRangeService(
       vendorId,
       firstDayLastMonth,
       lastDayLastMonth
     );
   
-
     res.status(200).json({
       success: true,
-      message: (lang=='en')?"Last month vendor statistics":"إحصائيات البائعين للشهر الماضي",
+      message: getMessage("vendor_stats_monthly", lang),
       data: stats,
     });
   });
   //=====================================================
-  export const getSubOrdersByVendorId = asyncHandelr(async (req, res) => {
-    const  vendorId = req.user._id;
-      const lang = getUserLanguage(req);
-    console.log(vendorId);
+  export const getSubOrdersByVendorId = asyncHandelr(async (req, res, next) => {
+    const vendorId = req.user._id;
+    const lang = getUserLanguage(req);
+    
     if (req.user.accountType !== "vendor") {
-     throw new Error("Only vendors");
- }
-   const result = await getSubOrdersByVendorIdService(vendorId, req.query);
- 
-   res.status(200).json({
-     success: true,
-     message: (lang=='en')?"Suborders fetched successfully":"تم جلب الطلبات الفرعية بنجاح",
-     ...result,
-   });
- });
+      return next(new Error(getMessage("only_vendors_allowed", lang), { cause: 403 }));
+    }
+    
+    const result = await getSubOrdersByVendorIdService(vendorId, req.query, lang);
+  
+    res.status(200).json({
+      success: true,
+      message: getMessage("suborders_fetched_successfully", lang),
+      ...result,
+    });
+  });
  //=================================
  export const getVendorOverallStats = asyncHandelr(async (req, res) => {
   const lang = getUserLanguage(req);
@@ -101,7 +100,7 @@ export const getCustomersForVendor = asyncHandelr(async (req, res) => {
   
     res.status(200).json({
       success: true,
-      message:(lang=='en')? "Vendor overall statistics fetched successfully":"تم جلب الإحصائيات العامة للبائع بنجاح",
+      message: getMessage("vendor_overall_stats_fetched", lang),
       data: stats,
     });
   });
@@ -111,7 +110,7 @@ export const getCustomersForVendor = asyncHandelr(async (req, res) => {
     const data = await getVendorDashboardStatsService(req.user);
     res.status(200).json({
       success: true,
-      message: (lang=='en')?"Vendor dashboard stats fetched successfully":"تم جلب إحصائيات لوحة معلومات البائع بنجاح",
+      message: getMessage("vendor_dashboard_stats_fetched", lang),
       data,
     });
   });

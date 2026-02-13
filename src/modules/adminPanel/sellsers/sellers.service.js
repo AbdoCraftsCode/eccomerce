@@ -54,242 +54,259 @@ export const getSellerAndProductStatsService = async () => {
 };
 //============================================================
 export const getLastMonthSalesStatsService = async () => {
-    // Get first and last day of last month
-    const now = new Date();
-    const firstDayLastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-    const lastDayLastMonth = new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59, 999);
-  
-    // 1️⃣ Total Sales
-    const totalSalesAgg = await OrderModelUser.aggregate([
-        {
-          $match: {
-            paymentStatus: "paid",
-            createdAt: { $gte: firstDayLastMonth, $lte: lastDayLastMonth },
-          },
-        },
-        {
-          $group: {
-            _id: null,
-            totalSales: { $sum: { $toDouble: "$totalAmount" } },
-          },
-        },
-    ]);
-  
-    const totalSales = totalSalesAgg[0]?.totalSales || 0;
-  
-    // 2️⃣ Average Seller Rating
-    // Aggregate average rating per seller from products
-    const avgRatingAgg = await ProductModellll.aggregate([
-      {
-        $group: {
-          _id: "$createdBy",
-          avgRating: { $avg: "$rating.average" },
-        },
+  // Get first and last day of last month
+  const now = new Date();
+  const firstDayLastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+  const lastDayLastMonth = new Date(
+    now.getFullYear(),
+    now.getMonth(),
+    0,
+    23,
+    59,
+    59,
+    999,
+  );
+
+  // 1️⃣ Total Sales
+  const totalSalesAgg = await OrderModelUser.aggregate([
+    {
+      $match: {
+        paymentStatus: "paid",
+        createdAt: { $gte: firstDayLastMonth, $lte: lastDayLastMonth },
       },
-      {
-        $group: {
-          _id: null,
-          overallAvgRating: { $avg: "$avgRating" },
-        },
+    },
+    {
+      $group: {
+        _id: null,
+        totalSales: { $sum: { $toDouble: "$totalAmount" } },
       },
-    ]);
-  
-    const avgSellerRating = avgRatingAgg[0]?.overallAvgRating || 0;
-  
-    // 3️⃣ Average Products per Seller
-    const productsPerSellerAgg = await ProductModellll.aggregate([
-      {
-        $group: {
-          _id: "$createdBy",
-          count: { $sum: 1 },
-        },
+    },
+  ]);
+
+  const totalSales = totalSalesAgg[0]?.totalSales || 0;
+
+  // 2️⃣ Average Seller Rating
+  // Aggregate average rating per seller from products
+  const avgRatingAgg = await ProductModellll.aggregate([
+    {
+      $group: {
+        _id: "$createdBy",
+        avgRating: { $avg: "$rating.average" },
       },
-      {
-        $group: {
-          _id: null,
-          avgProductsPerSeller: { $avg: "$count" },
-        },
+    },
+    {
+      $group: {
+        _id: null,
+        overallAvgRating: { $avg: "$avgRating" },
       },
-    ]);
-  
-    const avgProductsPerSeller = productsPerSellerAgg[0]?.avgProductsPerSeller || 0;
-  
-    // 4️⃣ Active Sellers Percentage
-    const totalVendors = await UserModel.countDocuments({ accountType: "vendor" });
-    const activeVendors = await UserModel.countDocuments({ accountType: "vendor", status: "ACCEPTED" });
-    const activeSellersPercentage = totalVendors ? (activeVendors / totalVendors) * 100 : 0;
-  
-    return {
-      totalSales,
-      avgSellerRating,
-      avgProductsPerSeller,
-      activeSellersPercentage: parseFloat(activeSellersPercentage.toFixed(2)),
-    };
+    },
+  ]);
+
+  const avgSellerRating = avgRatingAgg[0]?.overallAvgRating || 0;
+
+  // 3️⃣ Average Products per Seller
+  const productsPerSellerAgg = await ProductModellll.aggregate([
+    {
+      $group: {
+        _id: "$createdBy",
+        count: { $sum: 1 },
+      },
+    },
+    {
+      $group: {
+        _id: null,
+        avgProductsPerSeller: { $avg: "$count" },
+      },
+    },
+  ]);
+
+  const avgProductsPerSeller =
+    productsPerSellerAgg[0]?.avgProductsPerSeller || 0;
+
+  // 4️⃣ Active Sellers Percentage
+  const totalVendors = await UserModel.countDocuments({
+    accountType: "vendor",
+  });
+  const activeVendors = await UserModel.countDocuments({
+    accountType: "vendor",
+    status: "ACCEPTED",
+  });
+  const activeSellersPercentage = totalVendors
+    ? (activeVendors / totalVendors) * 100
+    : 0;
+
+  return {
+    totalSales,
+    avgSellerRating,
+    avgProductsPerSeller,
+    activeSellersPercentage: parseFloat(activeSellersPercentage.toFixed(2)),
   };
-  //====================================================
-  export const getAcceptedSellersWithCategories = async () => {
-    // 1️⃣ Get all active/accepted vendors
-    const vendors = await UserModel.aggregate([
-      { $match: { accountType: "vendor", status: "ACCEPTED" } }, // accepted sellers
-      {
-        $lookup: {
-          from: "producttttts", // collection name of products in MongoDB
-          localField: "_id",
-          foreignField: "createdBy",
-          as: "products",
+};
+//====================================================
+export const getAcceptedSellersWithCategories = async () => {
+  // 1️⃣ Get all active/accepted vendors
+  const vendors = await UserModel.aggregate([
+    { $match: { accountType: "vendor", status: "ACCEPTED" } }, // accepted sellers
+    {
+      $lookup: {
+        from: "producttttts", // collection name of products in MongoDB
+        localField: "_id",
+        foreignField: "createdBy",
+        as: "products",
+      },
+    },
+    {
+      $unwind: {
+        path: "$products",
+        preserveNullAndEmptyArrays: true, // include vendors without products
+      },
+    },
+    {
+      $lookup: {
+        from: "categoryyyys", // collection name of categories in MongoDB
+        localField: "products.categories",
+        foreignField: "_id",
+        as: "categories",
+      },
+    },
+    {
+      $group: {
+        _id: "$_id",
+        name: { $first: "$name" },
+        email: { $first: "$email" },
+        categories: { $addToSet: "$categories" }, // remove duplicates
+        totalProducts: { $sum: 1 },
+      },
+    },
+    {
+      $project: {
+        _id: 1,
+        name: 1,
+        email: 1,
+        totalProducts: 1,
+        categories: {
+          $reduce: {
+            input: "$categories",
+            initialValue: [],
+            in: { $setUnion: ["$$value", "$$this"] },
+          },
         },
       },
-      {
-        $unwind: {
-          path: "$products",
-          preserveNullAndEmptyArrays: true, // include vendors without products
-        },
+    },
+    { $sort: { name: 1 } }, // optional: sort by name
+  ]);
+
+  return vendors;
+};
+//=====================================================================
+export const getLatestSellersService = async (limit = 5) => {
+  const filter = { accountType: "vendor" };
+
+  // لو عايز المقبولين فقط
+  // if (onlyActive) {
+  //   filter.status = "active"; // أو accepted حسب عندك
+  // }
+
+  const sellers = await UserModel.find(filter)
+    .select("name email status createdAt") // اختار اللي تحتاجه
+    .sort({ createdAt: -1 }) // الأحدث أولاً
+    .limit(limit)
+    .lean();
+
+  return sellers;
+};
+//======================================================
+export const getCategorySalesService = async (lang = "en") => {
+  const startOfMonth = new Date();
+  startOfMonth.setDate(1);
+  startOfMonth.setHours(0, 0, 0, 0);
+
+  const stats = await SubOrderModel.aggregate([
+    {
+      $match: {
+        paymentStatus: "paid",
+        createdAt: { $gte: startOfMonth },
       },
-      {
-        $lookup: {
-          from: "categoryyyys", // collection name of categories in MongoDB
-          localField: "products.categories",
-          foreignField: "_id",
-          as: "categories",
-        },
+    },
+
+    { $unwind: "$items" },
+
+    {
+      $lookup: {
+        from: "producttttts",
+        localField: "items.product._id",
+        foreignField: "_id",
+        as: "product",
       },
-      {
-        $group: {
-          _id: "$_id",
-          name: { $first: "$name" },
-          email: { $first: "$email" },
-          categories: { $addToSet: "$categories" }, // remove duplicates
-          totalProducts: { $sum: 1 },
-        },
+    },
+    { $unwind: "$product" },
+
+    { $unwind: "$product.categories" },
+
+    {
+      $lookup: {
+        from: "categoryyyys",
+        localField: "product.categories",
+        foreignField: "_id",
+        as: "category",
       },
-      {
-        $project: {
-          _id: 1,
-          name: 1,
-          email: 1,
-          totalProducts: 1,
-          categories: {
-            $reduce: {
-              input: "$categories",
-              initialValue: [],
-              in: { $setUnion: ["$$value", "$$this"] },
-            },
-          },
-        },
+    },
+    { $unwind: "$category" },
+
+    {
+      $group: {
+        _id: "$category._id",
+        categoryNameAr: { $first: "$category.name.ar" },
+        categoryNameEn: { $first: "$category.name.en" },
+        totalQuantity: { $sum: "$items.quantity" },
       },
-      { $sort: { name: 1 } }, // optional: sort by name
-    ]);
-  
-    return vendors;
-  };
-  //=====================================================================
-  export const getLatestSellersService = async (limit = 5) => {
-    const filter = { accountType: "vendor" };
-  
-    // لو عايز المقبولين فقط
-    // if (onlyActive) {
-    //   filter.status = "active"; // أو accepted حسب عندك
-    // }
-  
-    const sellers = await UserModel.find(filter)
-      .select("name email status createdAt") // اختار اللي تحتاجه
-      .sort({ createdAt: -1 }) // الأحدث أولاً
-      .limit(limit)
-      .lean();
-  
-    return sellers;
-  };
-  //======================================================
-    export const getCategorySalesService = async (lang = "en") => {
-      return await SubOrderModel.aggregate([
-        {
-          $match: {
-            paymentStatus: "paid",
-          },
+    },
+
+    {
+      $group: {
+        _id: null,
+        categories: { $push: "$$ROOT" },
+        grandTotalQuantity: { $sum: "$totalQuantity" },
+      },
+    },
+
+    { $unwind: "$categories" },
+
+    {
+      $project: {
+        categoryName: {
+          $cond: [
+            { $eq: [lang, "ar"] },
+            "$categories.categoryNameAr",
+            "$categories.categoryNameEn",
+          ],
         },
-    
-        // 1️⃣ explode items
-        { $unwind: "$items" },
-    
-        // 2️⃣ get product
-        {
-          $lookup: {
-            from: "producttttts",
-            localField: "items.productId",
-            foreignField: "_id",
-            as: "product",
-          },
-        },
-        { $unwind: "$product" },
-    
-        // 3️⃣ explode product categories
-        { $unwind: "$product.categories" },
-    
-        // 4️⃣ get category
-        {
-          $lookup: {
-            from: "categoryyyys",
-            localField: "product.categories",
-            foreignField: "_id",
-            as: "category",
-          },
-        },
-        { $unwind: "$category" },
-    
-        // 5️⃣ group per category
-        {
-          $group: {
-            _id: "$category._id",
-            categoryNameAr: { $first: "$category.name.ar" },
-            categoryNameEn: { $first: "$category.name.en" },
-            totalQuantity: { $sum: "$items.quantity" },
-          },
-        },
-    
-        // 6️⃣ get grand total quantity
-        {
-          $group: {
-            _id: null,
-            categories: { $push: "$$ROOT" },
-            grandTotalQuantity: { $sum: "$totalQuantity" },
-          },
-        },
-    
-        // 7️⃣ calculate percentage
-        { $unwind: "$categories" },
-    
-        {
-          $project: {
-            categoryName: {
-              $cond: [
-                { $eq: [lang, "ar"] },
-                "$categories.categoryNameAr",
-                "$categories.categoryNameEn",
-              ],
-            },
-            totalQuantity: "$categories.totalQuantity",
-            percentage: {
-              $round: [
+        totalQuantity: "$categories.totalQuantity",
+        percentage: {
+          $round: [
+            {
+              $multiply: [
                 {
-                  $multiply: [
-                    {
-                      $divide: [
-                        "$categories.totalQuantity",
-                        "$grandTotalQuantity",
-                      ],
-                    },
-                    100,
-                  ],
+                  $divide: ["$categories.totalQuantity", "$grandTotalQuantity"],
                 },
-                2,
+                100,
               ],
             },
-            _id: 0,
-          },
+            2,
+          ],
         },
-    
-        { $sort: { percentage: -1 } },
-      ]);
-    };
-    
-    
+        _id: 0,
+      },
+    },
+
+    { $sort: { percentage: -1 } },
+    { $limit: 5 },
+  ]);
+
+  const categorySales = {};
+  stats.forEach((item) => {
+    categorySales[item.categoryName] = item.percentage;
+  });
+
+  return categorySales;
+};

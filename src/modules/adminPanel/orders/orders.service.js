@@ -3,27 +3,32 @@ import { ObjectId } from "mongodb";
 import User from "../../../DB/models/User.model.js";
 import { OrderModelUser } from "../../../DB/models/orderSchemaUser.model.js";
 import { SubOrderModel } from "../../../DB/models/subOrdersSchema.model.js";
+import {
+  transformOrderResponse,
+  transformSubOrderResponse,
+} from "../helpers/response.helpers.js";
 
-export const getAllCustomersService = async () => {
-  return await User.aggregate([
-    // 1️⃣ Customers only
+export const getAllCustomersService = async (query = {}) => {
+  const { page = 1, limit = 10 } = query;
+  const skip = (parseInt(page) - 1) * parseInt(limit);
+  const limitNum = parseInt(limit);
+
+  const stats = await User.aggregate([
     {
       $match: {
         accountType: { $nin: ["Admin", "Owner", "vendor"] },
       },
     },
 
-    // 2️⃣ Join orders
     {
       $lookup: {
-        from: "orderusers", // ⚠️ collection name (lowercase + plural)
+        from: "orderusers", 
         localField: "_id",
         foreignField: "customerId",
         as: "orders",
       },
     },
 
-    // 3️⃣ Calculate stats
     {
       $addFields: {
         totalOrders: {
@@ -46,14 +51,13 @@ export const getAllCustomersService = async () => {
                 },
               },
               as: "order",
-              in: "$$order.totalAmount",
+              in: "$$order.totalAmount.usd", 
             },
           },
         },
       },
     },
 
-    // 4️⃣ Clean response
     {
       $project: {
         password: 0,
@@ -62,14 +66,33 @@ export const getAllCustomersService = async () => {
       },
     },
 
-    // 5️⃣ Sort by highest spenders
     {
       $sort: { totalSpent: -1 },
     },
+
+    {
+      $facet: {
+        metadata: [{ $count: "total" }],
+        data: [{ $skip: skip }, { $limit: limitNum }],
+      },
+    },
   ]);
+
+  const total = stats[0].metadata[0]?.total || 0;
+  const data = stats[0].data;
+
+  return {
+    data,
+    pagination: {
+      total,
+      page: parseInt(page),
+      limit: parseInt(limit),
+      totalPages: Math.ceil(total / limitNum),
+    },
+  };
 };
 //---------------------------------------------------------------------------------------------
-export const getAllOrdersService = async (query) => {
+export const getAllOrdersService = async (query, lang = "en") => {
   const {
     paymentStatus,
     shippingStatus,
@@ -77,7 +100,6 @@ export const getAllOrdersService = async (query) => {
     toDate,
     page = 1,
     limit = 10,
-    currency = "customer", // 👈 new (customer | vendor | usd)
   } = query;
 
   const pageNum = Math.max(1, parseInt(page));
@@ -109,7 +131,6 @@ export const getAllOrdersService = async (query) => {
     }
   }
 
-  // 🔹 Fetch orders + total count
   const [orders, total] = await Promise.all([
     OrderModelUser.find(filter)
       .populate("customerId", "name email")
@@ -121,12 +142,10 @@ export const getAllOrdersService = async (query) => {
     OrderModelUser.countDocuments(filter),
   ]);
 
-  // 🔹 Map selected currency amount
-  const formattedOrders = orders.map((order) => ({
-    ...order,
-    totalAmountSelected: order.totalAmount?.[currency] || 0,
-    subtotalSelected: order.subtotal?.[currency] || 0,
-  }));
+  // 🔹 Transform orders with localization and admin pricing (USD)
+  const formattedOrders = orders.map((order) =>
+    transformOrderResponse(order, lang, "admin")
+  );
 
   return {
     count: formattedOrders.length,
@@ -141,18 +160,23 @@ export const getAllOrdersService = async (query) => {
 };
 
 //==============================================================================
-export const getSubOrdersByOrderIdService = async (orderId) => {
-  return await SubOrderModel.find({ orderId })
+export const getSubOrdersByOrderIdService = async (orderId, lang = "en") => {
+  const subOrders = await SubOrderModel.find({ orderId })
     .populate({
       path: "vendorId",
       select: "name email",
     })
     .sort({ createdAt: -1 })
     .lean();
+
+  // Transform suborders with localization and admin pricing (USD)
+  return subOrders.map((subOrder) =>
+    transformSubOrderResponse(subOrder, lang, "admin")
+  );
 };
 
 //===================================================================
-export const getAllSubOrdersService = async (query) => {
+export const getAllSubOrdersService = async (query, lang = "en") => {
   const { page = 1, limit = 10, status, vendorId } = query;
 
   const filter = {};
@@ -167,7 +191,7 @@ export const getAllSubOrdersService = async (query) => {
       .populate("orderId", "orderNumber")
       .populate("vendorId", "name email")
       .select(
-        "subOrderNumber totalAmount status paymentStatus shippingStatus items createdAt"
+        "subOrderNumber totalAmount subtotal status paymentStatus shippingStatus items couponUsed customerCurrency createdAt"
       )
       .sort({ createdAt: -1 })
       .skip(skip)
@@ -177,17 +201,19 @@ export const getAllSubOrdersService = async (query) => {
     SubOrderModel.countDocuments(filter),
   ]);
 
+  // Transform suborders with localization and admin pricing (USD)
+  const formattedSubOrders = subOrders.map((subOrder) =>
+    transformSubOrderResponse(subOrder, lang, "admin")
+  );
+
   return {
-    count: subOrders.length,
+    count: formattedSubOrders.length,
     pagination: {
       currentPage: Number(page),
       totalPages: Math.ceil(total / limit),
       totalItems: total,
     },
-    data: subOrders.map((subOrder) => ({
-      ...subOrder,
-      itemsCount: subOrder.items.length, // ✅ number of items
-    })),
+    data: formattedSubOrders,
   };
 };
 //====================================================
