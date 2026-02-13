@@ -5,123 +5,141 @@ import { OrderModelUser } from "../../../DB/models/orderSchemaUser.model.js";
 import { SubOrderModel } from "../../../DB/models/subOrdersSchema.model.js";
 
 export const getAllCustomersService = async () => {
-    return await User.aggregate([
-        // 1️⃣ Customers only
-        {
-          $match: {
-            accountType: { $nin: ["Admin", "Owner", "vendor"] },
+  return await User.aggregate([
+    // 1️⃣ Customers only
+    {
+      $match: {
+        accountType: { $nin: ["Admin", "Owner", "vendor"] },
+      },
+    },
+
+    // 2️⃣ Join orders
+    {
+      $lookup: {
+        from: "orderusers", // ⚠️ collection name (lowercase + plural)
+        localField: "_id",
+        foreignField: "customerId",
+        as: "orders",
+      },
+    },
+
+    // 3️⃣ Calculate stats
+    {
+      $addFields: {
+        totalOrders: {
+          $size: {
+            $filter: {
+              input: "$orders",
+              as: "order",
+              cond: { $eq: ["$$order.paymentStatus", "paid"] },
+            },
           },
         },
-    
-        // 2️⃣ Join orders
-        {
-          $lookup: {
-            from: "orderusers", // ⚠️ collection name (lowercase + plural)
-            localField: "_id",
-            foreignField: "customerId",
-            as: "orders",
-          },
-        },
-    
-        // 3️⃣ Calculate stats
-        {
-          $addFields: {
-            totalOrders: {
-              $size: {
+        totalSpent: {
+          $sum: {
+            $map: {
+              input: {
                 $filter: {
                   input: "$orders",
                   as: "order",
                   cond: { $eq: ["$$order.paymentStatus", "paid"] },
                 },
               },
-            },
-            totalSpent: {
-              $sum: {
-                $map: {
-                  input: {
-                    $filter: {
-                      input: "$orders",
-                      as: "order",
-                      cond: { $eq: ["$$order.paymentStatus", "paid"] },
-                    },
-                  },
-                  as: "order",
-                  in: "$$order.totalAmount",
-                },
-              },
+              as: "order",
+              in: "$$order.totalAmount",
             },
           },
         },
-    
-        // 4️⃣ Clean response
-        {
-          $project: {
-            password: 0,
-            __v: 0,
-            orders: 0,
-          },
-        },
-    
-        // 5️⃣ Sort by highest spenders
-        {
-          $sort: { totalSpent: -1 },
-        },
-      ]);
-    };
-    //---------------------------------------------------------------------------------------------
-    export const getAllOrdersService = async (query) => {
-      const {
-        paymentStatus,
-        shippingStatus,
-        fromDate,
-        page = 1,
-        limit = 10,
-      } = query;
-    
-      const pageNum = Math.max(1, parseInt(page));
-      const limitNum = Math.min(100, Math.max(1, parseInt(limit)));
-      const skip = (pageNum - 1) * limitNum;
-    
-      // 🔹 Build dynamic filter
-      const filter = {};
-    
-      if (paymentStatus) {
-        filter.paymentStatus = paymentStatus;
-      }
-    
-      if (shippingStatus) {
-        filter.shippingStatus = shippingStatus;
-      }
-    
-      if (fromDate) {
-        filter.createdAt = {
-          $gte: new Date(fromDate),
-        };
-      }
-    
-      // 🔹 Fetch orders + count
-      const [orders, total] = await Promise.all([
-        OrderModelUser.find(filter)
-          .populate("customerId", "name email")
-          .sort({ createdAt: -1 })
-          .skip(skip)
-          .limit(limitNum)
-          .lean(),
-    
-        OrderModelUser.countDocuments(filter),
-      ]);
-    
-      return {
-        count: orders.length,
-        pagination: {
-          currentPage: pageNum,
-          totalPages: Math.ceil(total / limitNum),
-          totalItems: total,
-          itemsPerPage: limitNum,
-        },
-        data: orders,
-      };
-    };
+      },
+    },
+
+    // 4️⃣ Clean response
+    {
+      $project: {
+        password: 0,
+        __v: 0,
+        orders: 0,
+      },
+    },
+
+    // 5️⃣ Sort by highest spenders
+    {
+      $sort: { totalSpent: -1 },
+    },
+  ]);
+};
+//---------------------------------------------------------------------------------------------
+export const getAllOrdersService = async (query) => {
+  const {
+    paymentStatus,
+    shippingStatus,
+    fromDate,
+    toDate,
+    page = 1,
+    limit = 10,
+    currency = "customer", // 👈 new (customer | vendor | usd)
+  } = query;
+
+  const pageNum = Math.max(1, parseInt(page));
+  const limitNum = Math.min(100, Math.max(1, parseInt(limit)));
+  const skip = (pageNum - 1) * limitNum;
+
+  // 🔹 Dynamic filter
+  const filter = {};
+
+  if (paymentStatus) {
+    filter.paymentStatus = paymentStatus;
+  }
+
+  if (shippingStatus) {
+    filter.shippingStatus = shippingStatus;
+  }
+
+  if (fromDate || toDate) {
+    filter.createdAt = {};
+
+    if (fromDate) {
+      filter.createdAt.$gte = new Date(fromDate);
+    }
+
+    if (toDate) {
+      const endDate = new Date(toDate);
+      endDate.setHours(23, 59, 59, 999);
+      filter.createdAt.$lte = endDate;
+    }
+  }
+
+  // 🔹 Fetch orders + total count
+  const [orders, total] = await Promise.all([
+    OrderModelUser.find(filter)
+      .populate("customerId", "name email")
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(limitNum)
+      .lean(),
+
+    OrderModelUser.countDocuments(filter),
+  ]);
+
+  // 🔹 Map selected currency amount
+  const formattedOrders = orders.map((order) => ({
+    ...order,
+    totalAmountSelected: order.totalAmount?.[currency] || 0,
+    subtotalSelected: order.subtotal?.[currency] || 0,
+  }));
+
+  return {
+    count: formattedOrders.length,
+    pagination: {
+      currentPage: pageNum,
+      totalPages: Math.ceil(total / limitNum),
+      totalItems: total,
+      itemsPerPage: limitNum,
+    },
+    data: formattedOrders,
+  };
+};
+
 //==============================================================================
 export const getSubOrdersByOrderIdService = async (orderId) => {
   return await SubOrderModel.find({ orderId })
@@ -129,13 +147,10 @@ export const getSubOrdersByOrderIdService = async (orderId) => {
       path: "vendorId",
       select: "name email",
     })
-    .populate({
-      path: "items.productId",
-      select: "name images",
-    })
     .sort({ createdAt: -1 })
     .lean();
 };
+
 //===================================================================
 export const getAllSubOrdersService = async (query) => {
   const { page = 1, limit = 10, status, vendorId } = query;
@@ -251,13 +266,20 @@ export const getLastMonthSalesAndOrdersService = async (vendorId) => {
   // Calculate first and last day of last month
   const now = new Date();
   const firstDayLastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-  const lastDayLastMonth = new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59);
+  const lastDayLastMonth = new Date(
+    now.getFullYear(),
+    now.getMonth(),
+    0,
+    23,
+    59,
+    59
+  );
 
   const result = await SubOrderModel.aggregate([
     {
       $match: {
         vendorId,
-        paymentStatus: "paid",  // only count paid suborders
+        paymentStatus: "paid", // only count paid suborders
         createdAt: { $gte: firstDayLastMonth, $lte: lastDayLastMonth },
       },
     },
@@ -265,7 +287,7 @@ export const getLastMonthSalesAndOrdersService = async (vendorId) => {
       $group: {
         _id: null,
         totalSales: { $sum: "$totalAmount" }, // sum of all paid suborders
-        totalOrders: { $sum: 1 },             // number of suborders
+        totalOrders: { $sum: 1 }, // number of suborders
       },
     },
   ]);
