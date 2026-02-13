@@ -1,6 +1,5 @@
 import mongoose from "mongoose";
 
-// Reusable sub-schemas
 const localizedStringSchema = { ar: String, en: String };
 
 const currencyDetailsSchema = {

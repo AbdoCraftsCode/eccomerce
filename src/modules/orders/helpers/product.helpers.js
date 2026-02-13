@@ -7,7 +7,6 @@ export const validateAndFetchProducts = async (cartItems, session = null) => {
     ...new Set(cartItems.map((item) => item.product._id.toString())),
   ];
 
-  // Fetch with session for transactional consistency
   const products = await ProductModellll.find({
     _id: { $in: productIds },
     isActive: true,
@@ -34,9 +33,7 @@ export const createProductsMap = (products) => {
   return productsMap;
 };
 
-/**
- * Fetch and validate variants with session
- */
+
 export const fetchAndValidateVariants = async (cartItems, session = null) => {
   const variantIds = cartItems
     .map((item) => item.variant?._id || item.variant)
@@ -58,7 +55,6 @@ export const fetchAndValidateVariants = async (cartItems, session = null) => {
     variantsMap[v._id.toString()] = v;
   });
 
-  // Validate all requested variants were found
   const foundIds = new Set(Object.keys(variantsMap));
   const missingVariants = variantIds.filter(
     (id) => !foundIds.has(id.toString())

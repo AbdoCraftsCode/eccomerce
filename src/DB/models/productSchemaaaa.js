@@ -33,9 +33,9 @@ const productSchema = new mongoose.Schema(
       required: true,
     },
     sku: { type: String, unique: true },
-    mainPrice: { type: String },
+    mainPrice: { type: Number },
     weight: { type: String },
-    disCountPrice: { type: String },
+    disCountPrice: { type: Number },
     images: [String],
     status: {
       type: String,

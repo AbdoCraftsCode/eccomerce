@@ -18,7 +18,7 @@ import {
   setOfferOnProducts,
   clearOfferFromProducts,
   approveProductsInOffer
-} from "../../products/services/product.service.js";
+} from "../../products/services/products.service.js";
 
 const uploadImagesToCloudinary = async (files) => {
   if (!files?.images?.length) return [];

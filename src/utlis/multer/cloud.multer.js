@@ -4,7 +4,7 @@ import multer from "multer";
 
 
 export const fileValidationTypes = {
-    image: ['image/jpg', 'image/jpeg', 'image/png', 'image/gif'],
+    image: ['image/jpg', 'image/jpeg', 'image/png', 'image/gif','image/jfif'],
     document: ['application/json', 'application/pdf'],
 };
 
