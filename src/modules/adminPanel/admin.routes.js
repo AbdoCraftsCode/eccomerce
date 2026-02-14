@@ -10,8 +10,11 @@ import { getTodayHourlyStatsVendor } from "./admin.controller.js";
 import { getMaxHourSalesVendor } from "./admin.controller.js";
 import { getAdminGraphData, getVendorGraphData } from "./admin.controller.js";
 
-import { getAllCustomers } from "./orders/orders.controller.js";
-import { getAllOrders } from "./orders/orders.controller.js";
+import { 
+  getAllCustomers, 
+  getAllOrders, 
+  getOrderDetailsById 
+} from "./orders/orders.controller.js";
 import { getSubOrdersByOrderId } from "./orders/orders.controller.js";
 import { getAllSubOrders } from "./orders/orders.controller.js";
 import { getPaymentStatusStats } from "./orders/orders.controller.js";
@@ -99,6 +102,12 @@ router.get(
   authentication(),
   authorization("Admin"),
   getAllOrders
+);
+router.get(
+  "/getOrderDetails/:orderId",
+  authentication(),
+  authorization("Admin"),
+  getOrderDetailsById
 );
 router.get(
   "/subOrdersById/:orderId",

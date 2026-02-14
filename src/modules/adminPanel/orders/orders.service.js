@@ -134,6 +134,7 @@ export const getAllOrdersService = async (query, lang = "en") => {
   const [orders, total] = await Promise.all([
     OrderModelUser.find(filter)
       .populate("customerId", "name email")
+      .select("-items -shippingAddress -paymentDetails -shippingDetails -notes -subOrders") // Exclude items and details for minimal listing
       .sort({ createdAt: -1 })
       .skip(skip)
       .limit(limitNum)
@@ -157,6 +158,19 @@ export const getAllOrdersService = async (query, lang = "en") => {
     },
     data: formattedOrders,
   };
+};
+
+export const getOrderDetailsByIdService = async (orderId, lang = "en") => {
+  const order = await OrderModelUser.findById(orderId)
+    .populate("customerId", "name email")
+    .lean();
+
+  if (!order) {
+    return null;
+  }
+
+  // Transform order with full details and admin pricing (USD)
+  return transformOrderResponse(order, lang, "admin");
 };
 
 //==============================================================================

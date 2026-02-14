@@ -1,12 +1,16 @@
 import { asyncHandelr } from "../../../utlis/response/error.response.js";
-import { getAllCustomersService } from "./orders.service.js";
-import { getAllOrdersService  } from "./orders.service.js";
-import { getSubOrdersByOrderIdService } from "./orders.service.js";
-import { getAllSubOrdersService } from "./orders.service.js";
-import { getPaymentStatusStatsService } from "./orders.service.js";
-import { getLastMonthSalesAndOrdersService  } from "./orders.service.js";
-import { getCustomersByVendorService  } from "./orders.service.js";
-import { getLastDayPaymentStatsService ,getLastMonthPaymentStatsService  } from "./orders.service.js";
+import {
+  getAllCustomersService,
+  getAllOrdersService,
+  getOrderDetailsByIdService,
+  getSubOrdersByOrderIdService,
+  getAllSubOrdersService,
+  getPaymentStatusStatsService,
+  getLastMonthSalesAndOrdersService,
+  getCustomersByVendorService,
+  getLastDayPaymentStatsService,
+  getLastMonthPaymentStatsService
+} from "./orders.service.js";
 import { getUserLanguage } from "../../../utlis/localization/langUserHelper.js";
 import { getMessage } from "../helpers/responseMessages.js";
 
@@ -26,6 +30,23 @@ export const getAllOrders = asyncHandelr(async (req, res) => {
     success: true,
     message: getMessage("orders_fetched_successfully", lang),
     ...result,
+  });
+});
+
+export const getOrderDetailsById = asyncHandelr(async (req, res, next) => {
+  const lang = getUserLanguage(req);
+  const { orderId } = req.params;
+
+  const order = await getOrderDetailsByIdService(orderId, lang);
+
+  if (!order) {
+    return next(new Error(getMessage("order_not_found", lang), { cause: 404 }));
+  }
+
+  res.status(200).json({
+    success: true,
+    message: getMessage("orders_fetched_successfully", lang),
+    data: order,
   });
 });
 //-----------------------------------------------------------------------------------
