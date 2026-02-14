@@ -16,14 +16,14 @@ import cartRoutes from './modules/cart/cart.routes.js';
 import walletRouter from './modules/wallet/wallet.controller.js';
 
 import adminRoutes from "./modules/adminPanel/admin.routes.js";
-import searchRoutes from "./modules/search/search.controller.js";
+import searchRoutes from "./modules/search/search.routes.js";
 import faqRoutes from "./modules/faq/faq.routes.js";
 import offersRoutes from "./modules/offers/offers.routes.js";
 import currenciesRoutes from "./modules/currency/currency.routes.js";
 import countriesRoutes from "./modules/country/country.routes.js";
 import slidersRoutes from "./modules/sliders/slider.routes.js";
 import puahNotificationsRoutes from "./modules/pushNotificationsAdmin/notification.routes.js";
-import invoicesRoutes from "./modules/invoice/invoice.routes.js";
+import invoicesRoutes from "./modules/invoices/invoice.routes.js";
 import ordersRoutes from "./modules/orders/orders.routes.js";
 import contactUsRoutes from "./modules/contactUs/contactUs.routes.js";
 import productsRoutes from "./modules/products/products.routes.js";
@@ -59,7 +59,7 @@ export const bootstap = (app, express) => {
   app.use("/contactUs",contactUsRoutes)
   app.use("/products", productsRoutes)
 
-  app.use("/invoice", invoicesRoutes);
+  app.use("/invoices", invoicesRoutes);
 
 
   app.use(globalerror);
