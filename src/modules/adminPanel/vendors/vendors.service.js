@@ -154,10 +154,11 @@ export const getVendorStatsByDateRangeService = async (
     }
   
     // 🔹 Fetch suborders + count
-    // Note: items contain embedded product/variant objects, not references
+    // NOTE: items are excluded here to keep the listing minimal as requested
     const [subOrders, total] = await Promise.all([
       SubOrderModel.find(filter)
         .populate("orderId", "orderNumber createdAt paymentStatus shippingStatus")
+        .select("-items") // Exclude items for minimal listing
         .sort({ createdAt: -1 })
         .skip(skip)
         .limit(limitNum)
@@ -182,6 +183,29 @@ export const getVendorStatsByDateRangeService = async (
       data: formattedSubOrders,
     };
   };
+
+  export const getSubOrderDetailsByVendorIdService = async (subOrderId, vendorId, lang = "en") => {
+    if (!subOrderId || !vendorId) {
+      throw new Error("Suborder ID and Vendor ID are required");
+    }
+
+    const subOrder = await SubOrderModel.findOne({
+      _id: subOrderId,
+      vendorId: mongoose.Types.ObjectId.isValid(vendorId) 
+        ? new mongoose.Types.ObjectId(vendorId) 
+        : vendorId
+    })
+      .populate("orderId", "orderNumber createdAt paymentStatus shippingStatus")
+      .lean();
+
+    if (!subOrder) {
+      return null;
+    }
+
+    // ✅ Transform suborder with full details (including items) and VENDOR pricing
+    return transformSubOrderResponse(subOrder, lang, "vendor");
+  };
+
   //==============================
   export const getVendorOverallStatsService = async (vendorId) => {
     if (!vendorId) throw new Error("Vendor ID is required");

@@ -24,7 +24,10 @@ import { getLastMonthSalesStats } from "./sellsers/sellers.controller.js";
 import { acceptedSellers } from "./sellsers/sellers.controller.js";
 import { getLatestSellers } from "./sellsers/sellers.controller.js";
 import { getCategorySales } from "./sellsers/sellers.controller.js";
-import { getSubOrdersByVendorId } from "./vendors/vendors.controller.js";
+import {
+  getSubOrdersByVendorId,
+  getSubOrderDetailsByVendorId
+} from "./vendors/vendors.controller.js";
 import { getLastMonthSalesAndOrders } from "./orders/orders.controller.js";
 import {
   authentication,
@@ -187,6 +190,12 @@ router.get(
   authentication(),
   authorization(["Admin", "vendor"]),
   getSubOrdersByVendorId
+);
+router.get(
+  "/getSubOrderDetails/:subOrderId",
+  authentication(),
+  authorization(["Admin", "vendor"]),
+  getSubOrderDetailsByVendorId
 );
 router.get(
   "/vedorStatistics",

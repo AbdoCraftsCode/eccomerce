@@ -31,6 +31,7 @@ export const getProducts = asyncHandelr(async (req, res) => {
     search: req.query.search,
     page: req.query.page,
     limit: req.query.limit,
+    hasOffer: req.query.hasOffer,
   };
 
   const result = await productsService.getProductsWithFilters(filters, userCurrency, lang);

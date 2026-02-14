@@ -10,6 +10,7 @@ export const getProductsSchema = Joi.object({
   search: Joi.string().trim().optional(),
   page: Joi.number().integer().min(1).optional(),
   limit: Joi.number().integer().min(1).max(100).optional(),
+  hasOffer: Joi.boolean().optional(),
 });
 
 export const getProductByIdSchema = Joi.object({

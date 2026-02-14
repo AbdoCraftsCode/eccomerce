@@ -1,9 +1,12 @@
 import { asyncHandelr } from "../../../utlis/response/error.response.js";
-import { getCustomersForVendorService } from "../vendors/vendors.service.js";
-import { getVendorStatsByDateRangeService } from "../vendors/vendors.service.js";
-import { getVendorOverallStatsService } from "../vendors/vendors.service.js";
-import { getVendorDashboardStatsService } from "../vendors/vendors.service.js";
-import { getSubOrdersByVendorIdService } from "./vendors.service.js";
+import {
+  getCustomersForVendorService,
+  getVendorStatsByDateRangeService,
+  getVendorOverallStatsService,
+  getVendorDashboardStatsService,
+  getSubOrdersByVendorIdService,
+  getSubOrderDetailsByVendorIdService
+} from "./vendors.service.js";
 import { getUserLanguage } from "../../../utlis/localization/langUserHelper.js";
 import { getMessage } from "../helpers/responseMessages.js";
 
@@ -90,6 +93,28 @@ export const getCustomersForVendor = asyncHandelr(async (req, res) => {
       success: true,
       message: getMessage("suborders_fetched_successfully", lang),
       ...result,
+    });
+  });
+  //=================================
+  export const getSubOrderDetailsByVendorId = asyncHandelr(async (req, res, next) => {
+    const { subOrderId } = req.params;
+    const vendorId = req.user._id;
+    const lang = getUserLanguage(req);
+    
+    if (req.user.accountType !== "vendor") {
+      return next(new Error(getMessage("only_vendors_allowed", lang), { cause: 403 }));
+    }
+
+    const subOrder = await getSubOrderDetailsByVendorIdService(subOrderId, vendorId, lang);
+
+    if (!subOrder) {
+      return next(new Error(getMessage("no_suborders_found", lang), { cause: 404 }));
+    }
+  
+    res.status(200).json({
+      success: true,
+      message: getMessage("suborders_fetched_successfully", lang),
+      data: subOrder,
     });
   });
  //=================================

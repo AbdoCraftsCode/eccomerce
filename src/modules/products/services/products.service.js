@@ -4,6 +4,7 @@ import { convertProductsArrayToCurrency, convertProductPricesToCurrency } from "
 import { throwError } from "../helpers/responseMessages.js";
 import { findAll, updateOne } from "../../../DB/dbservice.js";
 import { localizeProducts, localizeProduct } from "../helpers/localization.helper.js";
+import { addOfferInfo } from "../helpers/offer.helper.js";
 
 
 export const getProductsWithFilters = async (filters, userCurrency, lang = "en") => {
@@ -16,6 +17,7 @@ export const getProductsWithFilters = async (filters, userCurrency, lang = "en")
     search,
     page = 1,
     limit = 20,
+    hasOffer,
   } = filters;
 
   const query = { isActive: true, status: "published" };
@@ -44,6 +46,14 @@ export const getProductsWithFilters = async (filters, userCurrency, lang = "en")
     ];
   }
 
+  // Filter for products with valid offers (approved and not expired)
+  if (hasOffer === true || hasOffer === "true") {
+    const currentDate = new Date();
+    query.offerId = { $exists: true, $ne: null };
+    query.offerStatus = "approved";
+    query.offerEnd = { $gt: currentDate };
+  }
+
   if (minPrice !== undefined && maxPrice !== undefined) {
     if (parseFloat(minPrice) > parseFloat(maxPrice)) {
       throwError("invalid_price_range", lang, {}, 400);
@@ -64,11 +74,24 @@ export const getProductsWithFilters = async (filters, userCurrency, lang = "en")
 
   const productsWithVariants = await Promise.all(
     products.map(async (product) => {
+      // Add offer info to product if it has a valid offer
+      product = addOfferInfo(product);
+
       if (product.hasVariants) {
-        const variants = await VariantModel.find({
+        let variantQuery = {
           productId: product._id,
           isActive: true,
-        })
+        };
+
+        // If hasOffer filter is active, also filter variants with valid offers
+        if (hasOffer === true || hasOffer === "true") {
+          const currentDate = new Date();
+          variantQuery.offerId = { $exists: true, $ne: null };
+          variantQuery.offerStatus = "approved";
+          variantQuery.offerEnd = { $gt: currentDate };
+        }
+
+        const variants = await VariantModel.find(variantQuery)
           .populate({
             path: "attributes.attributeId",
             select: "name",
@@ -79,14 +102,19 @@ export const getProductsWithFilters = async (filters, userCurrency, lang = "en")
           })
           .lean();
 
-        product.variants = variants.map((variant) => ({
-          ...variant,
-          attributes: variant.attributes.map((attr) => ({
-            attributeName: attr.attributeId?.name || {},
-            valueName: attr.valueId?.value || {},
-            hexCode: attr.valueId?.hexCode || null,
-          })),
-        }));
+        product.variants = variants.map((variant) => {
+          // Add offer info to variant if it has a valid offer
+          variant = addOfferInfo(variant);
+
+          return {
+            ...variant,
+            attributes: variant.attributes.map((attr) => ({
+              attributeName: attr.attributeId?.name || {},
+              valueName: attr.valueId?.value || {},
+              hexCode: attr.valueId?.hexCode || null,
+            })),
+          };
+        });
       } else {
         product.variants = [];
       }
@@ -129,7 +157,7 @@ export const getProductsWithFilters = async (filters, userCurrency, lang = "en")
 
 
 export const getProductById = async (productId, userCurrency, lang = "en") => {
-  const product = await ProductModellll.findOne({
+  let product = await ProductModellll.findOne({
     _id: productId,
     isActive: true,
   })
@@ -142,6 +170,9 @@ export const getProductById = async (productId, userCurrency, lang = "en") => {
   if (!product) {
     throwError("not_found", lang, {}, 404);
   }
+
+  // Add offer info to product if it has a valid offer
+  product = addOfferInfo(product);
 
   if (product.hasVariants) {
     const variants = await VariantModel.find({
@@ -158,14 +189,19 @@ export const getProductById = async (productId, userCurrency, lang = "en") => {
       })
       .lean();
 
-    product.variants = variants.map((variant) => ({
-      ...variant,
-      attributes: variant.attributes.map((attr) => ({
-        attributeName: attr.attributeId?.name || {},
-        valueName: attr.valueId?.value || {},
-        hexCode: attr.valueId?.hexCode || null,
-      })),
-    }));
+    product.variants = variants.map((variant) => {
+      // Add offer info to variant if it has a valid offer
+      variant = addOfferInfo(variant);
+
+      return {
+        ...variant,
+        attributes: variant.attributes.map((attr) => ({
+          attributeName: attr.attributeId?.name || {},
+          valueName: attr.valueId?.value || {},
+          hexCode: attr.valueId?.hexCode || null,
+        })),
+      };
+    });
   } else {
     product.variants = [];
   }
