@@ -38,7 +38,7 @@ export const getDetailedCart = async (cartId) => {
       {
         path: "items.product",
         select:
-          "name description images mainPrice disCountPrice stock currency hasVariants status isActive",
+          "name description images mainPrice disCountPrice stock currency hasVariants status isActive createdBy categories",
         populate: {
           path: "currency",
           select: "name.ar name.en code symbol",
@@ -496,6 +496,7 @@ export const applyCouponToCart = async (
   const trimmedCode = couponCode.trim().toUpperCase();
 
   const cart = await getOrCreateCart(userId);
+
   const detailedCart = await getDetailedCart(cart._id);
 
   if (!detailedCart || !detailedCart.items || detailedCart.items.length === 0) {
@@ -511,6 +512,7 @@ export const applyCouponToCart = async (
       { path: "currency", select: "code symbol" },
     ],
   });
+
 
   if (!coupon) {
     throwError("coupon_invalid", lang, {}, 400);
@@ -531,6 +533,7 @@ export const applyCouponToCart = async (
   let applicableItemsSubtotal = 0;
 
   for (const item of detailedCart.items) {
+
     if (!item.product || !item.product._id) continue;
 
     const product = item.product;
@@ -539,6 +542,7 @@ export const applyCouponToCart = async (
     const matchesVendor =
       !coupon.vendorId ||
       product.createdBy?.toString() === coupon.vendorId.toString();
+
     if (!matchesVendor) continue;
 
     let isApplicable = false;
@@ -554,47 +558,51 @@ export const applyCouponToCart = async (
       );
     }
 
-    if (isApplicable) {
-      let itemPrice = 0;
-      if (item.variant) {
-        itemPrice = parseFloat(
-          item.variant.disCountPrice || item.variant.price || 0,
-        );
-      } else {
-        itemPrice = parseFloat(product.disCountPrice || product.mainPrice || 0);
-      }
+    if (!isApplicable) continue;
 
-      const productCurrencyId = product.currency?._id || product.currency;
-      if (!productCurrencyId) {
-        throwError("product_without_currency", lang, {}, 400);
-      }
+    let itemPrice = 0;
 
-      const productCurrencyDoc = await findById({
-        model: Currency,
-        id: productCurrencyId.toString(),
-        select: "code",
-      });
-
-      const fromCode = productCurrencyDoc?.code || "USD";
-
-      let exchangeRate = 1;
-      if (fromCode !== targetCurrencyCode) {
-        const rate = await getExchangeRate(fromCode, targetCurrencyCode);
-        exchangeRate = rate !== null && rate > 0 ? rate : 1;
-      }
-
-      const itemTotalInUserCurrency = itemPrice * exchangeRate * item.quantity;
-      applicableItemsSubtotal += itemTotalInUserCurrency;
-
-      applicableItems.push({
-        productId: productId,
-        variantId: item.variant?._id?.toString() || null,
-        quantity: item.quantity,
-        itemPrice: itemPrice * exchangeRate,
-        itemTotal: itemTotalInUserCurrency,
-      });
+    if (item.variant) {
+      itemPrice = parseFloat(
+        item.variant.disCountPrice || item.variant.price || 0,
+      );
+    } else {
+      itemPrice = parseFloat(product.disCountPrice || product.mainPrice || 0);
     }
+
+    const productCurrencyId = product.currency?._id || product.currency;
+    if (!productCurrencyId) {
+      throwError("product_without_currency", lang, {}, 400);
+    }
+
+    const productCurrencyDoc = await findById({
+      model: Currency,
+      id: productCurrencyId.toString(),
+      select: "code",
+    });
+
+    const fromCode = productCurrencyDoc?.code || "USD";
+
+    let exchangeRate = 1;
+    if (fromCode !== targetCurrencyCode) {
+      const rate = await getExchangeRate(fromCode, targetCurrencyCode);
+      exchangeRate = rate !== null && rate > 0 ? rate : 1;
+    }
+
+
+    const itemTotalInUserCurrency = itemPrice * exchangeRate * item.quantity;
+
+    applicableItemsSubtotal += itemTotalInUserCurrency;
+
+    applicableItems.push({
+      productId: productId,
+      variantId: item.variant?._id?.toString() || null,
+      quantity: item.quantity,
+      itemPrice: itemPrice * exchangeRate,
+      itemTotal: itemTotalInUserCurrency,
+    });
   }
+
 
   if (applicableItems.length === 0) {
     throwError("coupon_not_applicable", lang, {}, 400);
@@ -605,10 +613,6 @@ export const applyCouponToCart = async (
   if (coupon.discountType === "percentage") {
     discountAmount = (applicableItemsSubtotal * coupon.discountValue) / 100;
   } else if (coupon.discountType === "fixed") {
-    if (!coupon.currency || !coupon.currency._id) {
-      throwError("coupon_no_currency", lang, {}, 400);
-    }
-
     const couponCurrencyCode = coupon.currency.code;
 
     let exchangeRate = 1;
@@ -617,14 +621,12 @@ export const applyCouponToCart = async (
         couponCurrencyCode,
         targetCurrencyCode,
       );
-      if (!rate || rate <= 0) {
-        throwError("coupon_no_currency", lang, {}, 503);
-      }
       exchangeRate = rate;
     }
 
     const discountInUserCurrency = coupon.discountValue * exchangeRate;
     discountAmount = Math.min(discountInUserCurrency, applicableItemsSubtotal);
+
   }
 
   discountAmount = Number(discountAmount.toFixed(2));
@@ -638,20 +640,22 @@ export const applyCouponToCart = async (
   const cartSubtotal = convertedCart.subTotal || 0;
   const finalTotal = Math.max(0, cartSubtotal - discountAmount);
 
+
   return {
-      ...convertedCart,
-      appliedCoupon: {
-        code: coupon.code,
-        discountType: coupon.discountType,
-        discountValue: coupon.discountValue,
-        discountAmount: discountAmount,
-        applicableItems: applicableItems.map((item) => ({
-          productId: item.productId,
-          variantId: item.variantId,
-          quantity: item.quantity,
-        })),
-      },
+    ...convertedCart,
+    appliedCoupon: {
+      code: coupon.code,
+      discountType: coupon.discountType,
+      discountValue: coupon.discountValue,
       discountAmount: discountAmount,
-      total: Number(finalTotal.toFixed(2)),
+      applicableItems: applicableItems.map((item) => ({
+        productId: item.productId,
+        variantId: item.variantId,
+        quantity: item.quantity,
+      })),
+    },
+    discountAmount: discountAmount,
+    total: Number(finalTotal.toFixed(2)),
   };
 };
+
