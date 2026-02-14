@@ -5,6 +5,253 @@ import { ProductModellll } from "../../DB/models/productSchemaaaa.js";
 import { fillMissingDays } from "./helpers/fillMissingDays.js";
 import mongoose from "mongoose";
 
+// =================== NEW UNIFIED GRAPH DATA FUNCTIONS ===================
+
+export const getAdminGraphDataService = async (period) => {
+  if (period === "monthly") {
+    const now = new Date();
+    const thirtyDaysAgo = new Date(now);
+    thirtyDaysAgo.setDate(now.getDate() - 30);
+
+    const rawData = await OrderModelUser.aggregate([
+      {
+        $match: {
+          paymentStatus: "paid",
+          createdAt: { $gte: thirtyDaysAgo, $lte: now },
+        },
+      },
+      {
+        $group: {
+          _id: {
+            year: { $year: "$createdAt" },
+            month: { $month: "$createdAt" },
+            day: { $dayOfMonth: "$createdAt" },
+          },
+          ordersCount: { $sum: 1 },
+          revenue: { $sum: "$totalAmount.usd" },
+        },
+      },
+      {
+        $sort: { "_id.year": 1, "_id.month": 1, "_id.day": 1 },
+      },
+    ]);
+
+    // Create map for quick lookup
+    const dataMap = new Map();
+    rawData.forEach((item) => {
+      const dateKey = `${item._id.year}-${String(item._id.month).padStart(2, "0")}-${String(item._id.day).padStart(2, "0")}`;
+      dataMap.set(dateKey,{
+        ordersCount: item.ordersCount,
+        revenue: item.revenue,
+      });
+    });
+
+    // Generate all 30 days
+    const xAxis = [];
+    const ordersCount = [];
+    const revenue = [];
+
+    for (let i = 29; i >= 0; i--) {
+      const date = new Date(now);
+      date.setDate(now.getDate() - i);
+      const dateStr = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+      
+      xAxis.push(dateStr);
+      const data = dataMap.get(dateStr);
+      ordersCount.push(data?.ordersCount || 0);
+      revenue.push(data?.revenue || 0);
+    }
+
+    return {
+      xAxis,
+      yAxis: {
+        ordersCount,
+        revenue,
+      },
+    };
+  } else if (period === "daily") {
+    // Last 24 hours
+    const now = new Date();
+    const twentyFourHoursAgo = new Date(now);
+    twentyFourHoursAgo.setHours(now.getHours() - 24);
+
+    const rawData = await OrderModelUser.aggregate([
+      {
+        $match: {
+          paymentStatus: "paid",
+          createdAt: { $gte: twentyFourHoursAgo, $lte: now },
+        },
+      },
+      {
+        $group: {
+          _id: { $hour: "$createdAt" },
+          ordersCount: { $sum: 1 },
+          revenue: { $sum: "$totalAmount.usd" },
+        },
+      },
+      {
+        $sort: { "_id": 1 },
+      },
+    ]);
+
+    // Create map for quick lookup
+    const dataMap = new Map();
+    rawData.forEach((item) => {
+      dataMap.set(item._id, {
+        ordersCount: item.ordersCount,
+        revenue: item.revenue,
+      });
+    });
+
+    // Generate all 24 hours
+    const xAxis = [];
+   const ordersCount = [];
+    const revenue = [];
+
+    for (let i = 0; i < 24; i++) {
+      xAxis.push(`${String(i).padStart(2, "0")}:00`);
+      const data = dataMap.get(i);
+      ordersCount.push(data?.ordersCount || 0);
+      revenue.push(data?.revenue || 0);
+    }
+
+    return {
+      xAxis,
+      yAxis: {
+        ordersCount,
+        revenue,
+      },
+    };
+  }
+
+  throw new Error("Invalid period");
+};
+
+
+export const getVendorGraphDataService = async (vendorId, period) => {
+  if (period === "monthly") {
+    const now = new Date();
+    const thirtyDaysAgo = new Date(now);
+    thirtyDaysAgo.setDate(now.getDate() - 30);
+
+    const rawData = await SubOrderModel.aggregate([
+      {
+        $match: {
+          vendorId: new mongoose.Types.ObjectId(vendorId),
+          paymentStatus: "paid",
+          createdAt: { $gte: thirtyDaysAgo, $lte: now },
+        },
+      },
+      {
+        $group: {
+          _id: {
+            year: { $year: "$createdAt" },
+            month: { $month: "$createdAt" },
+            day: { $dayOfMonth: "$createdAt" },
+          },
+          ordersCount: { $sum: 1 },
+          revenue: { $sum: "$totalAmount.vendor" },
+        },
+      },
+      {
+        $sort: { "_id.year": 1, "_id.month": 1, "_id.day": 1 },
+      },
+    ]);
+
+    // Create map for quick lookup
+    const dataMap = new Map();
+    rawData.forEach((item) => {
+      const dateKey = `${item._id.year}-${String(item._id.month).padStart(2, "0")}-${String(item._id.day).padStart(2, "0")}`;
+      dataMap.set(dateKey, {
+        ordersCount: item.ordersCount,
+        revenue: item.revenue,
+      });
+    });
+
+    // Generate all 30 days
+    const xAxis = [];
+    const ordersCount = [];
+    const revenue = [];
+
+    for (let i = 29; i >= 0; i--) {
+      const date = new Date(now);
+      date.setDate(now.getDate() - i);
+      const dateStr = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+      
+      xAxis.push(dateStr);
+      const data = dataMap.get(dateStr);
+      ordersCount.push(data?.ordersCount || 0);
+      revenue.push(data?.revenue || 0);
+    }
+
+    return {
+      xAxis,
+      yAxis: {
+        ordersCount,
+        revenue,
+      },
+    };
+  } else if (period === "daily") {
+    // Last 24 hours
+    const now = new Date();
+    const twentyFourHoursAgo = new Date(now);
+    twentyFourHoursAgo.setHours(now.getHours() - 24);
+
+    const rawData = await SubOrderModel.aggregate([
+      {
+        $match: {
+          vendorId: new mongoose.Types.ObjectId(vendorId),
+          paymentStatus: "paid",
+          createdAt: { $gte: twentyFourHoursAgo, $lte: now },
+        },
+      },
+      {
+        $group: {
+          _id: { $hour: "$createdAt" },
+          ordersCount: { $sum: 1 },
+          revenue: { $sum: "$totalAmount.vendor" },
+        },
+      },
+      {
+        $sort: { "_id": 1 },
+      },
+    ]);
+
+    // Create map for quick lookup
+    const dataMap = new Map();
+    rawData.forEach((item) => {
+      dataMap.set(item._id, {
+        ordersCount: item.ordersCount,
+        revenue: item.revenue,
+      });
+    });
+
+    // Generate all 24 hours
+    const xAxis = [];
+    const ordersCount = [];
+    const revenue = [];
+
+    for (let i = 0; i < 24; i++) {
+      xAxis.push(`${String(i).padStart(2, "0")}:00`);
+      const data = dataMap.get(i);
+      ordersCount.push(data?.ordersCount || 0);
+      revenue.push(data?.revenue || 0);
+    }
+
+    return {
+      xAxis,
+      yAxis: {
+        ordersCount,
+        revenue,
+      },
+    };
+  }
+
+  throw new Error("Invalid period");
+};
+
+// =================== EXISTING FUNCTIONS (kept for backward compatibility) ===================
+
 export const getDashboardStatsService = async (user) => {
   if (!user || user.accountType !== "Admin") {
     throw new Error("Only admin can get dashboard stats");
@@ -149,98 +396,98 @@ export const getDashboardStatsService = async (user) => {
   };
 };
 
-//==================================
-export const getMonthlyDailySalesService = async () => {
-  const now = new Date();
+// //==================================
+// export const getMonthlyDailySalesService = async () => {
+//   const now = new Date();
 
-  const startOfMonth = new Date(
-    now.getFullYear(),
-    now.getMonth(),
-    1,
-    0,
-    0,
-    0,
-    0
-  );
+//   const startOfMonth = new Date(
+//     now.getFullYear(),
+//     now.getMonth(),
+//     1,
+//     0,
+//     0,
+//     0,
+//     0
+//   );
 
-  const endOfToday = new Date();
-  endOfToday.setHours(23, 59, 59, 999);
+//   const endOfToday = new Date();
+//   endOfToday.setHours(23, 59, 59, 999);
 
-  const aggData = await OrderModelUser.aggregate([
-    {
-      $match: {
-        paymentStatus: "paid",
-        // createdAt: { $gte: startOfMonth, $lte: endOfToday },
-      },
-    },
-    {
-      $group: {
-        _id: { $dayOfMonth: "$createdAt" },
-        val: { $sum: "$totalAmount.usd" },
-        users: { $addToSet: "$customerId" },
-      },
-    },
-    {
-      $project: {
-        _id: 0,
-        day: "$_id",
-        val: 1,
-        users: { $size: "$users" },
-      },
-    },
-  ]);
+//   const aggData = await OrderModelUser.aggregate([
+//     {
+//       $match: {
+//         paymentStatus: "paid",
+//         // createdAt: { $gte: startOfMonth, $lte: endOfToday },
+//       },
+//     },
+//     {
+//       $group: {
+//         _id: { $dayOfMonth: "$createdAt" },
+//         val: { $sum: "$totalAmount.usd" },
+//         users: { $addToSet: "$customerId" },
+//       },
+//     },
+//     {
+//       $project: {
+//         _id: 0,
+//         day: "$_id",
+//         val: 1,
+//         users: { $size: "$users" },
+//       },
+//     },
+//   ]);
 
-  // 🔽 fill missing days
-  return fillMissingDays(aggData, now.getDate());
-};
-//======================
-export const getMaxDailySalesService = async () => {
-  const startOfMonth = new Date(
-    new Date().getFullYear(),
-    new Date().getMonth(),
-    1
-  );
+//   // 🔽 fill missing days
+//   return fillMissingDays(aggData, now.getDate());
+// };
+// //======================
+// export const getMaxDailySalesService = async () => {
+//   const startOfMonth = new Date(
+//     new Date().getFullYear(),
+//     new Date().getMonth(),
+//     1
+//   );
 
-  const endOfToday = new Date();
-  endOfToday.setHours(23, 59, 59, 999);
+//   const endOfToday = new Date();
+//   endOfToday.setHours(23, 59, 59, 999);
 
-  const result = await OrderModelUser.aggregate([
-    {
-      $match: {
-        paymentStatus: "paid",
-        createdAt: { $gte: startOfMonth, $lte: endOfToday },
-      },
-    },
+//   const result = await OrderModelUser.aggregate([
+//     {
+//       $match: {
+//         paymentStatus: "paid",
+//         createdAt: { $gte: startOfMonth, $lte: endOfToday },
+//       },
+//     },
 
-    // 1️⃣ group by day
-    {
-      $group: {
-        _id: { $dayOfMonth: "$createdAt" },
-        val: { $sum: "$totalAmount.usd" },
-      },
-    },
+//     // 1️⃣ group by day
+//     {
+//       $group: {
+//         _id: { $dayOfMonth: "$createdAt" },
+//         val: { $sum: "$totalAmount.usd" },
+//       },
+//     },
 
-    // 2️⃣ get max daily sum
-    {
-      $group: {
-        _id: null,
-        averageMonthly: { $max: "$val" },
-      },
-    },
-  ]);
-  // let res =
-  // const ob={}
-  // result.push(4000);
-  // console.log(result[0].maxDailySales);
-  return result.length
-    ? [
-        result[0].averageMonthly,
-        Math.floor(result[0].averageMonthly - result[0].averageMonthly / 4),
-        Math.floor(result[0].averageMonthly - result[0].averageMonthly / 2),
-        Math.floor(result[0].averageMonthly / 4),
-      ]
-    : [0, 0, 0, 0];
-};
+//     // 2️⃣ get max daily sum
+//     {
+//       $group: {
+//         _id: null,
+//         averageMonthly: { $max: "$val" },
+//       },
+//     },
+//   ]);
+//   // let res =
+//   // const ob={}
+//   // result.push(4000);
+//   // console.log(result[0].maxDailySales);
+//   return result.length
+//     ? [
+//         result[0].averageMonthly,
+//         Math.floor(result[0].averageMonthly - result[0].averageMonthly / 4),
+//         Math.floor(result[0].averageMonthly - result[0].averageMonthly / 2),
+//         Math.floor(result[0].averageMonthly / 4),
+//       ]
+//     : [0, 0, 0, 0];
+// };
 //======================
 export const getTodayHourlyStatsService = async () => {
   const now = new Date();
@@ -390,50 +637,50 @@ export const getMonthlyDailySalesServiceV = async (vendorId) => {
 };
 
 // =================== Max Daily Sales for Vendor ===================
-export const getMaxDailySalesServiceV = async (vendorId) => {
-  const startOfMonth = new Date(
-    new Date().getFullYear(),
-    new Date().getMonth(),
-    1
-  );
+// export const getMaxDailySalesServiceV = async (vendorId) => {
+//   const startOfMonth = new Date(
+//     new Date().getFullYear(),
+//     new Date().getMonth(),
+//     1
+//   );
 
-  const endOfToday = new Date();
-  endOfToday.setHours(23, 59, 59, 999);
+//   const endOfToday = new Date();
+//   endOfToday.setHours(23, 59, 59, 999);
 
-  const result = await OrderModelUser.aggregate([
-    { $unwind: "$items" },
-    {
-      $match: {
-        paymentStatus: "paid",
-        "items.vendorId": new mongoose.Types.ObjectId(vendorId),
-        createdAt: { $gte: startOfMonth, $lte: endOfToday },
-      },
-    },
-    {
-      $group: {
-        _id: { $dayOfMonth: "$createdAt" },
-        val: { $sum: "$items.totalPrice.vendor" },
-      },
-    },
-    {
-      $group: {
-        _id: null,
-        maxDailySales: { $max: "$val" },
-      },
-    },
-  ]);
+//   const result = await OrderModelUser.aggregate([
+//     { $unwind: "$items" },
+//     {
+//       $match: {
+//         paymentStatus: "paid",
+//         "items.vendorId": new mongoose.Types.ObjectId(vendorId),
+//         createdAt: { $gte: startOfMonth, $lte: endOfToday },
+//       },
+//     },
+//     {
+//       $group: {
+//         _id: { $dayOfMonth: "$createdAt" },
+//         val: { $sum: "$items.totalPrice.vendor" },
+//       },
+//     },
+//     {
+//       $group: {
+//         _id: null,
+//         maxDailySales: { $max: "$val" },
+//       },
+//     },
+//   ]);
 
-  if (!result.length) return [0, 0, 0, 0];
+//   if (!result.length) return [0, 0, 0, 0];
 
-  const max = result[0].maxDailySales;
+//   const max = result[0].maxDailySales;
 
-  return [
-    max,
-    Math.floor(max - max / 4),
-    Math.floor(max - max / 2),
-    Math.floor(max / 4),
-  ];
-};
+//   return [
+//     max,
+//     Math.floor(max - max / 4),
+//     Math.floor(max - max / 2),
+//     Math.floor(max / 4),
+//   ];
+// };
 
 // =================== Today Hourly Stats for Vendor ===================
 export const getTodayHourlyStatsServiceV = async (vendorId) => {

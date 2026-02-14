@@ -1,13 +1,14 @@
 import express from "express";
 import { getDashboardStats } from "./admin.controller.js";
-import { getMonthlyDailySales } from "./admin.controller.js";
-import { getMaxDailySales } from "./admin.controller.js";
+//import { getMonthlyDailySales } from "./admin.controller.js";
+//import { getMaxDailySales } from "./admin.controller.js";
 import { getTodayHourlyStats } from "./admin.controller.js";
 import { getMaxHourSales } from "./admin.controller.js";
-import { getMonthlyDailySalesVendor } from "./admin.controller.js";
-import { getMaxDailySalesVendor } from "./admin.controller.js";
+//import { getMonthlyDailySalesVendor } from "./admin.controller.js";
+//import { getMaxDailySalesVendor } from "./admin.controller.js";
 import { getTodayHourlyStatsVendor } from "./admin.controller.js";
 import { getMaxHourSalesVendor } from "./admin.controller.js";
+import { getAdminGraphData, getVendorGraphData } from "./admin.controller.js";
 
 import { getAllCustomers } from "./orders/orders.controller.js";
 import { getAllOrders } from "./orders/orders.controller.js";
@@ -38,59 +39,51 @@ import { getVendorDashboardStats } from "./vendors/vendors.controller.js";
 const router = express.Router();
 
 router.get(
+  "/admin/graph-data",
+  authentication(),
+  authorization("Admin"),
+  getAdminGraphData
+);
+router.get(
+  "/vendor/graph-data",
+  authentication(),
+  authorization(["Admin", "vendor"]),
+  getVendorGraphData
+);
+
+router.get(
   "/homePage",
   authentication(),
   authorization("Admin"),
   getDashboardStats
 );
-router.get(
-  "/monthlyData",
-  authentication(),
-  authorization("Admin"),
-  getMonthlyDailySales
-);
-router.get(
-  "/averageMonthly",
-  authentication(),
-  authorization("Admin"),
-  getMaxDailySales
-);
-router.get(
-  "/dailyData",
-  authentication(),
-  authorization("Admin"),
-  getTodayHourlyStats
-);
-router.get(
-  "/averageDaily",
-  authentication(),
-  authorization("Admin"),
-  getMaxHourSales
-);
-router.get(
-  "/monthlyDataVendor",
-  authentication(),
-  authorization(["Admin", "vendor"]),
-  getMonthlyDailySalesVendor
-);
-router.get(
-  "/averageMonthlyVendor",
-  authentication(),
-  authorization(["Admin", "vendor"]),
-  getMaxDailySalesVendor
-);
-router.get(
-  "/dailyDataVendor",
-  authentication(),
-  authorization(["Admin", "vendor"]),
-  getTodayHourlyStatsVendor
-);
-router.get(
-  "/averageDailyVendor",
-  authentication(),
-  authorization(["Admin", "vendor"]),
-  getMaxHourSalesVendor
-);
+
+
+// router.get(
+//   "/monthlyData",
+//   authentication(),
+//   authorization("Admin"),
+//   getMonthlyDailySales
+// );
+// router.get(
+//   "/averageMonthly",
+//   authentication(),
+//   authorization("Admin"),
+//   getMaxDailySales
+// );
+// router.get(
+//   "/dailyData",
+//   authentication(),
+//   authorization("Admin"),
+//   getTodayHourlyStats
+// );
+// router.get(
+//   "/averageDaily",
+//   authentication(),
+//   authorization("Admin"),
+//   getMaxHourSales
+// );
+
 
 router.get(
   "/customers",

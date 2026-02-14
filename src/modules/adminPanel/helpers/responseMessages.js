@@ -86,6 +86,20 @@ const messages = {
     en: "Invalid currency specified",
     ar: "العملة المحددة غير صالحة",
   },
+
+  // Graph data messages
+  invalid_period: {
+    en: "Invalid period. Must be 'daily' or 'monthly'",
+    ar: "فترة غير صالحة. يجب أن تكون 'يومية' أو 'شهرية'",
+  },
+  graph_data_daily_fetched: {
+    en: "Daily graph data fetched successfully",
+    ar: "تم جلب بيانات الرسم البياني اليومي بنجاح",
+  },
+  graph_data_monthly_fetched: {
+    en: "Monthly graph data fetched successfully",
+    ar: "تم جلب بيانات الرسم البياني الشهري بنجاح",
+  },
 };
 
 /**
