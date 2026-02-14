@@ -17,6 +17,7 @@ export const getProducts = asyncHandelr(async (req, res) => {
   let userCurrency;
   try {
     userCurrency = await getCurrencyByCode(currencyCode, lang);
+    console.log(userCurrency)
   } catch (error) {
     userCurrency = { code: "USD", name: lang==='ar' ? "دولار أمريكي" : "US Dollar", symbol: "$" };
   }
@@ -42,13 +43,9 @@ export const getProducts = asyncHandelr(async (req, res) => {
   });
 });
 
-/**
- * Get product by ID
- */
 export const getProductById = asyncHandelr(async (req, res) => {
   const lang = getUserLanguage(req);
   
-  // Get currency code from user or default to USD
   let currencyCode = "USD";
   if (req.user?.currency) {
     currencyCode = req.user.currency.code || req.user.currency;

@@ -53,12 +53,13 @@ const transformOrderItem = (item, lang, role) => {
 
   // Localize product information
   if (transformed.product) {
+    // Destructure to exclude currency
+    const { currency, ...productWithoutCurrency } = transformed.product;
+    
     transformed.product = {
-      ...transformed.product,
+      ...productWithoutCurrency,
       name: localize(transformed.product.name, lang),
       description: localize(transformed.product.description, lang),
-      // Keep currency details for reference
-      currency: transformed.product.currency,
       // Transform prices
       mainPrice: transformPriceObject(transformed.product.mainPrice, role),
       discountPrice: transformed.product.discountPrice 
@@ -101,25 +102,30 @@ const transformOrderItem = (item, lang, role) => {
 const transformCouponData = (couponUsed, lang, role) => {
   if (!couponUsed || !couponUsed.couponId) return null;
 
+  // Destructure to exclude currency
+  const { currency, ...couponWithoutCurrency } = couponUsed;
+
   return {
-    ...couponUsed,
+    ...couponWithoutCurrency,
     discountValue: transformPriceObject(couponUsed.discountValue, role), // Direct value
-    currency: couponUsed.currency,
   };
 };
 
 /**
- * Transforms order response with localization and role-based pricing
- * @param {Object} order - Order document
- * @param {string} lang - Target language ('ar' or 'en')
+ * Transforms an order response with localization and role-based pricing
+ * @param {Object} order - Raw order object from database
+ * @param {string} lang - Target language ('en' or 'ar')
  * @param {string} role - User role ('admin' or 'vendor')
- * @returns {Object} - Transformed order
+ * @returns {Object} - Transformed order object
  */
 export const transformOrderResponse = (order, lang = "en", role = "admin") => {
   if (!order) return order;
 
+  // Destructure to exclude currency-related fields
+  const { customerCurrency, ...orderWithoutCurrency } = order;
+
   const transformed = {
-    ...order,
+    ...orderWithoutCurrency,
     // Transform all items
     items: (order.items || []).map((item) =>
       transformOrderItem(item, lang, role)
@@ -129,25 +135,30 @@ export const transformOrderResponse = (order, lang = "en", role = "admin") => {
     totalAmount: transformPriceObject(order.totalAmount, role),
     // Transform coupon data
     couponUsed: transformCouponData(order.couponUsed, lang, role),
-    // Keep currency details
-    customerCurrency: order.customerCurrency,
   };
 
   return transformed;
 };
 
 /**
- * Transforms suborder response with localization and role-based pricing
- * @param {Object} subOrder - SubOrder document
- * @param {string} lang - Target language ('ar' or 'en')
+ * Transforms a suborder response with localization and role-based pricing
+ * @param {Object} subOrder - Raw suborder object from database
+ * @param {string} lang - Target language ('en' or 'ar')
  * @param {string} role - User role ('admin' or 'vendor')
- * @returns {Object} - Transformed suborder
+ * @returns {Object} - Transformed suborder object
  */
-export const transformSubOrderResponse = (subOrder, lang = "en", role = "admin") => {
+export const transformSubOrderResponse = (
+  subOrder,
+  lang = "en",
+  role = "admin"
+) => {
   if (!subOrder) return subOrder;
 
+  // Destructure to exclude currency-related fields
+  const { customerCurrency, ...subOrderWithoutCurrency } = subOrder;
+
   const transformed = {
-    ...subOrder,
+    ...subOrderWithoutCurrency,
     // Transform all items
     items: (subOrder.items || []).map((item) =>
       transformOrderItem(item, lang, role)
@@ -157,8 +168,6 @@ export const transformSubOrderResponse = (subOrder, lang = "en", role = "admin")
     totalAmount: transformPriceObject(subOrder.totalAmount, role),
     // Transform coupon data
     couponUsed: transformCouponData(subOrder.couponUsed, lang, role),
-    // Keep currency details
-    customerCurrency: subOrder.customerCurrency,
     // Add items count for convenience
     itemsCount: (subOrder.items || []).length,
   };

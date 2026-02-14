@@ -150,23 +150,17 @@ export const convertCartToUserPreferences = async (
       itemPrice = productPrice;
     }
 
-    // Add to subtotal
-    // If product was already processed, prices are already converted
-    // Otherwise, we need to apply exchange rate
+
     if (productAlreadyProcessed) {
-      // Prices already converted - for variant items after product was processed
-      // Variant prices still need conversion if this is the first time seeing this variant
       if (item.variant && !item.variant._processed) {
         newSubTotal += itemPrice * exchangeRate * item.quantity;
       } else {
         newSubTotal += itemPrice * item.quantity;
       }
     } else {
-      // First time - apply exchange rate
       newSubTotal += itemPrice * exchangeRate * item.quantity;
     }
 
-    // Convert product prices for display (only if not already processed)
     if (!productAlreadyProcessed && exchangeRate !== 1) {
       if (product.mainPrice) {
         const val = parseFloat(product.mainPrice);

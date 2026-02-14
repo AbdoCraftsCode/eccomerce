@@ -5,7 +5,6 @@ import { throwError } from "./responseMessages.js";
 const convertProductWithRate = (product, targetCurrency, exchangeRate) => {
   const productCopy = JSON.parse(JSON.stringify(product));
 
-  // Convert product prices
   if (productCopy.mainPrice) {
     productCopy.mainPrice = parseFloat((productCopy.mainPrice * exchangeRate).toFixed(2));
   }
@@ -14,7 +13,6 @@ const convertProductWithRate = (product, targetCurrency, exchangeRate) => {
     productCopy.disCountPrice = parseFloat((productCopy.disCountPrice * exchangeRate).toFixed(2));
   }
 
-  // Convert variant prices
   if (productCopy.variants && Array.isArray(productCopy.variants)) {
     productCopy.variants = productCopy.variants.map((variant) => {
       const variantCopy = { ...variant };
@@ -38,17 +36,15 @@ const convertProductWithRate = (product, targetCurrency, exchangeRate) => {
   return productCopy;
 };
 
-/**
- * Convert product prices to target currency
- */
+
 export const convertProductPricesToCurrency = async (product, targetCurrency, exchangeRate = null) => {
   if (!product || !targetCurrency) return product;
 
-  const targetCurrencyCode = targetCurrency.code?.toUpperCase() || "USD";
+  const targetCurrencyCode = targetCurrency.code?.toUpperCase();
   const productCurrencyCode = product.currency?.code?.toUpperCase();
 
   if (!productCurrencyCode) {
-    return null; // Product will be filtered out
+    return null; 
   }
 
   // Same currency, no conversion needed
@@ -58,30 +54,26 @@ export const convertProductPricesToCurrency = async (product, targetCurrency, ex
     return productCopy;
   }
 
-  // Use provided exchange rate or fetch new one
   let rate = exchangeRate;
   if (!rate) {
     rate = await getExchangeRate(productCurrencyCode, targetCurrencyCode);
   }
 
   if (!rate) {
-    return null; // Product will be filtered out if no exchange rate available
+    return null; 
   }
 
   return convertProductWithRate(product, targetCurrency, rate);
 };
 
-/**
- * Convert multiple products with exchange rate caching
- */
+
 export const convertProductsArrayToCurrency = async (products, targetCurrency, lang = "en") => {
   if (!products || !Array.isArray(products) || products.length === 0) {
     return products;
   }
 
-  const targetCurrencyCode = targetCurrency.code?.toUpperCase() || "USD";
+  const targetCurrencyCode = targetCurrency.code?.toUpperCase();
 
-  // Filter products with currency
   const productsWithCurrency = products.filter(product => product.currency);
 
   const productsByCurrency = {};
