@@ -100,12 +100,9 @@ export const convertCartToUserPreferences = async (
   const cartObj = cart.toObject();
   let newSubTotal = 0;
 
-  // Track processed products to handle same product appearing multiple times
-  // (e.g., product-only and product+variant from same product)
-  const processedProducts = new Map(); // productId -> exchangeRate
+  const processedProducts = new Map(); 
 
   for (const item of cartObj.items) {
-    // Skip items without product (product may have been deleted)
     if (!item.product) continue;
 
     const product = item.product;
@@ -115,12 +112,10 @@ export const convertCartToUserPreferences = async (
     let productAlreadyProcessed = processedProducts.has(productId);
 
     if (productAlreadyProcessed) {
-      // Product was already processed in a previous item - product.currency is already a string
-      // Use the cached exchange rate
+
       exchangeRate = processedProducts.get(productId);
     } else {
-      // First time processing this product - product.currency is still an object
-      // Handle case where product has no currency set
+
       if (
         !product.currency ||
         (typeof product.currency === "object" && !product.currency._id)
@@ -132,18 +127,14 @@ export const convertCartToUserPreferences = async (
       processedProducts.set(productId, exchangeRate);
     }
 
-    // Calculate item price for subtotal
-    // If variant exists, use variant price; otherwise use product price
+
     let itemPrice = 0;
     if (item.variant) {
-      // User pays variant price when variant is specified
-      // Check if variant prices are already converted (string with decimals) or original
       const variantPrice = parseFloat(
         item.variant.disCountPrice || item.variant.price || 0,
       );
       itemPrice = variantPrice;
     } else {
-      // User pays product price when only product is specified (no variant)
       const productPrice = parseFloat(
         product.disCountPrice || product.mainPrice || 0,
       );
@@ -179,10 +170,9 @@ export const convertCartToUserPreferences = async (
       product.currency = targetCurrencyCode;
     }
 
-    // Convert variant prices for display (each variant is unique, always convert)
     if (item.variant && exchangeRate !== 1 && !item.variant._processed) {
       const variant = item.variant;
-      item.variant._processed = true; // Mark as processed
+      item.variant._processed = true;
 
       if (variant.price) {
         const val = parseFloat(variant.price);
@@ -199,13 +189,11 @@ export const convertCartToUserPreferences = async (
       }
     }
 
-    // Localize product name
     if (product.name) {
       product.name =
         product.name?.[lang] || product.name?.en || "Unnamed Product";
     }
 
-    // Localize product description
     if (product.description) {
       product.description =
         product.description?.[lang] ||
@@ -214,7 +202,6 @@ export const convertCartToUserPreferences = async (
     }
   }
 
-  // Round subtotal to 2 decimal places for consistency
   cartObj.subTotal = parseFloat(newSubTotal.toFixed(2));
   cartObj.currency = targetCurrencyCode;
 
@@ -270,19 +257,15 @@ export const addToCart = async (req, lang) => {
     const isSameProduct = item.product.toString() === productId;
     if (!isSameProduct) return false;
 
-    // Check if variant status matches
     const itemHasVariant = item.variant !== null && item.variant !== undefined;
     const requestHasVariant = variantId !== null && variantId !== undefined;
 
     if (requestHasVariant && itemHasVariant) {
-      // Both have variants - check if it's the SAME variant
       return item.variant.toString() === variantId;
     } else if (!requestHasVariant && !itemHasVariant) {
-      // Both are product-only (no variant) - this is a duplicate
       return true;
     }
 
-    // One has variant, one doesn't - these are different items, allow both
     return false;
   });
 

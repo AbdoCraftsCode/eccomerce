@@ -107,7 +107,9 @@ export const getAllOrdersService = async (query, lang = "en") => {
   const skip = (pageNum - 1) * limitNum;
 
   // 🔹 Dynamic filter
-  const filter = {};
+  const filter = {
+    status: "confirmed",
+  };
 
   if (paymentStatus) {
     filter.paymentStatus = paymentStatus;
@@ -145,7 +147,7 @@ export const getAllOrdersService = async (query, lang = "en") => {
 
   // 🔹 Transform orders with localization and admin pricing (USD)
   const formattedOrders = orders.map((order) =>
-    transformOrderResponse(order, lang, "admin")
+    transformOrderResponse(order, lang, "admin", { showCoupon: false })
   );
 
   return {

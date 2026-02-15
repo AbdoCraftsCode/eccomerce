@@ -132,7 +132,7 @@ export const getCustomersForVendor = asyncHandelr(async (req, res) => {
   //============================
   export const getVendorDashboardStats = asyncHandelr(async (req, res) => {
     const lang = getUserLanguage(req);
-    const data = await getVendorDashboardStatsService(req.user);
+    const data = await getVendorDashboardStatsService(req.user, lang);
     res.status(200).json({
       success: true,
       message: getMessage("vendor_dashboard_stats_fetched", lang),

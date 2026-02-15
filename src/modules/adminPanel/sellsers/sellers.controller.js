@@ -4,6 +4,7 @@ import { getLastMonthSalesStatsService  } from "./sellers.service.js";
 import { getAcceptedSellersWithCategories  } from "./sellers.service.js";
 import { getLatestSellersService   } from "./sellers.service.js";
 import { getCategorySalesService  } from "./sellers.service.js";
+import { getVendorGrowthGraphService } from "./sellers.service.js";
 import { getUserLanguage } from "../../../utlis/localization/langUserHelper.js";
 
 export const getSellerAndProductStats = asyncHandelr(async (req, res) => {
@@ -16,7 +17,7 @@ export const getSellerAndProductStats = asyncHandelr(async (req, res) => {
       data: stats,
     });
   });
-//===================================================================
+
 export const getLastMonthSalesStats = asyncHandelr(async (req, res) => {
     const lang = getUserLanguage(req);
     const stats = await getLastMonthSalesStatsService();
@@ -27,7 +28,7 @@ export const getLastMonthSalesStats = asyncHandelr(async (req, res) => {
       data: stats,
     });
   });
-  //=============================
+
   export const acceptedSellers = asyncHandelr(async (req, res, next) => {
     const lang = getUserLanguage(req);
     const vendors = await getAcceptedSellersWithCategories();
@@ -39,7 +40,7 @@ export const getLastMonthSalesStats = asyncHandelr(async (req, res) => {
       data: vendors,
     });
   });
-  //=========================================
+
   export const getLatestSellers = asyncHandelr(async (req, res, next) => {
     const { limit = 5 } = req.query;
     const lang = getUserLanguage(req);
@@ -52,7 +53,7 @@ export const getLastMonthSalesStats = asyncHandelr(async (req, res) => {
       data: sellers,
     });
   });
-  //===========================================
+
   export const getCategorySales = asyncHandelr(async (req, res) => {
     const lang = getUserLanguage(req);
     const data = await getCategorySalesService(lang);
@@ -60,6 +61,17 @@ export const getLastMonthSalesStats = asyncHandelr(async (req, res) => {
     res.status(200).json({
       success: true,
       message: (lang=='en')?"Sales per category":"المبيعات حسب الفئة",
+      data,
+    });
+  });
+
+  export const getVendorGrowthGraph = asyncHandelr(async (req, res) => {
+    const lang = getUserLanguage(req);
+    const data = await getVendorGrowthGraphService();
+  
+    res.status(200).json({
+      success: true,
+      message: (lang=='en')?"Vendor growth graph fetched successfully":"تم جلب رسم بياني لنمو البائعين بنجاح",
       data,
     });
   });

@@ -36,7 +36,7 @@ export const createOrderItems = (
         itemDiscount = (item.totalPrice.usd * coupon.discountValue) / 100;
       } else if (coupon.discountType === "fixed") {
         // Distribute fixed discount proportionally using USD values
-        const itemShare = (item.totalPrice.usd / subtotal.usd) * discountAmount;
+        const itemShare = (item.totalPrice.usd / subtotal.usd) * discountAmount.usd;
         itemDiscount = Math.min(itemShare, item.totalPrice.usd);
       }
     }
@@ -61,17 +61,15 @@ export const createOrder = async (orderData, session) => {
  * Build the couponUsed object with currency details and multi-currency values
  *
  * @param {Object} coupon - The coupon document
- * @param {number} applicableSubtotal
+ * @param {Object} applicableSubtotal - {vendor, customer, usd}
  * @param {Array} orderItems
- * @param {number} discountAmountInCustomerCurrency
- * @param {number} discountAmountInUSD
+ * @param {Object} discountAmount - Discount amounts in all currencies {vendor, customer, usd}
  */
 export const buildCouponUsedObject = (
   coupon,
   applicableSubtotal,
   orderItems,
-  discountAmountInCustomerCurrency = 0,
-  discountAmountInUSD = 0
+  discountAmount = { vendor: 0, customer: 0, usd: 0 }
 ) => {
   if (!coupon) return null;
 
@@ -92,9 +90,9 @@ export const buildCouponUsedObject = (
     code: coupon.code,
     discountType: coupon.discountType,
     discountValue: {
-      vendor: coupon.discountValue,
-      customer: discountAmountInCustomerCurrency,
-      usd: discountAmountInUSD,
+      vendor: Number(discountAmount.vendor.toFixed(2)),
+      customer: Number(discountAmount.customer.toFixed(2)),
+      usd: Number(discountAmount.usd.toFixed(2)),
     },
     currency: couponCurrency,
     appliesTo: coupon.appliesTo,
@@ -108,8 +106,16 @@ export const buildCouponUsedObject = (
         productId: item.product._id,
         variantId: item.variant?._id || null,
         quantity: item.quantity,
-        unitPrice: item.unitPrice,
-        itemTotal: item.totalPrice,
+        unitPrice: {
+          vendor: item.unitPrice.vendor,
+          customer: item.unitPrice.customer,
+          usd: item.unitPrice.usd,
+        },
+        itemTotal: {
+          vendor: item.totalPrice.vendor,
+          customer: item.totalPrice.customer,
+          usd: item.totalPrice.usd,
+        },
       })),
   };
 };

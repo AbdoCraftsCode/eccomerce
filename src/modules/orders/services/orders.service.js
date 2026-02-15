@@ -141,7 +141,6 @@ export const createOrderforUser = async (
     const {
       coupon,
       discountAmount,
-      discountAmountInCustomerCurrency,
       couponAppliedItems,
       applicableSubtotal,
     } = await validateAndApplyCoupon(
@@ -167,12 +166,11 @@ export const createOrderforUser = async (
       coupon,
       applicableSubtotal,
       orderItems,
-      discountAmountInCustomerCurrency,
       discountAmount
     );
 
     // Step 10: Calculate totals
-    const totals = calculateOrderTotals(subtotal.usd, discountAmount, 0);
+    const totals = calculateOrderTotals(subtotal.usd, discountAmount.usd, 0);
 
     const orderData = {
       customerId,
@@ -181,8 +179,8 @@ export const createOrderforUser = async (
       couponUsed,
       shippingCost: 0,
       totalAmount: {
-        vendor: subtotal.vendor - discountAmount,
-        customer: subtotal.customer - discountAmount,
+        vendor: Number((subtotal.vendor - discountAmount.vendor).toFixed(2)),
+        customer: Number((subtotal.customer - discountAmount.customer).toFixed(2)),
         usd: totals.totalAmount,
       },
       customerCurrency,
@@ -194,7 +192,7 @@ export const createOrderforUser = async (
       },
       paymentStatus: "pending",
       paymentMethod,
-      status: "pending",
+      status: paymentMethod === "cash_on_delivery" ? "confirmed" : "pending",
       subOrders: [],
     };
 
@@ -217,10 +215,17 @@ export const createOrderforUser = async (
         customer: vendorItems.reduce((sum, i) => sum + i.unitPrice.customer * i.quantity, 0),
         usd: vendorItems.reduce((sum, i) => sum + i.unitPrice.usd * i.quantity, 0),
       };
-      const vendorDiscount = vendorItems.reduce(
+      
+      // Calculate vendor discount in USD
+      const vendorDiscountUSD = vendorItems.reduce(
         (sum, i) => sum + (i.discountApplied || 0),
         0
       );
+      
+      // Calculate discount proportionally for vendor and customer currencies
+      const discountRatio = vendorSubtotal.usd > 0 ? vendorDiscountUSD / vendorSubtotal.usd : 0;
+      const vendorDiscountVendor = vendorSubtotal.vendor * discountRatio;
+      const vendorDiscountCustomer = vendorSubtotal.customer * discountRatio;
 
       let subCouponUsed = null;
       if (coupon) {
@@ -228,18 +233,63 @@ export const createOrderforUser = async (
           (i) => (i.discountApplied || 0) > 0
         );
         if (vendorAppliedItems.length > 0) {
-          subCouponUsed = {
-            ...couponUsed,
-            applicableSubtotal: vendorAppliedItems.reduce(
-              (sum, i) => sum + i.unitPrice.usd * i.quantity,
+          // Calculate this sub-order's applicable subtotal in all currencies
+          const subApplicableSubtotal = {
+            vendor: vendorAppliedItems.reduce(
+              (sum, i) => sum + i.totalPrice.vendor,
               0
             ),
+            customer: vendorAppliedItems.reduce(
+              (sum, i) => sum + i.totalPrice.customer,
+              0
+            ),
+            usd: vendorAppliedItems.reduce(
+              (sum, i) => sum + i.totalPrice.usd,
+              0
+            ),
+          };
+
+          // Calculate proportional discount for this sub-order
+          // based on the ratio of this vendor's applicable subtotal to the total applicable subtotal
+          const proportionRatio = applicableSubtotal.usd > 0
+            ? subApplicableSubtotal.usd / applicableSubtotal.usd
+            : 0;
+
+          const subDiscountValue = {
+            vendor: Number((discountAmount.vendor * proportionRatio).toFixed(2)),
+            customer: Number((discountAmount.customer * proportionRatio).toFixed(2)),
+            usd: Number((discountAmount.usd * proportionRatio).toFixed(2)),
+          };
+
+          subCouponUsed = {
+            couponId: couponUsed.couponId,
+            code: couponUsed.code,
+            discountType: couponUsed.discountType,
+            discountValue: subDiscountValue,
+            currency: couponUsed.currency,
+            appliesTo: couponUsed.appliesTo,
+            productId: couponUsed.productId,
+            categoryId: couponUsed.categoryId,
+            vendorId: couponUsed.vendorId,
+            applicableSubtotal: {
+              vendor: Number(subApplicableSubtotal.vendor.toFixed(2)),
+              customer: Number(subApplicableSubtotal.customer.toFixed(2)),
+              usd: Number(subApplicableSubtotal.usd.toFixed(2)),
+            },
             appliedItems: vendorAppliedItems.map((i) => ({
               productId: i.product._id,
               variantId: i.variant?._id || null,
               quantity: i.quantity,
-              unitPrice: i.unitPrice,
-              itemTotal: i.totalPrice,
+              unitPrice: {
+                vendor: i.unitPrice.vendor,
+                customer: i.unitPrice.customer,
+                usd: i.unitPrice.usd,
+              },
+              itemTotal: {
+                vendor: i.totalPrice.vendor,
+                customer: i.totalPrice.customer,
+                usd: i.totalPrice.usd,
+              },
             })),
           };
         }
@@ -258,9 +308,9 @@ export const createOrderforUser = async (
         couponUsed: subCouponUsed,
         shippingCost: 0,
         totalAmount: {
-          vendor: vendorSubtotal.vendor - vendorDiscount,
-          customer: vendorSubtotal.customer - vendorDiscount,
-          usd: vendorSubtotal.usd - vendorDiscount,
+          vendor: Number((vendorSubtotal.vendor - vendorDiscountVendor).toFixed(2)),
+          customer: Number((vendorSubtotal.customer - vendorDiscountCustomer).toFixed(2)),
+          usd: Number((vendorSubtotal.usd - vendorDiscountUSD).toFixed(2)),
         },
         customerCurrency,
         shippingAddress: order.shippingAddress,

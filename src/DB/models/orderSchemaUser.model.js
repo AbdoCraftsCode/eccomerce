@@ -137,16 +137,25 @@ const orderSchema = new mongoose.Schema(
         default: null,
       },
       applicableSubtotal: {
-        type: Number,
-        default: 0,
+        vendor: { type: Number, default: 0 },
+        customer: { type: Number, default: 0 },
+        usd: { type: Number, default: 0 },
       },
       appliedItems: [
         {
           productId: mongoose.Schema.Types.ObjectId,
           variantId: mongoose.Schema.Types.ObjectId,
           quantity: Number,
-          unitPrice: Number,
-          itemTotal: Number,
+          unitPrice: {
+            vendor: Number,
+            customer: Number,
+            usd: Number,
+          },
+          itemTotal: {
+            vendor: Number,
+            customer: Number,
+            usd: Number,
+          },
         },
       ],
     },

@@ -115,8 +115,14 @@ export const processCartItems = async (
     // Build variant snapshot if applicable
     let variantSnapshot = null;
     let variant = null;
-    let basePrice = Number(product.mainPrice) || 0;
-    let discountPrice = Number(product.disCountPrice) || 0;
+    
+    // Keep product's original prices separate
+    const productBasePrice = Number(product.mainPrice) || 0;
+    const productDiscountPrice = Number(product.disCountPrice) || 0;
+    
+    // These will be used for the actual order item (might be variant prices)
+    let basePrice = productBasePrice;
+    let discountPrice = productDiscountPrice;
 
     if (cartItem.variant && product.hasVariants) {
       variant = cartItem.variant;
@@ -142,6 +148,8 @@ export const processCartItems = async (
       // Temp fields for conversion
       _basePrice: basePrice,
       _discountPrice: discountPrice,
+      _productBasePrice: productBasePrice,
+      _productDiscountPrice: productDiscountPrice,
       _fromCode: fromCode,
       _productId: product._id,
     };
@@ -151,8 +159,8 @@ export const processCartItems = async (
 
     // Queue all conversion promises:
     // [0] unitPrice -> USD, [1] totalPrice -> USD,
-    // [2] mainPrice -> USD, [3] discountPrice -> USD,
-    // [4] mainPrice -> customerCurrency, [5] discountPrice -> customerCurrency
+    // [2] PRODUCT mainPrice -> USD, [3] PRODUCT discountPrice -> USD,
+    // [4] PRODUCT mainPrice -> customerCurrency, [5] PRODUCT discountPrice -> customerCurrency
     // [6] unitPrice -> customerCurrency
     conversionPromises.push(
       convertToUSD(applicablePrice, product.currency?._id || product.currency),
@@ -160,10 +168,10 @@ export const processCartItems = async (
         applicablePrice * quantity,
         product.currency?._id || product.currency
       ),
-      convertAmount(basePrice, fromCode, "USD"),
-      convertAmount(discountPrice, fromCode, "USD"),
-      convertAmount(basePrice, fromCode, customerCurrencyCode),
-      convertAmount(discountPrice, fromCode, customerCurrencyCode),
+      convertAmount(productBasePrice, fromCode, "USD"),
+      convertAmount(productDiscountPrice, fromCode, "USD"),
+      convertAmount(productBasePrice, fromCode, customerCurrencyCode),
+      convertAmount(productDiscountPrice, fromCode, customerCurrencyCode),
       convertAmount(applicablePrice, fromCode, customerCurrencyCode)
     );
   }
@@ -211,6 +219,8 @@ export const processCartItems = async (
       // Clean up temp fields
       delete item._basePrice;
       delete item._discountPrice;
+      delete item._productBasePrice;
+      delete item._productDiscountPrice;
       delete item._fromCode;
       delete item._productId;
     }

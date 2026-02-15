@@ -19,6 +19,7 @@ export const getAllPaidOrders = asyncHandelr(async (req, res) => {
     count: result.count,
     pagination: result.pagination,
     data: result.data,
+    summary: result.summary,
   });
 });
 

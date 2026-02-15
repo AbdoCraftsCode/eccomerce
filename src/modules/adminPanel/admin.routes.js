@@ -1,11 +1,7 @@
 import express from "express";
 import { getDashboardStats } from "./admin.controller.js";
-//import { getMonthlyDailySales } from "./admin.controller.js";
-//import { getMaxDailySales } from "./admin.controller.js";
 import { getTodayHourlyStats } from "./admin.controller.js";
 import { getMaxHourSales } from "./admin.controller.js";
-//import { getMonthlyDailySalesVendor } from "./admin.controller.js";
-//import { getMaxDailySalesVendor } from "./admin.controller.js";
 import { getTodayHourlyStatsVendor } from "./admin.controller.js";
 import { getMaxHourSalesVendor } from "./admin.controller.js";
 import { getAdminGraphData, getVendorGraphData } from "./admin.controller.js";
@@ -27,6 +23,7 @@ import { getLastMonthSalesStats } from "./sellsers/sellers.controller.js";
 import { acceptedSellers } from "./sellsers/sellers.controller.js";
 import { getLatestSellers } from "./sellsers/sellers.controller.js";
 import { getCategorySales } from "./sellsers/sellers.controller.js";
+import { getVendorGrowthGraph } from "./sellsers/sellers.controller.js";
 import {
   getSubOrdersByVendorId,
   getSubOrderDetailsByVendorId
@@ -36,7 +33,7 @@ import {
   authentication,
   authorization,
 } from "../../middlewere/authontcation.middlewere.js";
-// VENDORS ROUTES
+
 import { getCustomersForVendor } from "./vendors/vendors.controller.js";
 import { getDailyVendorStats } from "./vendors/vendors.controller.js";
 import { getMonthlyVendorStats } from "./vendors/vendors.controller.js";
@@ -63,33 +60,6 @@ router.get(
   authorization("Admin"),
   getDashboardStats
 );
-
-
-// router.get(
-//   "/monthlyData",
-//   authentication(),
-//   authorization("Admin"),
-//   getMonthlyDailySales
-// );
-// router.get(
-//   "/averageMonthly",
-//   authentication(),
-//   authorization("Admin"),
-//   getMaxDailySales
-// );
-// router.get(
-//   "/dailyData",
-//   authentication(),
-//   authorization("Admin"),
-//   getTodayHourlyStats
-// );
-// router.get(
-//   "/averageDaily",
-//   authentication(),
-//   authorization("Admin"),
-//   getMaxHourSales
-// );
-
 
 router.get(
   "/customers",
@@ -175,7 +145,14 @@ router.get(
   authorization("Admin"),
   getCategorySales
 );
-// VENDOR ROUTIES
+
+router.get(
+  "/vendors/growth",
+  authentication(),
+  authorization("Admin"),
+  getVendorGrowthGraph
+);
+
 router.get(
   "/getCustomersByVendor",
   authentication(),

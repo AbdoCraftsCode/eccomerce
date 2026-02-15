@@ -42,10 +42,9 @@ export const validateAndApplyCoupon = async (
   if (!couponCode) {
     return {
       coupon: null,
-      discountAmount: 0,
-      discountAmountInCustomerCurrency: 0,
+      discountAmount: { vendor: 0, customer: 0, usd: 0 },
       couponAppliedItems: [],
-      applicableSubtotal: 0,
+      applicableSubtotal: { vendor: 0, customer: 0, usd: 0 },
     };
   }
 
@@ -101,44 +100,54 @@ export const validateAndApplyCoupon = async (
     throw new Error("coupon_not_applicable", { cause: 400 });
   }
 
-  // Calculate applicable subtotal (already in USD)
-  let applicableSubtotal = applicableItems.reduce(
-    (sum, item) => sum + item.totalPrice,
+  // Calculate applicable subtotal in all currencies
+  let applicableSubtotalUSD = applicableItems.reduce(
+    (sum, item) => sum + item.totalPrice.usd,
+    0
+  );
+  let applicableSubtotalVendor = applicableItems.reduce(
+    (sum, item) => sum + item.totalPrice.vendor,
+    0
+  );
+  let applicableSubtotalCustomer = applicableItems.reduce(
+    (sum, item) => sum + item.totalPrice.customer,
     0
   );
 
-  let discountAmount = 0;
-  let discountAmountInCustomerCurrency = 0;
+  let discountAmountUSD = 0;
+  let discountAmountVendor = 0;
+  let discountAmountCustomer = 0;
 
   if (coupon.discountType === "percentage") {
-    discountAmount = (applicableSubtotal * coupon.discountValue) / 100;
-
-    // For percentage, customer currency discount is the same percentage
-    // applied to customer currency subtotal — but since we store absolute values,
-    // we convert the USD discount to customer currency
-    discountAmountInCustomerCurrency = await convertAmount(
-      discountAmount,
-      "USD",
-      customerCurrencyCode
-    );
+    // Apply percentage discount to all currencies
+    discountAmountUSD = (applicableSubtotalUSD * coupon.discountValue) / 100;
+    discountAmountVendor = (applicableSubtotalVendor * coupon.discountValue) / 100;
+    discountAmountCustomer = (applicableSubtotalCustomer * coupon.discountValue) / 100;
   } else if (coupon.discountType === "fixed") {
-    // Convert fixed discount to USD
+    // Convert fixed discount to all currencies
     try {
-      const couponCurrencyCode =
-        coupon.currency?.code || "USD";
+      const couponCurrencyCode = coupon.currency?.code || "USD";
 
+      // Convert to USD
       const discountInUSD = await convertToUSD(
         coupon.discountValue,
         coupon.currency?._id || coupon.currency
       );
-      discountAmount = Math.min(discountInUSD, applicableSubtotal);
+      discountAmountUSD = Math.min(discountInUSD, applicableSubtotalUSD);
 
       // Convert to customer currency
-      discountAmountInCustomerCurrency = await convertAmount(
+      const discountInCustomerCurr = await convertAmount(
         coupon.discountValue,
         couponCurrencyCode,
         customerCurrencyCode
       );
+      discountAmountCustomer = Math.min(discountInCustomerCurr, applicableSubtotalCustomer);
+
+      // For vendor currency, we need to know the vendor's currency
+      // Since items can have different vendors, we'll calculate proportionally
+      // The vendor discount will be calculated based on the ratio of USD discount to USD subtotal
+      const discountRatio = applicableSubtotalUSD > 0 ? discountAmountUSD / applicableSubtotalUSD : 0;
+      discountAmountVendor = applicableSubtotalVendor * discountRatio;
     } catch (error) {
       throw new Error(
         `Failed to convert coupon discount: ${error.message}`,
@@ -153,10 +162,17 @@ export const validateAndApplyCoupon = async (
 
   return {
     coupon,
-    discountAmount,
-    discountAmountInCustomerCurrency,
+    discountAmount: {
+      vendor: Number(discountAmountVendor.toFixed(2)),
+      customer: Number(discountAmountCustomer.toFixed(2)),
+      usd: Number(discountAmountUSD.toFixed(2)),
+    },
     couponAppliedItems,
-    applicableSubtotal,
+    applicableSubtotal: {
+      vendor: Number(applicableSubtotalVendor.toFixed(2)),
+      customer: Number(applicableSubtotalCustomer.toFixed(2)),
+      usd: Number(applicableSubtotalUSD.toFixed(2)),
+    },
   };
 };
 

@@ -169,7 +169,7 @@ export const getVendorStatsByDateRangeService = async (
   
     // ✅ Transform suborders with localization and VENDOR pricing
     const formattedSubOrders = subOrders.map((subOrder) =>
-      transformSubOrderResponse(subOrder, lang, "vendor")
+      transformSubOrderResponse(subOrder, lang, "vendor", { showCoupon: false })
     );
   
     return {
@@ -256,144 +256,152 @@ export const getVendorStatsByDateRangeService = async (
     };
   };
   //============================
-  export const getVendorDashboardStatsService = async (user) => {
-    if (!user || user.accountType !== "vendor") {
-      throw new Error("Only vendor can get dashboard stats");
-    }
-  
-    const vendorId = user._id;
-  
-    // ================= TOTAL COUNTS =================
-    const totalSubOrders = await SubOrderModel.countDocuments({ vendorId });
-  
-    const totalProducts = await ProductModellll.countDocuments({
-      createdBy: vendorId,
-    });
-  
-    // ================= TOTAL REVENUE (VENDOR PRICE) =================
-    const revenueAgg = await SubOrderModel.aggregate([
+  export const getVendorDashboardStatsService = async (user, lang = "en") => {
+  if (!user || user.accountType !== "vendor") {
+    throw new Error("Only vendor can get dashboard stats");
+  }
+
+  const vendorId = user._id;
+
+  const now = new Date();
+
+  // Start of Day (12:00 AM)
+  const startOfToday = new Date();
+  startOfToday.setHours(0, 0, 0, 0);
+
+  // Start of Month (1st)
+  const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+
+  // 🔹 Match criteria: Paid OR Confirmed (for COD) + Vendor ID
+  const validSubOrdersQuery = {
+    vendorId,
+    status: "confirmed",
+  };
+
+  // ================= PARALLEL QUERIES =================
+  const [
+    totalUsersAgg,
+    totalOrders,
+    totalProducts, // Total active products for this vendor
+    revenueAgg,
+    todayAgg,
+    monthAgg,
+    popularProducts,
+  ] = await Promise.all([
+    // 1. Total Users (Unique customers with confirmed/paid suborders)
+    SubOrderModel.aggregate([
+      { $match: validSubOrdersQuery },
+      // Lookup order to get customerId
+      {
+        $lookup: {
+          from: "orderusers", // Collection name
+          localField: "orderId",
+          foreignField: "_id",
+          as: "order",
+        },
+      },
+      { $unwind: "$order" },
+      { $group: { _id: "$order.customerId" } },
+      { $count: "count" },
+    ]),
+
+    // 2. Total Orders (Confirmed/Paid SubOrders)
+    SubOrderModel.countDocuments(validSubOrdersQuery),
+
+    // 3. Total Products (Active, created by vendor)
+    ProductModellll.countDocuments({ createdBy: vendorId }),
+
+    // 4. Total Revenue Base (Sum of Vendor Currency)
+    SubOrderModel.aggregate([
+      { $match: validSubOrdersQuery },
+      {
+        $group: {
+          _id: null,
+          totalAmount: { $sum: "$totalAmount.vendor" },
+        },
+      },
+    ]),
+
+    // 5. Latest Day Sales (Today 12 AM onwards)
+    SubOrderModel.aggregate([
       {
         $match: {
-          vendorId,
-          paymentStatus: "paid",
+          ...validSubOrdersQuery,
+          createdAt: { $gte: startOfToday },
         },
       },
       {
         $group: {
           _id: null,
-          totalRevenue: { $sum: "$totalAmount.vendor" }, // ✅ Use vendor price
+          totalSales: { $sum: "$totalAmount.vendor" },
+          ordersCount: { $sum: 1 },
         },
       },
-    ]);
-  
-    const totalRevenue = revenueAgg.length ? revenueAgg[0].totalRevenue : 0;
-  
-    // ================= POPULAR PRODUCTS (VENDOR PRICE) =================
-    const popularProducts = await SubOrderModel.aggregate([
+    ]),
+
+    // 6. Latest Month Sales (1st of month onwards)
+    SubOrderModel.aggregate([
       {
         $match: {
-          vendorId,
-          paymentStatus: "paid",
+          ...validSubOrdersQuery,
+          createdAt: { $gte: startOfMonth },
         },
       },
+      {
+        $group: {
+          _id: null,
+          totalSales: { $sum: "$totalAmount.vendor" },
+          ordersCount: { $sum: 1 },
+        },
+      },
+    ]),
+
+    // 7. Popular Products
+    SubOrderModel.aggregate([
+      { $match: validSubOrdersQuery },
       { $unwind: "$items" },
       {
         $group: {
           _id: "$items.product._id",
           totalSold: { $sum: "$items.quantity" },
-          totalRevenue: { $sum: "$items.totalPrice.vendor" }, // ✅ Use vendor price
-          productName: { $first: "$items.product.name" },
+          totalRevenue: { $sum: "$items.totalPrice.vendor" }, // Vendor pricing
+          productName: { $first: `$items.product.name.${lang}` }, 
+          productImages: { $first: "$items.product.images" }, // Added images
         },
       },
       { $sort: { totalSold: -1 } },
       { $limit: 5 },
-    ]);
+    ]),
+  ]);
+
+  // ================= PROCESS RESULTS =================
+  const totalUsers = totalUsersAgg[0]?.count || 0;
   
-    // ================= TODAY STATS =================
-    const startOfToday = new Date();
-    startOfToday.setHours(0, 0, 0, 0);
-  
-    const endOfToday = new Date();
-    endOfToday.setHours(23, 59, 59, 999);
-  
-    const todayOrders = await SubOrderModel.countDocuments({
-      vendorId,
-      createdAt: { $gte: startOfToday, $lte: endOfToday },
-    });
-  
-    const todaySalesAgg = await SubOrderModel.aggregate([
-      {
-        $match: {
-          vendorId,
-          paymentStatus: "paid",
-          createdAt: { $gte: startOfToday, $lte: endOfToday },
-        },
-      },
-      {
-        $group: {
-          _id: null,
-          totalSales: { $sum: "$totalAmount.vendor" }, // ✅ Use vendor price
-          ordersCount: { $sum: 1 },
-        },
-      },
-    ]);
-  
-    const latestDaySales = todaySalesAgg.length
-      ? todaySalesAgg[0]
-      : { totalSales: 0, ordersCount: 0 };
-  
-    // ================= MONTH STATS =================
-    const startOfMonth = new Date(
-      new Date().getFullYear(),
-      new Date().getMonth(),
-      1
-    );
-  
-    const endOfMonth = new Date(
-      new Date().getFullYear(),
-      new Date().getMonth() + 1,
-      0,
-      23,
-      59,
-      59,
-      999
-    );
-  
-    const monthOrders = await SubOrderModel.countDocuments({
-      vendorId,
-      createdAt: { $gte: startOfMonth, $lte: endOfMonth },
-    });
-  
-    const monthSalesAgg = await SubOrderModel.aggregate([
-      {
-        $match: {
-          vendorId,
-          paymentStatus: "paid",
-          createdAt: { $gte: startOfMonth, $lte: endOfMonth },
-        },
-      },
-      {
-        $group: {
-          _id: null,
-          totalSales: { $sum: "$totalAmount.vendor" }, // ✅ Use vendor price
-          ordersCount: { $sum: 1 },
-        },
-      },
-    ]);
-  
-    const latestMonthSales = monthSalesAgg.length
-      ? monthSalesAgg[0]
-      : { totalSales: 0, ordersCount: 0 };
-  
-    // ================= RETURN =================
-    return {
-      totalSubOrders,
-      totalProducts,
-      todayOrders,
-      monthOrders,
-      totalRevenue,
-      latestDaySales,
-      latestMonthSales,
-      popularProducts,
-    };
+  // Total Revenue = 95% of total confirmed suborders Vendor amount (5% admin fee deducted)
+  const totalRevenueVendor = revenueAgg[0]?.totalAmount || 0;
+  const totalRevenue = Number((totalRevenueVendor * 0.95).toFixed(2));
+
+  const latestDaySales = todayAgg[0]
+    ? {
+        totalSales: todayAgg[0].totalSales,
+        ordersCount: todayAgg[0].ordersCount,
+      }
+    : { totalSales: 0, ordersCount: 0 };
+
+  const latestMonthSales = monthAgg[0]
+    ? {
+        totalSales: monthAgg[0].totalSales,
+        ordersCount: monthAgg[0].ordersCount,
+      }
+    : { totalSales: 0, ordersCount: 0 };
+
+  return {
+    totalUsers,
+    totalOrders,
+    totalProducts,   
+    totalRevenue,
+    latestDaySales,
+    latestMonthSales,
+    popularProducts,
   };
+};

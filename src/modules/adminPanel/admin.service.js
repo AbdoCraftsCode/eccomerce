@@ -8,58 +8,56 @@ import mongoose from "mongoose";
 // =================== NEW UNIFIED GRAPH DATA FUNCTIONS ===================
 
 export const getAdminGraphDataService = async (period) => {
+  const now = new Date();
+
   if (period === "monthly") {
-    const now = new Date();
-    const thirtyDaysAgo = new Date(now);
-    thirtyDaysAgo.setDate(now.getDate() - 30);
+    // Range: 1st of current month to Now
+    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
 
     const rawData = await OrderModelUser.aggregate([
       {
         $match: {
-          paymentStatus: "paid",
-          createdAt: { $gte: thirtyDaysAgo, $lte: now },
+          status: "confirmed",
+          createdAt: { $gte: startOfMonth, $lte: now },
         },
       },
       {
         $group: {
-          _id: {
-            year: { $year: "$createdAt" },
-            month: { $month: "$createdAt" },
-            day: { $dayOfMonth: "$createdAt" },
-          },
+          _id: { $dayOfMonth: "$createdAt" },
           ordersCount: { $sum: 1 },
           revenue: { $sum: "$totalAmount.usd" },
         },
       },
-      {
-        $sort: { "_id.year": 1, "_id.month": 1, "_id.day": 1 },
-      },
     ]);
 
-    // Create map for quick lookup
+    // Map: Day -> Data
     const dataMap = new Map();
     rawData.forEach((item) => {
-      const dateKey = `${item._id.year}-${String(item._id.month).padStart(2, "0")}-${String(item._id.day).padStart(2, "0")}`;
-      dataMap.set(dateKey,{
+      dataMap.set(item._id, {
         ordersCount: item.ordersCount,
         revenue: item.revenue,
       });
     });
 
-    // Generate all 30 days
     const xAxis = [];
     const ordersCount = [];
     const revenue = [];
+    const currentDay = now.getDate();
 
-    for (let i = 29; i >= 0; i--) {
-      const date = new Date(now);
-      date.setDate(now.getDate() - i);
-      const dateStr = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
-      
-      xAxis.push(dateStr);
-      const data = dataMap.get(dateStr);
-      ordersCount.push(data?.ordersCount || 0);
-      revenue.push(data?.revenue || 0);
+    // Loop 1 to 30
+    for (let day = 1; day <= 30; day++) {
+      xAxis.push(day); // Return number only
+
+      if (day > currentDay) {
+        // Future days in this month -> 0
+        ordersCount.push(0);
+        revenue.push(0);
+      } else {
+        // Past/Present days -> Actual or 0
+        const data = dataMap.get(day);
+        ordersCount.push(data?.ordersCount || 0);
+        revenue.push(data?.revenue || 0);
+      }
     }
 
     return {
@@ -70,16 +68,15 @@ export const getAdminGraphDataService = async (period) => {
       },
     };
   } else if (period === "daily") {
-    // Last 24 hours
-    const now = new Date();
-    const twentyFourHoursAgo = new Date(now);
-    twentyFourHoursAgo.setHours(now.getHours() - 24);
+    // Range: 00:00 Today to Now
+    const startOfDay = new Date();
+    startOfDay.setHours(0, 0, 0, 0);
 
     const rawData = await OrderModelUser.aggregate([
       {
         $match: {
-          paymentStatus: "paid",
-          createdAt: { $gte: twentyFourHoursAgo, $lte: now },
+          status: "confirmed",
+          createdAt: { $gte: startOfDay, $lte: now },
         },
       },
       {
@@ -89,12 +86,9 @@ export const getAdminGraphDataService = async (period) => {
           revenue: { $sum: "$totalAmount.usd" },
         },
       },
-      {
-        $sort: { "_id": 1 },
-      },
     ]);
 
-    // Create map for quick lookup
+    // Map: Hour -> Data
     const dataMap = new Map();
     rawData.forEach((item) => {
       dataMap.set(item._id, {
@@ -103,16 +97,25 @@ export const getAdminGraphDataService = async (period) => {
       });
     });
 
-    // Generate all 24 hours
     const xAxis = [];
-   const ordersCount = [];
+    const ordersCount = [];
     const revenue = [];
+    const currentHour = now.getHours();
 
-    for (let i = 0; i < 24; i++) {
-      xAxis.push(`${String(i).padStart(2, "0")}:00`);
-      const data = dataMap.get(i);
-      ordersCount.push(data?.ordersCount || 0);
-      revenue.push(data?.revenue || 0);
+    // Loop 0 to 23
+    for (let hour = 0; hour < 24; hour++) {
+      xAxis.push(hour); // Return number only
+
+      if (hour > currentHour) {
+        // Future hours -> 0
+        ordersCount.push(0);
+        revenue.push(0);
+      } else {
+        // Past/Present hours -> Actual or 0
+        const data = dataMap.get(hour);
+        ordersCount.push(data?.ordersCount || 0);
+        revenue.push(data?.revenue || 0);
+      }
     }
 
     return {
@@ -129,59 +132,58 @@ export const getAdminGraphDataService = async (period) => {
 
 
 export const getVendorGraphDataService = async (vendorId, period) => {
+  const now = new Date();
+  const vId = new mongoose.Types.ObjectId(vendorId);
+
   if (period === "monthly") {
-    const now = new Date();
-    const thirtyDaysAgo = new Date(now);
-    thirtyDaysAgo.setDate(now.getDate() - 30);
+    // Range: 1st of current month to Now
+    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
 
     const rawData = await SubOrderModel.aggregate([
       {
         $match: {
-          vendorId: new mongoose.Types.ObjectId(vendorId),
-          paymentStatus: "paid",
-          createdAt: { $gte: thirtyDaysAgo, $lte: now },
+          vendorId: vId,
+          status: "confirmed",
+          createdAt: { $gte: startOfMonth, $lte: now },
         },
       },
       {
         $group: {
-          _id: {
-            year: { $year: "$createdAt" },
-            month: { $month: "$createdAt" },
-            day: { $dayOfMonth: "$createdAt" },
-          },
+          _id: { $dayOfMonth: "$createdAt" },
           ordersCount: { $sum: 1 },
           revenue: { $sum: "$totalAmount.vendor" },
         },
       },
-      {
-        $sort: { "_id.year": 1, "_id.month": 1, "_id.day": 1 },
-      },
     ]);
 
-    // Create map for quick lookup
+    // Map: Day -> Data
     const dataMap = new Map();
     rawData.forEach((item) => {
-      const dateKey = `${item._id.year}-${String(item._id.month).padStart(2, "0")}-${String(item._id.day).padStart(2, "0")}`;
-      dataMap.set(dateKey, {
+      dataMap.set(item._id, {
         ordersCount: item.ordersCount,
         revenue: item.revenue,
       });
     });
 
-    // Generate all 30 days
     const xAxis = [];
     const ordersCount = [];
     const revenue = [];
+    const currentDay = now.getDate();
 
-    for (let i = 29; i >= 0; i--) {
-      const date = new Date(now);
-      date.setDate(now.getDate() - i);
-      const dateStr = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
-      
-      xAxis.push(dateStr);
-      const data = dataMap.get(dateStr);
-      ordersCount.push(data?.ordersCount || 0);
-      revenue.push(data?.revenue || 0);
+    // Loop 1 to 30
+    for (let day = 1; day <= 30; day++) {
+      xAxis.push(day); // Return number only
+
+      if (day > currentDay) {
+        // Future days -> 0
+        ordersCount.push(0);
+        revenue.push(0);
+      } else {
+        // Past/Present days -> Actual or 0
+        const data = dataMap.get(day);
+        ordersCount.push(data?.ordersCount || 0);
+        revenue.push(data?.revenue || 0);
+      }
     }
 
     return {
@@ -192,17 +194,16 @@ export const getVendorGraphDataService = async (vendorId, period) => {
       },
     };
   } else if (period === "daily") {
-    // Last 24 hours
-    const now = new Date();
-    const twentyFourHoursAgo = new Date(now);
-    twentyFourHoursAgo.setHours(now.getHours() - 24);
+    // Range: 00:00 Today to Now
+    const startOfDay = new Date();
+    startOfDay.setHours(0, 0, 0, 0);
 
     const rawData = await SubOrderModel.aggregate([
       {
         $match: {
-          vendorId: new mongoose.Types.ObjectId(vendorId),
-          paymentStatus: "paid",
-          createdAt: { $gte: twentyFourHoursAgo, $lte: now },
+          vendorId: vId,
+          status: "confirmed",
+          createdAt: { $gte: startOfDay, $lte: now },
         },
       },
       {
@@ -212,12 +213,9 @@ export const getVendorGraphDataService = async (vendorId, period) => {
           revenue: { $sum: "$totalAmount.vendor" },
         },
       },
-      {
-        $sort: { "_id": 1 },
-      },
     ]);
 
-    // Create map for quick lookup
+    // Map: Hour -> Data
     const dataMap = new Map();
     rawData.forEach((item) => {
       dataMap.set(item._id, {
@@ -226,16 +224,25 @@ export const getVendorGraphDataService = async (vendorId, period) => {
       });
     });
 
-    // Generate all 24 hours
     const xAxis = [];
     const ordersCount = [];
     const revenue = [];
+    const currentHour = now.getHours();
 
-    for (let i = 0; i < 24; i++) {
-      xAxis.push(`${String(i).padStart(2, "0")}:00`);
-      const data = dataMap.get(i);
-      ordersCount.push(data?.ordersCount || 0);
-      revenue.push(data?.revenue || 0);
+    // Loop 0 to 23
+    for (let hour = 0; hour < 24; hour++) {
+      xAxis.push(hour); // Return number only
+
+      if (hour > currentHour) {
+        // Future hours -> 0
+        ordersCount.push(0);
+        revenue.push(0);
+      } else {
+        // Past/Present hours -> Actual or 0
+        const data = dataMap.get(hour);
+        ordersCount.push(data?.ordersCount || 0);
+        revenue.push(data?.revenue || 0);
+      }
     }
 
     return {
@@ -252,146 +259,140 @@ export const getVendorGraphDataService = async (vendorId, period) => {
 
 // =================== EXISTING FUNCTIONS (kept for backward compatibility) ===================
 
-export const getDashboardStatsService = async (user) => {
+export const getDashboardStatsService = async (user, lang = "en") => {
   if (!user || user.accountType !== "Admin") {
     throw new Error("Only admin can get dashboard stats");
   }
 
   const now = new Date();
 
+  // Start of Day (12:00 AM)
   const startOfToday = new Date();
   startOfToday.setHours(0, 0, 0, 0);
 
-  const endOfToday = new Date();
-  endOfToday.setHours(23, 59, 59, 999);
-
+  // Start of Month (1st)
   const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
 
-  const endOfMonth = new Date(
-    now.getFullYear(),
-    now.getMonth() + 1,
-    0,
-    23,
-    59,
-    59,
-    999
-  );
+  // 🔹 Match criteria: Paid OR Confirmed (for COD)
+  const validOrdersQuery = {
+    status: "confirmed",
+  };
 
-  // ================= BASIC COUNTS =================
+  // ================= PARALLEL QUERIES =================
   const [
-    totalUsers,
+    totalUsersAgg,
     totalOrders,
-    totalSubOrders,
     totalProducts,
-    todayOrders,
-    monthOrders,
+    revenueAgg,
+    todayAgg,
+    monthAgg,
+    popularProducts,
   ] = await Promise.all([
-    User.countDocuments(),
-    OrderModelUser.countDocuments(),
-    SubOrderModel.countDocuments(),
+    // 1. Total Users (Unique customers with confirmed/paid orders)
+    OrderModelUser.aggregate([
+      { $match: validOrdersQuery },
+      { $group: { _id: "$customerId" } },
+      { $count: "count" },
+    ]),
+
+    // 2. Total Orders (Confirmed/Paid)
+    OrderModelUser.countDocuments(validOrdersQuery),
+
+    // 3. Total Products (Active)
     ProductModellll.countDocuments(),
-    OrderModelUser.countDocuments({
-      createdAt: { $gte: startOfToday, $lte: endOfToday },
-    }),
-    OrderModelUser.countDocuments({
-      createdAt: { $gte: startOfMonth, $lte: endOfMonth },
-    }),
+
+    // 4. Total Revenue Base (Sum of USD)
+    OrderModelUser.aggregate([
+      { $match: validOrdersQuery },
+      {
+        $group: {
+          _id: null,
+          totalAmount: { $sum: "$totalAmount.usd" },
+        },
+      },
+    ]),
+
+    // 5. Latest Day Sales (Today 12 AM onwards)
+    OrderModelUser.aggregate([
+      {
+        $match: {
+          ...validOrdersQuery,
+          createdAt: { $gte: startOfToday },
+        },
+      },
+      {
+        $group: {
+          _id: null,
+          totalSales: { $sum: "$totalAmount.usd" },
+          ordersCount: { $sum: 1 },
+        },
+      },
+    ]),
+
+    // 6. Latest Month Sales (1st of month onwards)
+    OrderModelUser.aggregate([
+      {
+        $match: {
+          ...validOrdersQuery,
+          createdAt: { $gte: startOfMonth },
+        },
+      },
+      {
+        $group: {
+          _id: null,
+          totalSales: { $sum: "$totalAmount.usd" },
+          ordersCount: { $sum: 1 },
+        },
+      },
+    ]),
+
+    // 7. Popular Products
+    OrderModelUser.aggregate([
+      { $match: validOrdersQuery },
+      { $unwind: "$items" },
+      {
+        $group: {
+          _id: "$items.product._id",
+          totalSold: { $sum: "$items.quantity" },
+          totalRevenue: { $sum: "$items.totalPrice.usd" }, // Using USD for consistency
+          productName: { $first: `$items.product.name.${lang}` }, // Localized name
+          productImages: { $first: "$items.product.images" },
+        },
+      },
+      { $sort: { totalSold: -1 } },
+      { $limit: 5 },
+    ]),
   ]);
 
-  // ================= TOTAL REVENUE =================
-  const revenueAgg = await OrderModelUser.aggregate([
-    { $match: { paymentStatus: "paid" } },
-    {
-      $group: {
-        _id: null,
-        totalRevenue: { $sum: "$totalAmount.customer" },
-      },
-    },
-  ]);
+  // ================= PROCESS RESULTS =================
+  const totalUsers = totalUsersAgg[0]?.count || 0;
+  
+  // Total Revenue = 5% of total confirmed orders USD amount
+  const totalRevenueUSD = revenueAgg[0]?.totalAmount || 0;
+  const totalRevenue = Number((totalRevenueUSD * 0.05).toFixed(2));
 
-  const totalRevenue = revenueAgg[0]?.totalRevenue || 0;
+  const latestDaySales = todayAgg[0]
+    ? {
+        totalSales: todayAgg[0].totalSales,
+        ordersCount: todayAgg[0].ordersCount,
+      }
+    : { totalSales: 0, ordersCount: 0 };
 
-  // ================= POPULAR PRODUCTS =================
-  const popularProducts = await OrderModelUser.aggregate([
-    { $match: { paymentStatus: "paid" } },
-    { $unwind: "$items" },
-    {
-      $group: {
-        _id: "$items.product._id",
-        totalSold: { $sum: "$items.quantity" },
-        totalRevenue: { $sum: "$items.totalPrice.customer" },
-        productName: { $first: "$items.product.name.en" },
-        productImages: { $first: "$items.product.images" },
-      },
-    },
-    { $sort: { totalSold: -1 } },
-    { $limit: 5 },
-  ]);
-
-  // ================= TODAY REVENUE =================
-  const todayAgg = await OrderModelUser.aggregate([
-    {
-      $match: {
-        paymentStatus: "paid",
-        createdAt: { $gte: startOfToday, $lte: endOfToday },
-      },
-    },
-    {
-      $group: {
-        _id: null,
-        totalSales: { $sum: "$totalAmount.customer" },
-        ordersCount: { $sum: 1 },
-      },
-    },
-  ]);
-
-  const latestDaySales = todayAgg[0] || {
-    totalSales: 0,
-    ordersCount: 0,
-  };
-
-  const todayRevenue = latestDaySales.totalSales;
-
-  // ================= MONTH REVENUE =================
-  const monthAgg = await OrderModelUser.aggregate([
-    {
-      $match: {
-        paymentStatus: "paid",
-        createdAt: { $gte: startOfMonth, $lte: endOfMonth },
-      },
-    },
-    {
-      $group: {
-        _id: null,
-        totalSales: { $sum: "$totalAmount.customer" },
-        ordersCount: { $sum: 1 },
-      },
-    },
-  ]);
-
-  const latestMonthSales = monthAgg[0] || {
-    totalSales: 0,
-    ordersCount: 0,
-  };
-
-  const monthRevenue = latestMonthSales.totalSales;
+  const latestMonthSales = monthAgg[0]
+    ? {
+        totalSales: monthAgg[0].totalSales,
+        ordersCount: monthAgg[0].ordersCount,
+      }
+    : { totalSales: 0, ordersCount: 0 };
 
   return {
+    // Requested Values
     totalUsers,
     totalOrders,
-    totalSubOrders,
     totalProducts,
-
     totalRevenue,
-
-    todayOrders,
-    todayRevenue,
     latestDaySales,
-
-    monthOrders,
-    monthRevenue,
     latestMonthSales,
-
     popularProducts,
   };
 };

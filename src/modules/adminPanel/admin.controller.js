@@ -18,7 +18,7 @@ import { getMessage } from "./helpers/responseMessages.js";
 
 export const getDashboardStats = asyncHandelr(async (req, res, next) => {
   const lang = getUserLanguage(req);
-  const data = await getDashboardStatsService(req.user);
+  const data = await getDashboardStatsService(req.user, lang);
   res.status(200).json({
     status: "success",
     message:

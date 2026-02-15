@@ -52,9 +52,8 @@ export const getSellerAndProductStatsService = async () => {
     totalProducts: productCount,
   };
 };
-//============================================================
+
 export const getLastMonthSalesStatsService = async () => {
-  // Get first and last day of last month
   const now = new Date();
   const firstDayLastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
   const lastDayLastMonth = new Date(
@@ -67,7 +66,6 @@ export const getLastMonthSalesStatsService = async () => {
     999,
   );
 
-  // 1️⃣ Total Sales
   const totalSalesAgg = await OrderModelUser.aggregate([
     {
       $match: {
@@ -85,8 +83,6 @@ export const getLastMonthSalesStatsService = async () => {
 
   const totalSales = totalSalesAgg[0]?.totalSales || 0;
 
-  // 2️⃣ Average Seller Rating
-  // Aggregate average rating per seller from products
   const avgRatingAgg = await ProductModellll.aggregate([
     {
       $group: {
@@ -104,7 +100,6 @@ export const getLastMonthSalesStatsService = async () => {
 
   const avgSellerRating = avgRatingAgg[0]?.overallAvgRating || 0;
 
-  // 3️⃣ Average Products per Seller
   const productsPerSellerAgg = await ProductModellll.aggregate([
     {
       $group: {
@@ -123,7 +118,6 @@ export const getLastMonthSalesStatsService = async () => {
   const avgProductsPerSeller =
     productsPerSellerAgg[0]?.avgProductsPerSeller || 0;
 
-  // 4️⃣ Active Sellers Percentage
   const totalVendors = await UserModel.countDocuments({
     accountType: "vendor",
   });
@@ -142,14 +136,13 @@ export const getLastMonthSalesStatsService = async () => {
     activeSellersPercentage: parseFloat(activeSellersPercentage.toFixed(2)),
   };
 };
-//====================================================
+
 export const getAcceptedSellersWithCategories = async () => {
-  // 1️⃣ Get all active/accepted vendors
   const vendors = await UserModel.aggregate([
-    { $match: { accountType: "vendor", status: "ACCEPTED" } }, // accepted sellers
+    { $match: { accountType: "vendor", status: "ACCEPTED" } },
     {
       $lookup: {
-        from: "producttttts", // collection name of products in MongoDB
+        from: "producttttts",
         localField: "_id",
         foreignField: "createdBy",
         as: "products",
@@ -158,12 +151,12 @@ export const getAcceptedSellersWithCategories = async () => {
     {
       $unwind: {
         path: "$products",
-        preserveNullAndEmptyArrays: true, // include vendors without products
+        preserveNullAndEmptyArrays: true,
       },
     },
     {
       $lookup: {
-        from: "categoryyyys", // collection name of categories in MongoDB
+        from: "categoryyyys",
         localField: "products.categories",
         foreignField: "_id",
         as: "categories",
@@ -174,7 +167,7 @@ export const getAcceptedSellersWithCategories = async () => {
         _id: "$_id",
         name: { $first: "$name" },
         email: { $first: "$email" },
-        categories: { $addToSet: "$categories" }, // remove duplicates
+        categories: { $addToSet: "$categories" },
         totalProducts: { $sum: 1 },
       },
     },
@@ -193,29 +186,24 @@ export const getAcceptedSellersWithCategories = async () => {
         },
       },
     },
-    { $sort: { name: 1 } }, // optional: sort by name
+    { $sort: { name: 1 } },
   ]);
 
   return vendors;
 };
-//=====================================================================
+
 export const getLatestSellersService = async (limit = 5) => {
   const filter = { accountType: "vendor" };
 
-  // لو عايز المقبولين فقط
-  // if (onlyActive) {
-  //   filter.status = "active"; // أو accepted حسب عندك
-  // }
-
   const sellers = await UserModel.find(filter)
-    .select("name email status createdAt") // اختار اللي تحتاجه
-    .sort({ createdAt: -1 }) // الأحدث أولاً
+    .select("name email status createdAt")
+    .sort({ createdAt: -1 })
     .limit(limit)
     .lean();
 
   return sellers;
 };
-//======================================================
+
 export const getCategorySalesService = async (lang = "en") => {
   const startOfMonth = new Date();
   startOfMonth.setDate(1);
@@ -224,7 +212,7 @@ export const getCategorySalesService = async (lang = "en") => {
   const stats = await SubOrderModel.aggregate([
     {
       $match: {
-        paymentStatus: "paid",
+        status: "confirmed",
         createdAt: { $gte: startOfMonth },
       },
     },
@@ -309,4 +297,60 @@ export const getCategorySalesService = async (lang = "en") => {
   });
 
   return categorySales;
+};
+
+export const getVendorGrowthGraphService = async () => {
+  const now = new Date();
+  const currentYear = now.getFullYear();
+
+  const xAxis = [];
+  const promises = [];
+
+  for (let month = 1; month <= 12; month++) {
+    xAxis.push(month);
+
+    const endOfMonth = new Date(currentYear, month, 0, 23, 59, 59, 999);
+    
+    const startOfMonth = new Date(currentYear, month - 1, 1, 0, 0, 0, 0);
+
+    if (startOfMonth <= now) {
+      promises.push(
+        (async () => {
+          const [total, activeIds] = await Promise.all([
+            UserModel.countDocuments({
+              accountType: "vendor",
+              createdAt: { $lte: endOfMonth },
+            }),
+
+            SubOrderModel.distinct("vendorId", {
+              status: "confirmed",
+              createdAt: { $gte: startOfMonth, $lte: endOfMonth },
+            }),
+          ]);
+
+          return { 
+            monthIndex: month - 1, 
+            total, 
+            active: activeIds.length 
+          };
+        })()
+      );
+    } 
+  }
+
+  const results = await Promise.all(promises);
+
+  const finalTotal = new Array(12).fill(0);
+  const finalActive = new Array(12).fill(0);
+
+  results.forEach(({ monthIndex, total, active }) => {
+    finalTotal[monthIndex] = total;
+    finalActive[monthIndex] = active;
+  });
+
+  return {
+    xAxis,
+    totalVendors: finalTotal,
+    activeVendors: finalActive,
+  };
 };
